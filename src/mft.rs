@@ -15,6 +15,7 @@ use windows::Win32::System::Ioctl::{
 use windows::Win32::System::IO::DeviceIoControl;
 use windows::core::PCWSTR;
 
+#[allow(dead_code)]
 pub struct ScanResult {
     pub file_count:  u64,
     pub dir_count:   u64,
@@ -45,9 +46,8 @@ const BUFFER_SIZE: usize = 512 * 1024; // 512KB
 pub fn enumerate(drive: char) -> Result<ScanResult> {
     let handle = open_drive(drive)?;
 
-    let mut file_count:  u64 = 0;
-    let mut dir_count:   u64 = 0;
-    let total_bytes:     u64 = 0;
+    let mut file_count: u64 = 0;
+    let mut dir_count:  u64 = 0;
 
     // MFT列挙の開始位置
     let mut med = MFT_ENUM_DATA_V0 {
@@ -202,11 +202,53 @@ pub fn enumerate(drive: char) -> Result<ScanResult> {
     println!("ツリー構築完了: ノード数={}", nodes.len());
     println!("ルートノード: {:?}", root_idx.map(|i| &nodes[i].name));
 
-    // 互換用 top_files（size=0 のため先頭100件）
-    let top_files: Vec<FileEntry> = all_records.iter()
-        .filter(|(_, _, _, is_dir)| !is_dir)
-        .take(100)
-        .map(|(name, _, _, _)| FileEntry { name: name.clone(), size: 0 })
+    // Step 5: ファイルノードのサイズを並列取得
+    let t5 = std::time::Instant::now();
+    let idx_sizes: Vec<(usize, u64)> = (0..nodes.len())
+        .into_par_iter()
+        .filter(|&i| !nodes[i].is_dir)
+        .map(|i| {
+            let path = build_full_path(i, &nodes);
+            let size = get_file_size(drive, &path);
+            (i, size)
+        })
+        .collect();
+    for (i, size) in idx_sizes {
+        nodes[i].size = size;
+    }
+    println!("ファイルサイズ取得時間: {:.2}秒", t5.elapsed().as_secs_f64());
+
+    // Step 6: ディレクトリサイズを後退伝播（葉から根へ・Kahn法）
+    for node in nodes.iter_mut() {
+        node.total_size = node.size;
+    }
+    let mut pending: Vec<usize> = nodes.iter().map(|n| n.children.len()).collect();
+    let mut queue: std::collections::VecDeque<usize> = (0..nodes.len())
+        .filter(|&i| nodes[i].children.is_empty())
+        .collect();
+    while let Some(idx) = queue.pop_front() {
+        if let Some(parent_idx) = nodes[idx].parent_idx {
+            let ts = nodes[idx].total_size;
+            nodes[parent_idx].total_size += ts;
+            pending[parent_idx] -= 1;
+            if pending[parent_idx] == 0 {
+                queue.push_back(parent_idx);
+            }
+        }
+    }
+
+    // total_bytes を実サイズの合計に更新
+    let total_bytes: u64 = nodes.iter().filter(|n| !n.is_dir).map(|n| n.size).sum();
+
+    // top_files を実サイズで再構築
+    let mut top_vec: Vec<(u64, String)> = nodes.iter()
+        .filter(|n| !n.is_dir)
+        .map(|n| (n.size, n.name.clone()))
+        .collect();
+    top_vec.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+    top_vec.truncate(100);
+    let top_files: Vec<FileEntry> = top_vec.into_iter()
+        .map(|(size, name)| FileEntry { name, size })
         .collect();
 
     println!("1回あたり平均エントリ数: {}",
@@ -216,6 +258,43 @@ pub fn enumerate(drive: char) -> Result<ScanResult> {
     unsafe { windows::Win32::Foundation::CloseHandle(handle).ok(); }
 
     Ok(ScanResult { file_count, dir_count, total_bytes, top_files, nodes, root_idx })
+}
+
+fn build_full_path(idx: usize, nodes: &[FileNode]) -> String {
+    let mut parts = Vec::new();
+    let mut current = idx;
+    loop {
+        parts.push(nodes[current].name.clone());
+        match nodes[current].parent_idx {
+            Some(p) if p != current => current = p,
+            _ => break,
+        }
+    }
+    parts.reverse();
+    parts.join("\\")
+}
+
+fn get_file_size(drive: char, path: &str) -> u64 {
+    use windows::Win32::Storage::FileSystem::GetFileAttributesExW;
+    use windows::Win32::Storage::FileSystem::WIN32_FILE_ATTRIBUTE_DATA;
+    use windows::Win32::Storage::FileSystem::GetFileExInfoStandard;
+
+    let full_path = format!("{}:\\{}", drive, path);
+    let wide: Vec<u16> = full_path.encode_utf16().chain(Some(0)).collect();
+
+    let mut info = WIN32_FILE_ATTRIBUTE_DATA::default();
+    let ok = unsafe {
+        GetFileAttributesExW(
+            windows::core::PCWSTR(wide.as_ptr()),
+            GetFileExInfoStandard,
+            &mut info as *mut _ as *mut _,
+        )
+    };
+    if ok.is_ok() {
+        ((info.nFileSizeHigh as u64) << 32) | (info.nFileSizeLow as u64)
+    } else {
+        0
+    }
 }
 
 fn open_drive(drive: char) -> Result<HANDLE> {
