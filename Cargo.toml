@@ -15,8 +15,9 @@ windows = { version = "0.61", features = [
     "Win32_System_IO",
     "Win32_Security",
 ] }
-anyhow   = "1"     # エラー処理
+anyhow    = "1"    # エラー処理
 byteorder = "1"    # バッファのバイト列読み取り
+rayon     = "1"    # 並列パース
 
 [profile.release]
 opt-level = 3
