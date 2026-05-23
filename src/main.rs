@@ -2,13 +2,22 @@
 //! 実行には管理者権限が必要です。
 
 mod mft;
+mod mft_probe;
+mod mft_raw;
 
 use anyhow::Result;
 use std::time::Instant;
 
+#[allow(unreachable_code)]
 fn main() -> Result<()> {
     // TODO: 引数でドライブ文字を受け取る（暫定でCドライブ固定）
     let drive = 'C';
+
+    match mft_probe::probe2(drive) {
+        Ok(_) => {}
+        Err(e) => println!("probe2 エラー: {}", e),
+    }
+    return Ok(());
 
     println!("disk-insight Phase 1: MFT列挙");
     println!("対象ドライブ: {}:\\", drive);
