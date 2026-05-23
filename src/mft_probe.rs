@@ -1475,6 +1475,93 @@ pub fn probe6(drive: char) -> Result<()> {
             println!("  Windows Used (176.28 GB):             {:>8} GB  ({} bytes)", windows_used / 1_073_741_824, windows_used);
             println!("  diff (Windows - adjusted):            {:>+8} GB  ({:+} bytes)", diff / 1_073_741_824_i64, diff);
             println!("  (negative = adjusted exceeds Windows Used; not all 40GB should be added)");
+
+            // ── candidate exclusion rule dry-runs ─────────────────────────
+            {
+                // compute name + category for ALL 3350 candidates (not just top-100)
+                let cand_details: Vec<(u64, String, &'static str)> = candidates.iter()
+                    .map(|g| {
+                        let from_e = base_entry_lookup.get(&g.base_record_number)
+                            .map(|e| e.name.as_str()).unwrap_or("");
+                        let name = if !from_e.is_empty()           { from_e.to_string() }
+                                   else if !g.file_name.is_empty() { g.file_name.clone() }
+                                   else                             { String::new() };
+                        let cat = classify(&name);
+                        (g.unnamed_alloc, name, cat)
+                    })
+                    .collect();
+
+                // returns (excl_count, excl_alloc, incl_count, incl_alloc, adjusted, diff_from_windows)
+                let run_rule = |excl_cats: &[&str], excl_names: &[&str]| -> (usize, u64, usize, u64, u64, i64) {
+                    let mut excl_count: usize = 0;
+                    let mut excl_alloc: u64   = 0;
+                    let mut incl_count: usize = 0;
+                    let mut incl_alloc: u64   = 0;
+                    for (alloc, name, cat) in &cand_details {
+                        let lower   = name.to_lowercase();
+                        let is_excl = excl_cats.contains(cat)
+                            || excl_names.iter().any(|n| *n == lower.as_str());
+                        if is_excl {
+                            excl_count += 1;
+                            excl_alloc  = excl_alloc.saturating_add(*alloc);
+                        } else {
+                            incl_count += 1;
+                            incl_alloc  = incl_alloc.saturating_add(*alloc);
+                        }
+                    }
+                    let adj  = total_alloc_iu + incl_alloc;
+                    let diff = windows_used as i64 - adj as i64;
+                    (excl_count, excl_alloc, incl_count, incl_alloc, adj, diff)
+                };
+
+                let rules: &[(&str, &[&str], &[&str])] = &[
+                    ("A: all",                    &[],                                                          &[]),
+                    ("B: -hiberfil",              &[],                                                          &["hiberfil.sys"]),
+                    ("C: -system",                &["system"],                                                  &[]),
+                    ("D: -installer",             &["installer"],                                               &[]),
+                    ("E: -ai_tool",               &["ai_tool"],                                                 &[]),
+                    ("F: -database",              &["database"],                                                &[]),
+                    ("G: -other",                 &["other"],                                                   &[]),
+                    ("H: -sys-inst",              &["system","installer"],                                      &[]),
+                    ("I: -sys-inst-ai",           &["system","installer","ai_tool"],                           &[]),
+                    ("J: -sys-inst-ai-db",        &["system","installer","ai_tool","database"],                &[]),
+                    ("K: -sys-inst-ai-db-oth",    &["system","installer","ai_tool","database","other"],        &[]),
+                ];
+
+                println!();
+                println!("=== candidate exclusion rule dry-runs ===");
+                println!("  adjusted = current_alloc ({} GB) + included_candidate_alloc", total_alloc_iu / 1_073_741_824);
+                println!("  Windows Used = {} GB ({} bytes)", windows_used / 1_073_741_824, windows_used);
+                println!();
+                println!("  {:<28} {:>9} {:>9} {:>9} {:>9} {:>8} {:>9}",
+                    "rule", "excl_cnt", "excl_GB", "incl_cnt", "incl_GB", "adj_GB", "diff_GB");
+                println!("  {}", "-".repeat(86));
+
+                let mut best_rule:     &str = "";
+                let mut best_diff_abs: i64  = i64::MAX;
+
+                for (rule_name, excl_cats, excl_names) in rules {
+                    let (excl_cnt, excl_alloc, incl_cnt, incl_alloc, adj, diff) =
+                        run_rule(excl_cats, excl_names);
+                    println!("  {:<28} {:>9} {:>9} {:>9} {:>9} {:>8} {:>+9}",
+                        rule_name,
+                        excl_cnt,
+                        excl_alloc / 1_073_741_824,
+                        incl_cnt,
+                        incl_alloc / 1_073_741_824,
+                        adj / 1_073_741_824,
+                        diff / 1_073_741_824_i64);
+                    let d_abs = diff.abs();
+                    if d_abs < best_diff_abs {
+                        best_diff_abs = d_abs;
+                        best_rule     = rule_name;
+                    }
+                }
+
+                println!();
+                println!("  best rule (closest to Windows Used): {}  (|diff| ~{} GB)",
+                    best_rule, best_diff_abs / 1_073_741_824_i64);
+            }
         }
     }
 
