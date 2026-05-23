@@ -656,11 +656,12 @@ pub fn probe6(drive: char) -> Result<()> {
     println!("解析開始... 総レコード数: {}", total_records);
 
     struct ParsedEntry {
-        record_idx: usize,
-        name:       String,
-        parent_frn: u64,
-        size:       u64,
-        is_in_use:  bool,
+        record_idx:    usize,
+        name:          String,
+        parent_frn:    u64,
+        size:          u64,
+        is_in_use:     bool,
+        has_attr_list: bool,
     }
 
     // 診断カウンタ（全体）
@@ -676,6 +677,10 @@ pub fn probe6(drive: char) -> Result<()> {
     let nonres_data_iu    = AtomicUsize::new(0);
     let fn_fallback_iu    = AtomicUsize::new(0);
     let size_zero_iu      = AtomicUsize::new(0);
+    // $ATTRIBUTE_LIST (0x20) 観測カウンタ
+    let attr_list_count        = AtomicUsize::new(0); // 全レコード中の $ATTRIBUTE_LIST 件数
+    let attr_list_iu           = AtomicUsize::new(0); // in-use のみ
+    let attr_list_iu_fallback  = AtomicUsize::new(0); // in-use + fn_size fallback
 
     let parse_start = std::time::Instant::now();
 
@@ -707,6 +712,7 @@ pub fn probe6(drive: char) -> Result<()> {
             let mut best_ns_prio: u8 = 255;
             let mut found_res    = false;
             let mut found_nonres = false;
+            let mut has_attr_list = false;
 
             loop {
                 if pos + 8 > record.len() { break; }
@@ -785,10 +791,18 @@ pub fn probe6(drive: char) -> Result<()> {
                             }
                         }
                     }
+                    0x20 => {
+                        has_attr_list = true;
+                    }
                     _ => {}
                 }
 
                 pos += attr_len;
+            }
+
+            if has_attr_list {
+                attr_list_count.fetch_add(1, Ordering::Relaxed);
+                if is_in_use { attr_list_iu.fetch_add(1, Ordering::Relaxed); }
             }
 
             if name.is_empty() { return None; }
@@ -806,7 +820,10 @@ pub fn probe6(drive: char) -> Result<()> {
                 ds
             } else {
                 fn_fallback_count.fetch_add(1, Ordering::Relaxed);
-                if is_in_use { fn_fallback_iu.fetch_add(1, Ordering::Relaxed); }
+                if is_in_use {
+                    fn_fallback_iu.fetch_add(1, Ordering::Relaxed);
+                    if has_attr_list { attr_list_iu_fallback.fetch_add(1, Ordering::Relaxed); }
+                }
                 fn_size
             };
 
@@ -816,7 +833,7 @@ pub fn probe6(drive: char) -> Result<()> {
             }
             if size > 1_073_741_824 { size_1gb_count.fetch_add(1, Ordering::Relaxed); }
 
-            Some(ParsedEntry { record_idx: i, name, parent_frn, size, is_in_use })
+            Some(ParsedEntry { record_idx: i, name, parent_frn, size, is_in_use, has_attr_list })
         })
         .collect();
 
@@ -837,6 +854,15 @@ pub fn probe6(drive: char) -> Result<()> {
     let zero_del          = size_zero_count.load(Ordering::Relaxed).saturating_sub(zero_iu);
     let size_1gb_total    = size_1gb_count.load(Ordering::Relaxed);
 
+    // $ATTRIBUTE_LIST カウンタ読み取り
+    let al_total          = attr_list_count.load(Ordering::Relaxed);
+    let al_iu             = attr_list_iu.load(Ordering::Relaxed);
+    let al_del            = al_total.saturating_sub(al_iu);
+    let al_iu_fallback    = attr_list_iu_fallback.load(Ordering::Relaxed);
+    let al_iu_zero        = entries.iter()
+        .filter(|e| e.has_attr_list && e.is_in_use && e.size == 0)
+        .count();
+
     // in-use / deleted のエントリ数・サイズ
     let iu_entries  = entries.iter().filter(|e|  e.is_in_use).count();
     let del_entries = entries.iter().filter(|e| !e.is_in_use).count();
@@ -849,6 +875,13 @@ pub fn probe6(drive: char) -> Result<()> {
         .collect();
     top20.sort_unstable_by(|a, b| b.size.cmp(&a.size));
     top20.truncate(20);
+
+    // top 20: $ATTRIBUTE_LIST を持つ in-use のみ
+    let mut top20_al: Vec<&ParsedEntry> = entries.iter()
+        .filter(|e| e.has_attr_list && e.is_in_use && e.size > 0)
+        .collect();
+    top20_al.sort_unstable_by(|a, b| b.size.cmp(&a.size));
+    top20_al.truncate(20);
 
     println!();
     println!("=== probe6 結果 ===");
@@ -876,6 +909,20 @@ pub fn probe6(drive: char) -> Result<()> {
     println!();
     println!("--- top 20 largest (in-use only) ---");
     for (rank, e) in top20.iter().enumerate() {
+        println!("{:>3}. {:>10} MB  {}  (parent_frn={}, idx={})",
+            rank + 1, e.size / 1_048_576, e.name, e.parent_frn, e.record_idx);
+    }
+
+    println!();
+    println!("$ATTRIBUTE_LIST (0x20) 観測:");
+    println!("  records with $ATTR_LIST (all):     {:>10}", al_total);
+    println!("  records with $ATTR_LIST (in-use):  {:>10}", al_iu);
+    println!("  records with $ATTR_LIST (deleted): {:>10}", al_del);
+    println!("  $ATTR_LIST + fn_fallback (in-use): {:>10}  (= $DATA in extension record)", al_iu_fallback);
+    println!("  $ATTR_LIST + size==0    (in-use):  {:>10}", al_iu_zero);
+    println!();
+    println!("--- top 20 largest with $ATTR_LIST (in-use only) ---");
+    for (rank, e) in top20_al.iter().enumerate() {
         println!("{:>3}. {:>10} MB  {}  (parent_frn={}, idx={})",
             rank + 1, e.size / 1_048_576, e.name, e.parent_frn, e.record_idx);
     }
