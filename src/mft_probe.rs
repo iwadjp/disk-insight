@@ -660,16 +660,22 @@ pub fn probe6(drive: char) -> Result<()> {
         name:       String,
         parent_frn: u64,
         size:       u64,
+        is_in_use:  bool,
     }
 
-    // 診断カウンタ
+    // 診断カウンタ（全体）
     let file_sig_count    = AtomicUsize::new(0);
     let in_use_count      = AtomicUsize::new(0); // flags bit0=1
-    let res_data_count    = AtomicUsize::new(0); // resident $DATA
-    let nonres_data_count = AtomicUsize::new(0); // non-resident $DATA
-    let fn_fallback_count = AtomicUsize::new(0); // $DATA 未発見 → fn_size 採用
-    let size_zero_count   = AtomicUsize::new(0); // size == 0
-    let size_1gb_count    = AtomicUsize::new(0); // size > 1GB
+    let res_data_count    = AtomicUsize::new(0); // resident $DATA (全体)
+    let nonres_data_count = AtomicUsize::new(0); // non-resident $DATA (全体)
+    let fn_fallback_count = AtomicUsize::new(0); // $DATA 未発見 → fn_size 採用 (全体)
+    let size_zero_count   = AtomicUsize::new(0); // size == 0 (全体)
+    let size_1gb_count    = AtomicUsize::new(0); // size > 1GB (全体)
+    // in-use only カウンタ（deleted = 全体 - in_use で導出）
+    let res_data_iu       = AtomicUsize::new(0);
+    let nonres_data_iu    = AtomicUsize::new(0);
+    let fn_fallback_iu    = AtomicUsize::new(0);
+    let size_zero_iu      = AtomicUsize::new(0);
 
     let parse_start = std::time::Instant::now();
 
@@ -686,7 +692,8 @@ pub fn probe6(drive: char) -> Result<()> {
 
             // offset 22: flags (2 bytes) - bit0=in_use, bit1=directory
             let flags = u16::from_le_bytes([record[22], record[23]]);
-            if flags & 0x01 != 0 {
+            let is_in_use = flags & 0x01 != 0;
+            if is_in_use {
                 in_use_count.fetch_add(1, Ordering::Relaxed);
             }
 
@@ -786,59 +793,88 @@ pub fn probe6(drive: char) -> Result<()> {
 
             if name.is_empty() { return None; }
 
-            if found_res    { res_data_count.fetch_add(1, Ordering::Relaxed); }
-            if found_nonres { nonres_data_count.fetch_add(1, Ordering::Relaxed); }
+            if found_res {
+                res_data_count.fetch_add(1, Ordering::Relaxed);
+                if is_in_use { res_data_iu.fetch_add(1, Ordering::Relaxed); }
+            }
+            if found_nonres {
+                nonres_data_count.fetch_add(1, Ordering::Relaxed);
+                if is_in_use { nonres_data_iu.fetch_add(1, Ordering::Relaxed); }
+            }
 
             let size = if let Some(ds) = data_size {
                 ds
             } else {
                 fn_fallback_count.fetch_add(1, Ordering::Relaxed);
+                if is_in_use { fn_fallback_iu.fetch_add(1, Ordering::Relaxed); }
                 fn_size
             };
 
-            if size == 0        { size_zero_count.fetch_add(1, Ordering::Relaxed); }
+            if size == 0 {
+                size_zero_count.fetch_add(1, Ordering::Relaxed);
+                if is_in_use { size_zero_iu.fetch_add(1, Ordering::Relaxed); }
+            }
             if size > 1_073_741_824 { size_1gb_count.fetch_add(1, Ordering::Relaxed); }
 
-            Some(ParsedEntry { record_idx: i, name, parent_frn, size })
+            Some(ParsedEntry { record_idx: i, name, parent_frn, size, is_in_use })
         })
         .collect();
 
     let parse_elapsed = parse_start.elapsed();
     let total_elapsed = total_start.elapsed();
 
+    // カウンタ読み取り
     let file_sig_total    = file_sig_count.load(Ordering::Relaxed);
-    let in_use_total      = in_use_count.load(Ordering::Relaxed);
-    let res_data_total    = res_data_count.load(Ordering::Relaxed);
-    let nonres_data_total = nonres_data_count.load(Ordering::Relaxed);
-    let fn_fallback_total = fn_fallback_count.load(Ordering::Relaxed);
-    let size_zero_total   = size_zero_count.load(Ordering::Relaxed);
+    let in_use_sig_total  = in_use_count.load(Ordering::Relaxed);
+    let del_sig_total     = file_sig_total.saturating_sub(in_use_sig_total);
+    let res_iu            = res_data_iu.load(Ordering::Relaxed);
+    let nonres_iu         = nonres_data_iu.load(Ordering::Relaxed);
+    let fallback_iu       = fn_fallback_iu.load(Ordering::Relaxed);
+    let zero_iu           = size_zero_iu.load(Ordering::Relaxed);
+    let res_del           = res_data_count.load(Ordering::Relaxed).saturating_sub(res_iu);
+    let nonres_del        = nonres_data_count.load(Ordering::Relaxed).saturating_sub(nonres_iu);
+    let fallback_del      = fn_fallback_count.load(Ordering::Relaxed).saturating_sub(fallback_iu);
+    let zero_del          = size_zero_count.load(Ordering::Relaxed).saturating_sub(zero_iu);
     let size_1gb_total    = size_1gb_count.load(Ordering::Relaxed);
-    let total_size: u64   = entries.iter().map(|e| e.size).sum();
 
+    // in-use / deleted のエントリ数・サイズ
+    let iu_entries  = entries.iter().filter(|e|  e.is_in_use).count();
+    let del_entries = entries.iter().filter(|e| !e.is_in_use).count();
+    let total_size_iu:  u64 = entries.iter().filter(|e|  e.is_in_use).map(|e| e.size).sum();
+    let total_size_del: u64 = entries.iter().filter(|e| !e.is_in_use).map(|e| e.size).sum();
+
+    // top 20: in-use のみ
     let mut top20: Vec<&ParsedEntry> = entries.iter()
-        .filter(|e| e.size > 0)
+        .filter(|e| e.is_in_use && e.size > 0)
         .collect();
     top20.sort_unstable_by(|a, b| b.size.cmp(&a.size));
     top20.truncate(20);
 
     println!();
     println!("=== probe6 結果 ===");
-    println!("total records:            {:>10}", total_records);
-    println!("valid FILE records:       {:>10}  (apply_fixup + FILE sig)", file_sig_total);
-    println!("  in-use  (flags bit0=1): {:>10}", in_use_total);
-    println!("  deleted (flags bit0=0): {:>10}", file_sig_total.saturating_sub(in_use_total));
-    println!("parsed file entries:      {:>10}  (FILE sig + $FILE_NAME あり)", entries.len());
-    println!("  resident $DATA:         {:>10}", res_data_total);
-    println!("  non-resident $DATA:     {:>10}", nonres_data_total);
-    println!("  fn_size fallback:       {:>10}  (base record に $DATA なし)", fn_fallback_total);
-    println!("  size == 0:              {:>10}", size_zero_total);
-    println!("  size > 1GB:             {:>10}", size_1gb_total);
-    println!("total size:               {:>6} GB ({} bytes)",
-        total_size / 1_073_741_824, total_size);
-    println!("parse elapsed:            {:.2}秒", parse_elapsed.as_secs_f64());
-    println!("total elapsed:            {:.2}秒", total_elapsed.as_secs_f64());
+    println!("total records:                  {:>10}", total_records);
+    println!("valid FILE records:             {:>10}", file_sig_total);
+    println!("  in-use  (flags bit0=1):       {:>10}", in_use_sig_total);
+    println!("  deleted (flags bit0=0):       {:>10}", del_sig_total);
     println!();
-    println!("--- top 20 largest entries ---");
+    println!("parsed file entries (all):      {:>10}", entries.len());
+    println!("  in-use:                       {:>10}", iu_entries);
+    println!("  deleted:                      {:>10}", del_entries);
+    println!();
+    println!("$DATA breakdown        (in-use / deleted):");
+    println!("  resident $DATA:     {:>10} / {:>10}", res_iu,      res_del);
+    println!("  non-resident $DATA: {:>10} / {:>10}", nonres_iu,   nonres_del);
+    println!("  fn_size fallback:   {:>10} / {:>10}  ($DATA not in base record)", fallback_iu, fallback_del);
+    println!("  size == 0:          {:>10} / {:>10}", zero_iu,     zero_del);
+    println!("  size > 1GB (all):   {:>10}", size_1gb_total);
+    println!();
+    println!("total size  in-use:   {:>6} GB ({} bytes)", total_size_iu  / 1_073_741_824, total_size_iu);
+    println!("total size  deleted:  {:>6} GB ({} bytes)", total_size_del / 1_073_741_824, total_size_del);
+    println!("total size  all:      {:>6} GB",           (total_size_iu + total_size_del) / 1_073_741_824);
+    println!("parse elapsed:        {:.2}秒", parse_elapsed.as_secs_f64());
+    println!("total elapsed:        {:.2}秒", total_elapsed.as_secs_f64());
+    println!();
+    println!("--- top 20 largest (in-use only) ---");
     for (rank, e) in top20.iter().enumerate() {
         println!("{:>3}. {:>10} MB  {}  (parent_frn={}, idx={})",
             rank + 1, e.size / 1_048_576, e.name, e.parent_frn, e.record_idx);
