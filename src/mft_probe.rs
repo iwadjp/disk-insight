@@ -610,3 +610,192 @@ pub fn probe5(drive: char) -> Result<()> {
     unsafe { windows::Win32::Foundation::CloseHandle(info.handle).ok(); }
     Ok(())
 }
+
+pub fn probe6(drive: char) -> Result<()> {
+    use rayon::prelude::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use windows::Win32::Storage::FileSystem::{ReadFile, SetFilePointerEx, FILE_BEGIN};
+
+    let info = get_mft_info(drive)?;
+
+    println!("$MFT サイズ: {} MB", info.mft_size / 1_048_576);
+    println!("エクステント数: {}", info.extents.len());
+    println!("メモリ確保・読み込み開始...");
+
+    let total_start = std::time::Instant::now();
+    let mut mft_buf = vec![0u8; info.mft_size as usize];
+
+    let io_start = std::time::Instant::now();
+    for (start_vcn, lcn, length) in &info.extents {
+        let disk_offset = lcn  * info.bytes_per_cluster;
+        let dst_start   = start_vcn * info.bytes_per_cluster;
+        let read_size   = length * info.bytes_per_cluster;
+        let dst_end     = dst_start + read_size;
+
+        unsafe {
+            SetFilePointerEx(info.handle, disk_offset as i64, None, FILE_BEGIN)
+        }.context("SetFilePointerEx失敗")?;
+
+        let mut bytes_read: u32 = 0;
+        unsafe {
+            ReadFile(
+                info.handle,
+                Some(&mut mft_buf[dst_start as usize..dst_end as usize]),
+                Some(&mut bytes_read),
+                None,
+            )
+        }.context("ReadFile失敗")?;
+    }
+    let io_elapsed = io_start.elapsed();
+    println!("I/O時間: {:.2}秒", io_elapsed.as_secs_f64());
+
+    unsafe { windows::Win32::Foundation::CloseHandle(info.handle).ok(); }
+
+    let record_size   = info.bytes_per_record as usize;
+    let total_records = info.mft_size as usize / record_size;
+    println!("解析開始... 総レコード数: {}", total_records);
+
+    struct ParsedEntry {
+        record_idx: usize,
+        name:       String,
+        parent_frn: u64,
+        size:       u64,
+    }
+
+    let file_sig_count = AtomicUsize::new(0);
+    let parse_start    = std::time::Instant::now();
+
+    let entries: Vec<ParsedEntry> = mft_buf
+        .par_chunks_exact(record_size)
+        .enumerate()
+        .filter_map(|(i, raw)| {
+            let record = apply_fixup(raw)?;
+
+            if record.len() < 4 || &record[0..4] != b"FILE" { return None; }
+            file_sig_count.fetch_add(1, Ordering::Relaxed);
+
+            if record.len() < 22 { return None; }
+            let attr_start = u16::from_le_bytes([record[20], record[21]]) as usize;
+
+            let mut pos          = attr_start;
+            let mut name         = String::new();
+            let mut parent_frn:   u64 = 0;
+            let mut fn_size:      u64 = 0;
+            let mut data_size: Option<u64> = None;
+            let mut best_ns_prio: u8 = 255;
+
+            loop {
+                if pos + 8 > record.len() { break; }
+
+                let attr_type = u32::from_le_bytes([
+                    record[pos], record[pos+1], record[pos+2], record[pos+3],
+                ]);
+                let attr_len = u32::from_le_bytes([
+                    record[pos+4], record[pos+5], record[pos+6], record[pos+7],
+                ]) as usize;
+
+                if attr_type == 0xFFFF_FFFF { break; }
+                if attr_len == 0 || pos + attr_len > record.len() { break; }
+
+                let non_resident = record[pos + 8];
+
+                match attr_type {
+                    0x30 if non_resident == 0 => {
+                        // $FILE_NAME（常駐のみ）
+                        if pos + 22 > record.len() { pos += attr_len; continue; }
+                        let content_off = u16::from_le_bytes([record[pos+20], record[pos+21]]) as usize;
+                        let c = pos + content_off;
+                        if c + 0x42 > record.len() { pos += attr_len; continue; }
+
+                        let ns = record[c + 0x41];
+                        // Win32(1) > Win32&DOS(3) > POSIX(0) > DOS(2)
+                        let ns_prio: u8 = match ns { 1 => 0, 3 => 1, 0 => 2, 2 => 3, _ => 4 };
+
+                        if ns_prio < best_ns_prio {
+                            best_ns_prio = ns_prio;
+
+                            if c + 8 <= record.len() {
+                                let parent_raw = u64::from_le_bytes([
+                                    record[c],   record[c+1], record[c+2], record[c+3],
+                                    record[c+4], record[c+5], record[c+6], record[c+7],
+                                ]);
+                                parent_frn = parent_raw & 0x0000_FFFF_FFFF_FFFF;
+                            }
+
+                            if c + 0x38 <= record.len() {
+                                fn_size = u64::from_le_bytes([
+                                    record[c+0x30], record[c+0x31], record[c+0x32], record[c+0x33],
+                                    record[c+0x34], record[c+0x35], record[c+0x36], record[c+0x37],
+                                ]);
+                            }
+
+                            let name_chars = record[c + 0x40] as usize;
+                            let name_start = c + 0x42;
+                            let name_end   = name_start + name_chars * 2;
+                            if name_end <= record.len() {
+                                let wide: Vec<u16> = record[name_start..name_end]
+                                    .chunks_exact(2)
+                                    .map(|b| u16::from_le_bytes([b[0], b[1]]))
+                                    .collect();
+                                name = String::from_utf16_lossy(&wide);
+                            }
+                        }
+                    }
+                    0x80 if data_size.is_none() => {
+                        // 無名 $DATA のみ（ADS はスキップ）
+                        if record[pos + 9] == 0 {
+                            if non_resident == 1 && pos + 56 <= record.len() {
+                                data_size = Some(u64::from_le_bytes([
+                                    record[pos+48], record[pos+49], record[pos+50], record[pos+51],
+                                    record[pos+52], record[pos+53], record[pos+54], record[pos+55],
+                                ]));
+                            } else if non_resident == 0 && pos + 20 <= record.len() {
+                                data_size = Some(u32::from_le_bytes([
+                                    record[pos+16], record[pos+17], record[pos+18], record[pos+19],
+                                ]) as u64);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+
+                pos += attr_len;
+            }
+
+            if name.is_empty() { return None; }
+
+            let size = data_size.unwrap_or(fn_size);
+            Some(ParsedEntry { record_idx: i, name, parent_frn, size })
+        })
+        .collect();
+
+    let parse_elapsed = parse_start.elapsed();
+    let total_elapsed = total_start.elapsed();
+
+    let file_sig_total = file_sig_count.load(Ordering::Relaxed);
+    let total_size: u64 = entries.iter().map(|e| e.size).sum();
+
+    let mut top10: Vec<&ParsedEntry> = entries.iter()
+        .filter(|e| e.size > 0)
+        .collect();
+    top10.sort_unstable_by(|a, b| b.size.cmp(&a.size));
+    top10.truncate(10);
+
+    println!();
+    println!("=== probe6 結果 ===");
+    println!("total records:       {:>10}", total_records);
+    println!("valid FILE records:  {:>10}", file_sig_total);
+    println!("parsed file entries: {:>10}", entries.len());
+    println!("total size:          {:>6} GB ({} bytes)",
+        total_size / 1_073_741_824, total_size);
+    println!("parse elapsed:       {:.2}秒", parse_elapsed.as_secs_f64());
+    println!("total elapsed:       {:.2}秒", total_elapsed.as_secs_f64());
+    println!();
+    println!("--- top 10 largest files ---");
+    for (rank, e) in top10.iter().enumerate() {
+        println!("{:>3}. {:>10} MB  {}  (parent_frn={}, idx={})",
+            rank + 1, e.size / 1_048_576, e.name, e.parent_frn, e.record_idx);
+    }
+
+    Ok(())
+}
