@@ -662,8 +662,16 @@ pub fn probe6(drive: char) -> Result<()> {
         size:       u64,
     }
 
-    let file_sig_count = AtomicUsize::new(0);
-    let parse_start    = std::time::Instant::now();
+    // 診断カウンタ
+    let file_sig_count    = AtomicUsize::new(0);
+    let in_use_count      = AtomicUsize::new(0); // flags bit0=1
+    let res_data_count    = AtomicUsize::new(0); // resident $DATA
+    let nonres_data_count = AtomicUsize::new(0); // non-resident $DATA
+    let fn_fallback_count = AtomicUsize::new(0); // $DATA 未発見 → fn_size 採用
+    let size_zero_count   = AtomicUsize::new(0); // size == 0
+    let size_1gb_count    = AtomicUsize::new(0); // size > 1GB
+
+    let parse_start = std::time::Instant::now();
 
     let entries: Vec<ParsedEntry> = mft_buf
         .par_chunks_exact(record_size)
@@ -674,15 +682,24 @@ pub fn probe6(drive: char) -> Result<()> {
             if record.len() < 4 || &record[0..4] != b"FILE" { return None; }
             file_sig_count.fetch_add(1, Ordering::Relaxed);
 
-            if record.len() < 22 { return None; }
+            if record.len() < 24 { return None; }
+
+            // offset 22: flags (2 bytes) - bit0=in_use, bit1=directory
+            let flags = u16::from_le_bytes([record[22], record[23]]);
+            if flags & 0x01 != 0 {
+                in_use_count.fetch_add(1, Ordering::Relaxed);
+            }
+
             let attr_start = u16::from_le_bytes([record[20], record[21]]) as usize;
 
-            let mut pos          = attr_start;
-            let mut name         = String::new();
-            let mut parent_frn:   u64 = 0;
-            let mut fn_size:      u64 = 0;
+            let mut pos              = attr_start;
+            let mut name             = String::new();
+            let mut parent_frn: u64  = 0;
+            let mut fn_size:    u64  = 0;
             let mut data_size: Option<u64> = None;
             let mut best_ns_prio: u8 = 255;
+            let mut found_res    = false;
+            let mut found_nonres = false;
 
             loop {
                 if pos + 8 > record.len() { break; }
@@ -701,7 +718,7 @@ pub fn probe6(drive: char) -> Result<()> {
 
                 match attr_type {
                     0x30 if non_resident == 0 => {
-                        // $FILE_NAME（常駐のみ）
+                        // $FILE_NAME（常に常駐）
                         if pos + 22 > record.len() { pos += attr_len; continue; }
                         let content_off = u16::from_le_bytes([record[pos+20], record[pos+21]]) as usize;
                         let c = pos + content_off;
@@ -741,18 +758,23 @@ pub fn probe6(drive: char) -> Result<()> {
                             }
                         }
                     }
-                    0x80 if data_size.is_none() => {
-                        // 無名 $DATA のみ（ADS はスキップ）
-                        if record[pos + 9] == 0 {
+                    0x80 => {
+                        // 無名 $DATA のみ・先着1件
+                        // ガードをマッチアームから外して内側で判定（ADS 混在時も正しく処理）
+                        if record[pos + 9] == 0 && data_size.is_none() {
                             if non_resident == 1 && pos + 56 <= record.len() {
+                                // 非常駐: offset+48 = RealSize (offset+40 = AllocatedSize)
                                 data_size = Some(u64::from_le_bytes([
                                     record[pos+48], record[pos+49], record[pos+50], record[pos+51],
                                     record[pos+52], record[pos+53], record[pos+54], record[pos+55],
                                 ]));
+                                found_nonres = true;
                             } else if non_resident == 0 && pos + 20 <= record.len() {
+                                // 常駐: offset+16 = ContentLength (u32)
                                 data_size = Some(u32::from_le_bytes([
                                     record[pos+16], record[pos+17], record[pos+18], record[pos+19],
                                 ]) as u64);
+                                found_res = true;
                             }
                         }
                     }
@@ -764,7 +786,19 @@ pub fn probe6(drive: char) -> Result<()> {
 
             if name.is_empty() { return None; }
 
-            let size = data_size.unwrap_or(fn_size);
+            if found_res    { res_data_count.fetch_add(1, Ordering::Relaxed); }
+            if found_nonres { nonres_data_count.fetch_add(1, Ordering::Relaxed); }
+
+            let size = if let Some(ds) = data_size {
+                ds
+            } else {
+                fn_fallback_count.fetch_add(1, Ordering::Relaxed);
+                fn_size
+            };
+
+            if size == 0        { size_zero_count.fetch_add(1, Ordering::Relaxed); }
+            if size > 1_073_741_824 { size_1gb_count.fetch_add(1, Ordering::Relaxed); }
+
             Some(ParsedEntry { record_idx: i, name, parent_frn, size })
         })
         .collect();
@@ -772,27 +806,40 @@ pub fn probe6(drive: char) -> Result<()> {
     let parse_elapsed = parse_start.elapsed();
     let total_elapsed = total_start.elapsed();
 
-    let file_sig_total = file_sig_count.load(Ordering::Relaxed);
-    let total_size: u64 = entries.iter().map(|e| e.size).sum();
+    let file_sig_total    = file_sig_count.load(Ordering::Relaxed);
+    let in_use_total      = in_use_count.load(Ordering::Relaxed);
+    let res_data_total    = res_data_count.load(Ordering::Relaxed);
+    let nonres_data_total = nonres_data_count.load(Ordering::Relaxed);
+    let fn_fallback_total = fn_fallback_count.load(Ordering::Relaxed);
+    let size_zero_total   = size_zero_count.load(Ordering::Relaxed);
+    let size_1gb_total    = size_1gb_count.load(Ordering::Relaxed);
+    let total_size: u64   = entries.iter().map(|e| e.size).sum();
 
-    let mut top10: Vec<&ParsedEntry> = entries.iter()
+    let mut top20: Vec<&ParsedEntry> = entries.iter()
         .filter(|e| e.size > 0)
         .collect();
-    top10.sort_unstable_by(|a, b| b.size.cmp(&a.size));
-    top10.truncate(10);
+    top20.sort_unstable_by(|a, b| b.size.cmp(&a.size));
+    top20.truncate(20);
 
     println!();
     println!("=== probe6 結果 ===");
-    println!("total records:       {:>10}", total_records);
-    println!("valid FILE records:  {:>10}", file_sig_total);
-    println!("parsed file entries: {:>10}", entries.len());
-    println!("total size:          {:>6} GB ({} bytes)",
+    println!("total records:            {:>10}", total_records);
+    println!("valid FILE records:       {:>10}  (apply_fixup + FILE sig)", file_sig_total);
+    println!("  in-use  (flags bit0=1): {:>10}", in_use_total);
+    println!("  deleted (flags bit0=0): {:>10}", file_sig_total.saturating_sub(in_use_total));
+    println!("parsed file entries:      {:>10}  (FILE sig + $FILE_NAME あり)", entries.len());
+    println!("  resident $DATA:         {:>10}", res_data_total);
+    println!("  non-resident $DATA:     {:>10}", nonres_data_total);
+    println!("  fn_size fallback:       {:>10}  (base record に $DATA なし)", fn_fallback_total);
+    println!("  size == 0:              {:>10}", size_zero_total);
+    println!("  size > 1GB:             {:>10}", size_1gb_total);
+    println!("total size:               {:>6} GB ({} bytes)",
         total_size / 1_073_741_824, total_size);
-    println!("parse elapsed:       {:.2}秒", parse_elapsed.as_secs_f64());
-    println!("total elapsed:       {:.2}秒", total_elapsed.as_secs_f64());
+    println!("parse elapsed:            {:.2}秒", parse_elapsed.as_secs_f64());
+    println!("total elapsed:            {:.2}秒", total_elapsed.as_secs_f64());
     println!();
-    println!("--- top 10 largest files ---");
-    for (rank, e) in top10.iter().enumerate() {
+    println!("--- top 20 largest entries ---");
+    for (rank, e) in top20.iter().enumerate() {
         println!("{:>3}. {:>10} MB  {}  (parent_frn={}, idx={})",
             rank + 1, e.size / 1_048_576, e.name, e.parent_frn, e.record_idx);
     }
