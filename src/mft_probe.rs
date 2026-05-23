@@ -301,3 +301,158 @@ pub fn probe3(drive: char) -> Result<()> {
     unsafe { windows::Win32::Foundation::CloseHandle(handle).ok(); }
     Ok(())
 }
+
+fn decode_runlist(runlist: &[u8]) -> Vec<(u64, u64)> {
+    let mut extents = Vec::new();
+    let mut pos = 0usize;
+    let mut current_lcn: i64 = 0;
+
+    while pos < runlist.len() {
+        let header = runlist[pos];
+        if header == 0x00 {
+            break;
+        }
+
+        let length_bytes = (header & 0x0F) as usize;
+        let lcn_bytes    = (header >> 4)   as usize;
+
+        if length_bytes == 0 { break; }
+        pos += 1;
+
+        if pos + length_bytes > runlist.len() { break; }
+        let mut length: u64 = 0;
+        for i in 0..length_bytes {
+            length |= (runlist[pos + i] as u64) << (i * 8);
+        }
+        pos += length_bytes;
+
+        if lcn_bytes > 0 {
+            if pos + lcn_bytes > runlist.len() { break; }
+            let mut delta: i64 = 0;
+            for i in 0..lcn_bytes {
+                delta |= (runlist[pos + i] as i64) << (i * 8);
+            }
+            // 符号拡張
+            let shift = 64 - lcn_bytes * 8;
+            delta = (delta << shift) >> shift;
+            current_lcn += delta;
+            pos += lcn_bytes;
+        }
+
+        extents.push((current_lcn as u64, length));
+    }
+
+    extents
+}
+
+pub fn probe4(drive: char) -> Result<()> {
+    use windows::Win32::System::Ioctl::{
+        FSCTL_GET_NTFS_VOLUME_DATA, NTFS_VOLUME_DATA_BUFFER,
+    };
+
+    let path: Vec<u16> = format!("\\\\.\\{}:", drive)
+        .encode_utf16().chain(std::iter::once(0)).collect();
+
+    let handle = unsafe {
+        CreateFileW(
+            PCWSTR(path.as_ptr()),
+            0x80000000u32,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            None, OPEN_EXISTING,
+            FILE_FLAGS_AND_ATTRIBUTES(0), None,
+        )
+    }.context("ドライブオープン失敗")?;
+
+    // bytes_per_cluster 取得
+    let mut vol_data = NTFS_VOLUME_DATA_BUFFER::default();
+    let mut bytes_returned: u32 = 0;
+    unsafe {
+        DeviceIoControl(
+            handle,
+            FSCTL_GET_NTFS_VOLUME_DATA,
+            None, 0,
+            Some(&mut vol_data as *mut _ as *mut _),
+            std::mem::size_of::<NTFS_VOLUME_DATA_BUFFER>() as u32,
+            Some(&mut bytes_returned),
+            None,
+        )
+    }.context("FSCTL_GET_NTFS_VOLUME_DATA失敗")?;
+
+    let bytes_per_cluster = vol_data.BytesPerCluster as u64;
+    println!("BytesPerCluster: {}", bytes_per_cluster);
+
+    // FRN=0 ($MFT) のレコードを取得
+    let out_size = 8 + 4 + 1024usize;
+    let mut out_buf = vec![0u8; out_size];
+    let mut bytes_returned: u32 = 0;
+
+    let input = NtfsFileRecordInputBuffer {
+        file_reference_number: 0i64,
+    };
+
+    unsafe {
+        DeviceIoControl(
+            handle,
+            FSCTL_GET_NTFS_FILE_RECORD,
+            Some(&input as *const _ as *const _),
+            std::mem::size_of::<NtfsFileRecordInputBuffer>() as u32,
+            Some(out_buf.as_mut_ptr() as *mut _),
+            out_size as u32,
+            Some(&mut bytes_returned),
+            None,
+        )
+    }.context("FSCTL_GET_NTFS_FILE_RECORD失敗")?;
+
+    let record = &out_buf[12..12+1024];
+
+    // $DATA属性 (0x80) を探す
+    let attr_offset = u16::from_le_bytes([record[20], record[21]]) as usize;
+    let mut pos = attr_offset;
+
+    loop {
+        if pos + 8 > record.len() { break; }
+        let attr_type = u32::from_le_bytes(record[pos..pos+4].try_into().unwrap());
+        let attr_len  = u32::from_le_bytes(record[pos+4..pos+8].try_into().unwrap()) as usize;
+
+        if attr_type == 0xFFFFFFFF || attr_len == 0 { break; }
+
+        if attr_type == 0x80 && record[pos + 8] == 1 {
+            let runlist_offset = u16::from_le_bytes(
+                [record[pos+32], record[pos+33]]
+            ) as usize;
+            let real_size = u64::from_le_bytes(
+                record[pos+48..pos+56].try_into().unwrap()
+            );
+
+            let rl_start = pos + runlist_offset;
+            let rl_end   = pos + attr_len;
+            if rl_start < rl_end && rl_end <= record.len() {
+                let runlist = &record[rl_start..rl_end];
+                let extents = decode_runlist(runlist);
+
+                println!("=== $MFT Runlist ===");
+                println!("RealSize: {} MB", real_size / 1_048_576);
+                println!("エクステント数: {}", extents.len());
+
+                let mut total_clusters: u64 = 0;
+                for (i, (lcn, len)) in extents.iter().enumerate() {
+                    let byte_offset = lcn * bytes_per_cluster;
+                    let size_mb = len * bytes_per_cluster / 1_048_576;
+                    println!("  [{:2}] LCN={:8} clusters={:6} offset={:12} size={}MB",
+                        i, lcn, len, byte_offset, size_mb);
+                    total_clusters += len;
+                }
+
+                println!("合計クラスタ数: {}", total_clusters);
+                println!("合計サイズ: {} MB",
+                    total_clusters * bytes_per_cluster / 1_048_576);
+            }
+            break;
+        }
+
+        pos += attr_len;
+    }
+
+    unsafe { windows::Win32::Foundation::CloseHandle(handle).ok(); }
+    Ok(())
+}
