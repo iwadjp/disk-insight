@@ -659,9 +659,22 @@ pub fn probe6(drive: char) -> Result<()> {
         record_idx:    usize,
         name:          String,
         parent_frn:    u64,
-        size:          u64,
+        size:          u64,       // RealSize
+        alloc_size:    u64,       // AllocatedSize
         is_in_use:     bool,
         has_attr_list: bool,
+        data_kind:     u8,        // 0=resident, 1=nonresident, 2=fallback
+    }
+
+    struct ExtensionDataEntry {
+        record_idx:       usize,
+        base_record:      u64,
+        file_name:        String,
+        stream_names:     Vec<String>,
+        real_size:        u64,
+        alloc_size:       u64,
+        has_unnamed_data: bool,
+        has_named_data:   bool,
     }
 
     // 診断カウンタ（全体）
@@ -681,10 +694,14 @@ pub fn probe6(drive: char) -> Result<()> {
     let attr_list_count        = AtomicUsize::new(0); // 全レコード中の $ATTRIBUTE_LIST 件数
     let attr_list_iu           = AtomicUsize::new(0); // in-use のみ
     let attr_list_iu_fallback  = AtomicUsize::new(0); // in-use + fn_size fallback
+    let ext_in_use_count       = AtomicUsize::new(0);
+    let ext_deleted_count      = AtomicUsize::new(0);
+    let ext_with_file_name_iu  = AtomicUsize::new(0);
+    let ext_without_file_name_iu = AtomicUsize::new(0);
 
     let parse_start = std::time::Instant::now();
 
-    let entries: Vec<ParsedEntry> = mft_buf
+    let parsed_records: Vec<(Option<ParsedEntry>, Option<ExtensionDataEntry>)> = mft_buf
         .par_chunks_exact(record_size)
         .enumerate()
         .filter_map(|(i, raw)| {
@@ -701,6 +718,22 @@ pub fn probe6(drive: char) -> Result<()> {
             if is_in_use {
                 in_use_count.fetch_add(1, Ordering::Relaxed);
             }
+            let base_record = if record.len() >= 40 {
+                u64::from_le_bytes([
+                    record[32], record[33], record[34], record[35],
+                    record[36], record[37], record[38], record[39],
+                ])
+            } else {
+                0
+            };
+            let is_extension = base_record != 0;
+            if is_extension {
+                if is_in_use {
+                    ext_in_use_count.fetch_add(1, Ordering::Relaxed);
+                } else {
+                    ext_deleted_count.fetch_add(1, Ordering::Relaxed);
+                }
+            }
 
             let attr_start = u16::from_le_bytes([record[20], record[21]]) as usize;
 
@@ -713,6 +746,13 @@ pub fn probe6(drive: char) -> Result<()> {
             let mut found_res    = false;
             let mut found_nonres = false;
             let mut has_attr_list = false;
+            let mut alloc_data_size: Option<u64> = None;
+            let mut ext_real_size: u64 = 0;
+            let mut ext_alloc_size: u64 = 0;
+            let mut ext_has_data = false;
+            let mut ext_has_unnamed_data = false;
+            let mut ext_has_named_data = false;
+            let mut ext_stream_names: Vec<String> = Vec::new();
 
             loop {
                 if pos + 8 > record.len() { break; }
@@ -728,6 +768,23 @@ pub fn probe6(drive: char) -> Result<()> {
                 if attr_len == 0 || pos + attr_len > record.len() { break; }
 
                 let non_resident = record[pos + 8];
+                let stream_name_len = record[pos + 9] as usize;
+                let stream_name = if stream_name_len > 0 && pos + 12 <= record.len() {
+                    let name_off = u16::from_le_bytes([record[pos+10], record[pos+11]]) as usize;
+                    let name_start = pos + name_off;
+                    let name_end = name_start + stream_name_len * 2;
+                    if name_end <= pos + attr_len && name_end <= record.len() {
+                        let wide: Vec<u16> = record[name_start..name_end]
+                            .chunks_exact(2)
+                            .map(|b| u16::from_le_bytes([b[0], b[1]]))
+                            .collect();
+                        Some(String::from_utf16_lossy(&wide))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
 
                 match attr_type {
                     0x30 if non_resident == 0 => {
@@ -772,11 +829,50 @@ pub fn probe6(drive: char) -> Result<()> {
                         }
                     }
                     0x80 => {
+                        if is_extension {
+                            let mut attr_real_size: Option<u64> = None;
+                            let mut attr_alloc_size: Option<u64> = None;
+                            if non_resident == 1 && pos + 56 <= record.len() {
+                                attr_alloc_size = Some(u64::from_le_bytes([
+                                    record[pos+40], record[pos+41], record[pos+42], record[pos+43],
+                                    record[pos+44], record[pos+45], record[pos+46], record[pos+47],
+                                ]));
+                                attr_real_size = Some(u64::from_le_bytes([
+                                    record[pos+48], record[pos+49], record[pos+50], record[pos+51],
+                                    record[pos+52], record[pos+53], record[pos+54], record[pos+55],
+                                ]));
+                            } else if non_resident == 0 && pos + 20 <= record.len() {
+                                let content_len = u32::from_le_bytes([
+                                    record[pos+16], record[pos+17], record[pos+18], record[pos+19],
+                                ]) as u64;
+                                attr_real_size = Some(content_len);
+                                attr_alloc_size = Some(content_len);
+                            }
+
+                            if let (Some(real), Some(alloc)) = (attr_real_size, attr_alloc_size) {
+                                ext_has_data = true;
+                                ext_real_size = ext_real_size.saturating_add(real);
+                                ext_alloc_size = ext_alloc_size.saturating_add(alloc);
+                                if stream_name_len == 0 {
+                                    ext_has_unnamed_data = true;
+                                } else {
+                                    ext_has_named_data = true;
+                                    if let Some(sn) = &stream_name {
+                                        ext_stream_names.push(sn.clone());
+                                    }
+                                }
+                            }
+                        }
+
                         // 無名 $DATA のみ・先着1件
                         // ガードをマッチアームから外して内側で判定（ADS 混在時も正しく処理）
                         if record[pos + 9] == 0 && data_size.is_none() {
                             if non_resident == 1 && pos + 56 <= record.len() {
                                 // 非常駐: offset+48 = RealSize (offset+40 = AllocatedSize)
+                                alloc_data_size = Some(u64::from_le_bytes([
+                                    record[pos+40], record[pos+41], record[pos+42], record[pos+43],
+                                    record[pos+44], record[pos+45], record[pos+46], record[pos+47],
+                                ]));
                                 data_size = Some(u64::from_le_bytes([
                                     record[pos+48], record[pos+49], record[pos+50], record[pos+51],
                                     record[pos+52], record[pos+53], record[pos+54], record[pos+55],
@@ -784,9 +880,11 @@ pub fn probe6(drive: char) -> Result<()> {
                                 found_nonres = true;
                             } else if non_resident == 0 && pos + 20 <= record.len() {
                                 // 常駐: offset+16 = ContentLength (u32)
-                                data_size = Some(u32::from_le_bytes([
+                                let content_len = u32::from_le_bytes([
                                     record[pos+16], record[pos+17], record[pos+18], record[pos+19],
-                                ]) as u64);
+                                ]) as u64;
+                                data_size       = Some(content_len);
+                                alloc_data_size = Some(content_len);
                                 found_res = true;
                             }
                         }
@@ -800,12 +898,37 @@ pub fn probe6(drive: char) -> Result<()> {
                 pos += attr_len;
             }
 
+            if is_extension && is_in_use {
+                if name.is_empty() {
+                    ext_without_file_name_iu.fetch_add(1, Ordering::Relaxed);
+                } else {
+                    ext_with_file_name_iu.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+
             if has_attr_list {
                 attr_list_count.fetch_add(1, Ordering::Relaxed);
                 if is_in_use { attr_list_iu.fetch_add(1, Ordering::Relaxed); }
             }
 
-            if name.is_empty() { return None; }
+            let ext_data = if is_extension && is_in_use && ext_has_data {
+                Some(ExtensionDataEntry {
+                    record_idx: i,
+                    base_record,
+                    file_name: name.clone(),
+                    stream_names: ext_stream_names,
+                    real_size: ext_real_size,
+                    alloc_size: ext_alloc_size,
+                    has_unnamed_data: ext_has_unnamed_data,
+                    has_named_data: ext_has_named_data,
+                })
+            } else {
+                None
+            };
+
+            if name.is_empty() {
+                return Some((None, ext_data));
+            }
 
             if found_res {
                 res_data_count.fetch_add(1, Ordering::Relaxed);
@@ -816,15 +939,17 @@ pub fn probe6(drive: char) -> Result<()> {
                 if is_in_use { nonres_data_iu.fetch_add(1, Ordering::Relaxed); }
             }
 
-            let size = if let Some(ds) = data_size {
-                ds
+            let (size, alloc_size, data_kind) = if found_res {
+                (data_size.unwrap(), alloc_data_size.unwrap(), 0u8)
+            } else if found_nonres {
+                (data_size.unwrap(), alloc_data_size.unwrap(), 1u8)
             } else {
                 fn_fallback_count.fetch_add(1, Ordering::Relaxed);
                 if is_in_use {
                     fn_fallback_iu.fetch_add(1, Ordering::Relaxed);
                     if has_attr_list { attr_list_iu_fallback.fetch_add(1, Ordering::Relaxed); }
                 }
-                fn_size
+                (fn_size, fn_size, 2u8)
             };
 
             if size == 0 {
@@ -833,9 +958,21 @@ pub fn probe6(drive: char) -> Result<()> {
             }
             if size > 1_073_741_824 { size_1gb_count.fetch_add(1, Ordering::Relaxed); }
 
-            Some(ParsedEntry { record_idx: i, name, parent_frn, size, is_in_use, has_attr_list })
+            Some((Some(ParsedEntry { record_idx: i, name, parent_frn, size, alloc_size, is_in_use, has_attr_list, data_kind }), ext_data))
         })
         .collect();
+
+    let (entries, ext_data_entries): (Vec<_>, Vec<_>) = parsed_records
+        .into_iter()
+        .fold((Vec::new(), Vec::new()), |mut acc, (entry, ext_data)| {
+            if let Some(entry) = entry {
+                acc.0.push(entry);
+            }
+            if let Some(ext_data) = ext_data {
+                acc.1.push(ext_data);
+            }
+            acc
+        });
 
     let parse_elapsed = parse_start.elapsed();
     let total_elapsed = total_start.elapsed();
@@ -868,6 +1005,16 @@ pub fn probe6(drive: char) -> Result<()> {
     let del_entries = entries.iter().filter(|e| !e.is_in_use).count();
     let total_size_iu:  u64 = entries.iter().filter(|e|  e.is_in_use).map(|e| e.size).sum();
     let total_size_del: u64 = entries.iter().filter(|e| !e.is_in_use).map(|e| e.size).sum();
+    let total_alloc_iu: u64 = entries.iter().filter(|e|  e.is_in_use).map(|e| e.alloc_size).sum();
+    let total_alloc_del:u64 = entries.iter().filter(|e| !e.is_in_use).map(|e| e.alloc_size).sum();
+
+    // RealSize/AllocatedSize 縺ｮ遞ｮ蛻･蜀・ｨｳ・・n-use 縺ｮ縺ｿ・・
+    let res_real_iu:     u64 = entries.iter().filter(|e| e.is_in_use && e.data_kind == 0).map(|e| e.size).sum();
+    let res_alloc_iu:    u64 = entries.iter().filter(|e| e.is_in_use && e.data_kind == 0).map(|e| e.alloc_size).sum();
+    let nonres_real_iu:  u64 = entries.iter().filter(|e| e.is_in_use && e.data_kind == 1).map(|e| e.size).sum();
+    let nonres_alloc_iu: u64 = entries.iter().filter(|e| e.is_in_use && e.data_kind == 1).map(|e| e.alloc_size).sum();
+    let fallback_cnt_iu: usize = entries.iter().filter(|e| e.is_in_use && e.data_kind == 2).count();
+    let fallback_real_iu: u64 = entries.iter().filter(|e| e.is_in_use && e.data_kind == 2).map(|e| e.size).sum();
 
     // top 20: in-use のみ
     let mut top20: Vec<&ParsedEntry> = entries.iter()
@@ -882,6 +1029,26 @@ pub fn probe6(drive: char) -> Result<()> {
         .collect();
     top20_al.sort_unstable_by(|a, b| b.size.cmp(&a.size));
     top20_al.truncate(20);
+
+    let ext_in_use_total = ext_in_use_count.load(Ordering::Relaxed);
+    let ext_deleted_total = ext_deleted_count.load(Ordering::Relaxed);
+    let ext_with_data_iu = ext_data_entries.len();
+    let ext_with_unnamed_data_iu = ext_data_entries.iter().filter(|e| e.has_unnamed_data).count();
+    let ext_with_named_data_iu = ext_data_entries.iter().filter(|e| e.has_named_data).count();
+    let ext_real_total_iu: u64 = ext_data_entries.iter().map(|e| e.real_size).sum();
+    let ext_alloc_total_iu: u64 = ext_data_entries.iter().map(|e| e.alloc_size).sum();
+    let ext_with_file_name_total_iu = ext_with_file_name_iu.load(Ordering::Relaxed);
+    let ext_without_file_name_total_iu = ext_without_file_name_iu.load(Ordering::Relaxed);
+
+    let mut top20_ext_data: Vec<&ExtensionDataEntry> = ext_data_entries.iter()
+        .filter(|e| e.real_size > 0 || e.alloc_size > 0)
+        .collect();
+    top20_ext_data.sort_unstable_by(|a, b| {
+        b.alloc_size
+            .cmp(&a.alloc_size)
+            .then_with(|| b.real_size.cmp(&a.real_size))
+    });
+    top20_ext_data.truncate(20);
 
     println!();
     println!("=== probe6 結果 ===");
@@ -901,16 +1068,29 @@ pub fn probe6(drive: char) -> Result<()> {
     println!("  size == 0:          {:>10} / {:>10}", zero_iu,     zero_del);
     println!("  size > 1GB (all):   {:>10}", size_1gb_total);
     println!();
-    println!("total size  in-use:   {:>6} GB ({} bytes)", total_size_iu  / 1_073_741_824, total_size_iu);
-    println!("total size  deleted:  {:>6} GB ({} bytes)", total_size_del / 1_073_741_824, total_size_del);
-    println!("total size  all:      {:>6} GB",           (total_size_iu + total_size_del) / 1_073_741_824);
+    println!("RealSize/AllocatedSize (in-use):");
+    println!("  total real  size in-use:  {:>7} GB ({} bytes)", total_size_iu  / 1_073_741_824, total_size_iu);
+    println!("  total alloc size in-use:  {:>7} GB ({} bytes)", total_alloc_iu / 1_073_741_824, total_alloc_iu);
+    let slack_iu = total_alloc_iu.saturating_sub(total_size_iu);
+    let over_iu  = total_size_iu.saturating_sub(total_alloc_iu);
+    println!("  alloc - real (slack):     {:>7} GB ({} bytes)", slack_iu / 1_073_741_824, slack_iu);
+    println!("  real - alloc (over):      {:>7} GB ({} bytes)", over_iu  / 1_073_741_824, over_iu);
+    println!();
+    println!("RealSize/AllocatedSize breakdown (in-use):");
+    println!("  resident   real / alloc:  {:>7} GB / {:>7} GB", res_real_iu    / 1_073_741_824, res_alloc_iu    / 1_073_741_824);
+    println!("  nonresident real / alloc: {:>7} GB / {:>7} GB", nonres_real_iu / 1_073_741_824, nonres_alloc_iu / 1_073_741_824);
+    println!("  fallback    count / real: {:>10} / {:>7} GB  (fn_size, alloc==real)", fallback_cnt_iu, fallback_real_iu / 1_073_741_824);
+    println!();
+    println!("deleted (simplified):");
+    println!("  total real  size deleted: {:>7} GB", total_size_del  / 1_073_741_824);
+    println!("  total alloc size deleted: {:>7} GB", total_alloc_del / 1_073_741_824);
     println!("parse elapsed:        {:.2}秒", parse_elapsed.as_secs_f64());
     println!("total elapsed:        {:.2}秒", total_elapsed.as_secs_f64());
     println!();
-    println!("--- top 20 largest (in-use only) ---");
+    println!("--- top 20 largest (in-use only, by real size) ---");
     for (rank, e) in top20.iter().enumerate() {
-        println!("{:>3}. {:>10} MB  {}  (parent_frn={}, idx={})",
-            rank + 1, e.size / 1_048_576, e.name, e.parent_frn, e.record_idx);
+        println!("{:>3}. real={:>8}MB alloc={:>8}MB  {}  (parent_frn={}, idx={})",
+            rank + 1, e.size / 1_048_576, e.alloc_size / 1_048_576, e.name, e.parent_frn, e.record_idx);
     }
 
     println!();
@@ -925,6 +1105,40 @@ pub fn probe6(drive: char) -> Result<()> {
     for (rank, e) in top20_al.iter().enumerate() {
         println!("{:>3}. {:>10} MB  {}  (parent_frn={}, idx={})",
             rank + 1, e.size / 1_048_576, e.name, e.parent_frn, e.record_idx);
+    }
+
+    println!();
+    println!("Extension records (base_record != 0) diagnostics:");
+    println!("  in-use extension records:                 {:>10}", ext_in_use_total);
+    println!("  deleted extension records:                {:>10}", ext_deleted_total);
+    println!("  in-use extension records with $DATA:      {:>10}", ext_with_data_iu);
+    println!("  in-use extension records with unnamed $DATA: {:>7}", ext_with_unnamed_data_iu);
+    println!("  in-use extension records with named $DATA:   {:>7}", ext_with_named_data_iu);
+    println!("  in-use extension $DATA real total:        {:>10} GB ({} bytes)", ext_real_total_iu / 1_073_741_824, ext_real_total_iu);
+    println!("  in-use extension $DATA alloc total:       {:>10} GB ({} bytes)", ext_alloc_total_iu / 1_073_741_824, ext_alloc_total_iu);
+    println!("  in-use extension records with $FILE_NAME: {:>10}", ext_with_file_name_total_iu);
+    println!("  in-use extension records without $FILE_NAME: {:>7}", ext_without_file_name_total_iu);
+    println!();
+    println!("--- top 20 largest extension records with $DATA (in-use only, by allocated size) ---");
+    for (rank, e) in top20_ext_data.iter().enumerate() {
+        let streams = if e.stream_names.is_empty() {
+            String::from("(unnamed)")
+        } else {
+            e.stream_names.join(",")
+        };
+        let file_name = if e.file_name.is_empty() {
+            "(no $FILE_NAME)"
+        } else {
+            e.file_name.as_str()
+        };
+        println!("{:>3}. real={:>8}MB alloc={:>8}MB base_record={} idx={} stream={} file={}",
+            rank + 1,
+            e.real_size / 1_048_576,
+            e.alloc_size / 1_048_576,
+            e.base_record,
+            e.record_idx,
+            streams,
+            file_name);
     }
 
     Ok(())
