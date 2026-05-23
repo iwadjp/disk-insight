@@ -670,9 +670,11 @@ pub fn probe6(drive: char) -> Result<()> {
         record_idx:       usize,
         base_record:      u64,
         file_name:        String,
-        stream_names:     Vec<String>,
-        real_size:        u64,
-        alloc_size:       u64,
+        named_streams:    Vec<(String, u64, u64)>, // (name, real, alloc)
+        unnamed_real:     u64,
+        unnamed_alloc:    u64,
+        real_size:        u64,   // total = unnamed + named
+        alloc_size:       u64,   // total = unnamed + named
         has_unnamed_data: bool,
         has_named_data:   bool,
     }
@@ -749,10 +751,12 @@ pub fn probe6(drive: char) -> Result<()> {
             let mut alloc_data_size: Option<u64> = None;
             let mut ext_real_size: u64 = 0;
             let mut ext_alloc_size: u64 = 0;
+            let mut ext_unnamed_real: u64 = 0;
+            let mut ext_unnamed_alloc: u64 = 0;
             let mut ext_has_data = false;
             let mut ext_has_unnamed_data = false;
             let mut ext_has_named_data = false;
-            let mut ext_stream_names: Vec<String> = Vec::new();
+            let mut ext_named_streams: Vec<(String, u64, u64)> = Vec::new();
 
             loop {
                 if pos + 8 > record.len() { break; }
@@ -855,10 +859,12 @@ pub fn probe6(drive: char) -> Result<()> {
                                 ext_alloc_size = ext_alloc_size.saturating_add(alloc);
                                 if stream_name_len == 0 {
                                     ext_has_unnamed_data = true;
+                                    ext_unnamed_real = ext_unnamed_real.saturating_add(real);
+                                    ext_unnamed_alloc = ext_unnamed_alloc.saturating_add(alloc);
                                 } else {
                                     ext_has_named_data = true;
                                     if let Some(sn) = &stream_name {
-                                        ext_stream_names.push(sn.clone());
+                                        ext_named_streams.push((sn.clone(), real, alloc));
                                     }
                                 }
                             }
@@ -916,7 +922,9 @@ pub fn probe6(drive: char) -> Result<()> {
                     record_idx: i,
                     base_record,
                     file_name: name.clone(),
-                    stream_names: ext_stream_names,
+                    named_streams: ext_named_streams,
+                    unnamed_real: ext_unnamed_real,
+                    unnamed_alloc: ext_unnamed_alloc,
                     real_size: ext_real_size,
                     alloc_size: ext_alloc_size,
                     has_unnamed_data: ext_has_unnamed_data,
@@ -1121,16 +1129,12 @@ pub fn probe6(drive: char) -> Result<()> {
     println!();
     println!("--- top 20 largest extension records with $DATA (in-use only, by allocated size) ---");
     for (rank, e) in top20_ext_data.iter().enumerate() {
-        let streams = if e.stream_names.is_empty() {
+        let streams = if e.named_streams.is_empty() {
             String::from("(unnamed)")
         } else {
-            e.stream_names.join(",")
+            e.named_streams.iter().map(|(n, _, _)| n.as_str()).collect::<Vec<_>>().join(",")
         };
-        let file_name = if e.file_name.is_empty() {
-            "(no $FILE_NAME)"
-        } else {
-            e.file_name.as_str()
-        };
+        let file_name = if e.file_name.is_empty() { "(no $FILE_NAME)" } else { e.file_name.as_str() };
         println!("{:>3}. real={:>8}MB alloc={:>8}MB base_record={} idx={} stream={} file={}",
             rank + 1,
             e.real_size / 1_048_576,
@@ -1139,6 +1143,121 @@ pub fn probe6(drive: char) -> Result<()> {
             e.record_idx,
             streams,
             file_name);
+    }
+
+    // ── base_record グループ集計 ──────────────────────────────────────────────
+    {
+        use std::collections::{BTreeSet, HashMap};
+
+        struct BaseGroup {
+            base_record_number: u64,
+            ext_count:          usize,
+            unnamed_data_count: usize,
+            named_data_count:   usize,
+            unnamed_alloc:      u64,
+            named_alloc:        u64,
+            stream_names:       BTreeSet<String>,
+            file_name:          String,
+        }
+
+        let mut base_groups: HashMap<u64, BaseGroup> = HashMap::new();
+        let mut j_real:      u64 = 0;
+        let mut j_alloc:     u64 = 0;
+        let mut wof_real:    u64 = 0;
+        let mut wof_alloc:   u64 = 0;
+        let mut ext_unnamed_real_total:  u64 = 0;
+        let mut ext_unnamed_alloc_total: u64 = 0;
+        let mut ext_named_real_total:    u64 = 0;
+        let mut ext_named_alloc_total:   u64 = 0;
+
+        for e in &ext_data_entries {
+            ext_unnamed_real_total  = ext_unnamed_real_total.saturating_add(e.unnamed_real);
+            ext_unnamed_alloc_total = ext_unnamed_alloc_total.saturating_add(e.unnamed_alloc);
+
+            let ns_real:  u64 = e.named_streams.iter().map(|(_, r, _)| *r).sum();
+            let ns_alloc: u64 = e.named_streams.iter().map(|(_, _, a)| *a).sum();
+            ext_named_real_total  = ext_named_real_total.saturating_add(ns_real);
+            ext_named_alloc_total = ext_named_alloc_total.saturating_add(ns_alloc);
+
+            for (sname, sreal, salloc) in &e.named_streams {
+                if sname == "$J" {
+                    j_real  = j_real.saturating_add(*sreal);
+                    j_alloc = j_alloc.saturating_add(*salloc);
+                }
+                if sname == "WofCompressedData" {
+                    wof_real  = wof_real.saturating_add(*sreal);
+                    wof_alloc = wof_alloc.saturating_add(*salloc);
+                }
+            }
+
+            let group = base_groups.entry(e.base_record).or_insert_with(|| BaseGroup {
+                base_record_number: e.base_record & 0x0000_FFFF_FFFF_FFFF,
+                ext_count: 0,
+                unnamed_data_count: 0,
+                named_data_count: 0,
+                unnamed_alloc: 0,
+                named_alloc: 0,
+                stream_names: BTreeSet::new(),
+                file_name: String::new(),
+            });
+            group.ext_count += 1;
+            if e.has_unnamed_data { group.unnamed_data_count += 1; }
+            if e.has_named_data   { group.named_data_count   += 1; }
+            group.unnamed_alloc = group.unnamed_alloc.saturating_add(e.unnamed_alloc);
+            group.named_alloc   = group.named_alloc.saturating_add(ns_alloc);
+            for (sname, _, _) in &e.named_streams {
+                group.stream_names.insert(sname.clone());
+            }
+            if group.file_name.is_empty() && !e.file_name.is_empty() {
+                group.file_name = e.file_name.clone();
+            }
+        }
+
+        let base_groups_count = base_groups.len();
+
+        let mut bg_vec: Vec<(u64, &BaseGroup)> = base_groups.iter()
+            .map(|(k, v)| (*k, v))
+            .collect();
+        bg_vec.sort_unstable_by(|a, b| {
+            let a_total = a.1.unnamed_alloc + a.1.named_alloc;
+            let b_total = b.1.unnamed_alloc + b.1.named_alloc;
+            b_total.cmp(&a_total)
+        });
+        bg_vec.truncate(20);
+
+        println!();
+        println!("=== extension record base_record grouping diagnostics ===");
+        println!("  base groups (distinct base_record):       {:>10}", base_groups_count);
+        println!("  ext records with $DATA (in-use):          {:>10}", ext_data_entries.len());
+        println!();
+        println!("  unnamed ext $DATA real  total:   {:>7} GB ({} bytes)", ext_unnamed_real_total  / 1_073_741_824, ext_unnamed_real_total);
+        println!("  unnamed ext $DATA alloc total:   {:>7} GB ({} bytes)", ext_unnamed_alloc_total / 1_073_741_824, ext_unnamed_alloc_total);
+        println!("  named   ext $DATA real  total:   {:>7} GB ({} bytes)", ext_named_real_total    / 1_073_741_824, ext_named_real_total);
+        println!("  named   ext $DATA alloc total:   {:>7} GB ({} bytes)", ext_named_alloc_total   / 1_073_741_824, ext_named_alloc_total);
+        println!();
+        println!("  special stream totals:");
+        println!("    $J             real={:>7}GB alloc={:>7}GB", j_real   / 1_073_741_824, j_alloc   / 1_073_741_824);
+        println!("    WofCompressedData real={:>4}GB alloc={:>7}GB", wof_real / 1_073_741_824, wof_alloc / 1_073_741_824);
+        println!();
+        println!("--- top 20 base groups by extension allocated size (in-use) ---");
+        for (rank, (raw_base, g)) in bg_vec.iter().enumerate() {
+            let total_alloc = g.unnamed_alloc + g.named_alloc;
+            let streams: Vec<&str> = g.stream_names.iter().map(|s| s.as_str()).collect();
+            let streams_str = if streams.is_empty() { String::from("(unnamed only)") } else { streams.join(",") };
+            let fname = if g.file_name.is_empty() { "(no $FILE_NAME)" } else { g.file_name.as_str() };
+            println!("{:>3}. raw={} rec_num={} ext={} unname={} named={} ualloc={:>6}MB nalloc={:>6}MB total={:>6}MB streams=[{}] file={}",
+                rank + 1,
+                raw_base,
+                g.base_record_number,
+                g.ext_count,
+                g.unnamed_data_count,
+                g.named_data_count,
+                g.unnamed_alloc / 1_048_576,
+                g.named_alloc   / 1_048_576,
+                total_alloc     / 1_048_576,
+                streams_str,
+                fname);
+        }
     }
 
     Ok(())
