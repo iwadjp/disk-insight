@@ -13,9 +13,9 @@ fn main() -> Result<()> {
     // TODO: 引数でドライブ文字を受け取る（暫定でCドライブ固定）
     let drive = 'C';
 
-    match mft_probe::probe2(drive) {
+    match mft_probe::probe3(drive) {
         Ok(_) => {}
-        Err(e) => println!("probe2 エラー: {}", e),
+        Err(e) => println!("probe3 エラー: {}", e),
     }
     return Ok(());
 
