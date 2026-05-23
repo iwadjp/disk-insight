@@ -1154,8 +1154,11 @@ pub fn probe6(drive: char) -> Result<()> {
             ext_count:          usize,
             unnamed_data_count: usize,
             named_data_count:   usize,
+            unnamed_real:       u64,
             unnamed_alloc:      u64,
             named_alloc:        u64,
+            j_alloc:            u64,
+            wof_alloc:          u64,
             stream_names:       BTreeSet<String>,
             file_name:          String,
         }
@@ -1195,18 +1198,24 @@ pub fn probe6(drive: char) -> Result<()> {
                 ext_count: 0,
                 unnamed_data_count: 0,
                 named_data_count: 0,
+                unnamed_real: 0,
                 unnamed_alloc: 0,
                 named_alloc: 0,
+                j_alloc: 0,
+                wof_alloc: 0,
                 stream_names: BTreeSet::new(),
                 file_name: String::new(),
             });
             group.ext_count += 1;
             if e.has_unnamed_data { group.unnamed_data_count += 1; }
             if e.has_named_data   { group.named_data_count   += 1; }
+            group.unnamed_real  = group.unnamed_real.saturating_add(e.unnamed_real);
             group.unnamed_alloc = group.unnamed_alloc.saturating_add(e.unnamed_alloc);
             group.named_alloc   = group.named_alloc.saturating_add(ns_alloc);
-            for (sname, _, _) in &e.named_streams {
+            for (sname, _, salloc) in &e.named_streams {
                 group.stream_names.insert(sname.clone());
+                if sname == "$J"                { group.j_alloc   = group.j_alloc.saturating_add(*salloc); }
+                if sname == "WofCompressedData" { group.wof_alloc = group.wof_alloc.saturating_add(*salloc); }
             }
             if group.file_name.is_empty() && !e.file_name.is_empty() {
                 group.file_name = e.file_name.clone();
@@ -1215,6 +1224,13 @@ pub fn probe6(drive: char) -> Result<()> {
 
         let base_groups_count = base_groups.len();
 
+        // base entry lookup: record_idx → &ParsedEntry (in-use のみ)
+        let base_entry_lookup: std::collections::HashMap<u64, &ParsedEntry> = entries.iter()
+            .filter(|e| e.is_in_use)
+            .map(|e| (e.record_idx as u64, e))
+            .collect();
+
+        // top 30: ext alloc total 降順
         let mut bg_vec: Vec<(u64, &BaseGroup)> = base_groups.iter()
             .map(|(k, v)| (*k, v))
             .collect();
@@ -1223,12 +1239,26 @@ pub fn probe6(drive: char) -> Result<()> {
             let b_total = b.1.unnamed_alloc + b.1.named_alloc;
             b_total.cmp(&a_total)
         });
-        bg_vec.truncate(20);
+        bg_vec.truncate(30);
+
+        // サマリ集計
+        let mut base_alloc_zero_with_ext_unnamed: usize = 0;
+        let mut total_candidate_recovered: u64 = 0;
+        for (_raw, g) in &base_groups {
+            let base_alloc = base_entry_lookup
+                .get(&g.base_record_number)
+                .map(|e| e.alloc_size)
+                .unwrap_or(0);
+            if base_alloc == 0 && g.unnamed_alloc > 0 {
+                base_alloc_zero_with_ext_unnamed += 1;
+                total_candidate_recovered = total_candidate_recovered.saturating_add(g.unnamed_alloc);
+            }
+        }
 
         println!();
-        println!("=== extension record base_record grouping diagnostics ===");
-        println!("  base groups (distinct base_record):       {:>10}", base_groups_count);
-        println!("  ext records with $DATA (in-use):          {:>10}", ext_data_entries.len());
+        println!("=== extension base_record grouping diagnostics ===");
+        println!("  base groups (distinct base_record):        {:>10}", base_groups_count);
+        println!("  ext records with $DATA (in-use):           {:>10}", ext_data_entries.len());
         println!();
         println!("  unnamed ext $DATA real  total:   {:>7} GB ({} bytes)", ext_unnamed_real_total  / 1_073_741_824, ext_unnamed_real_total);
         println!("  unnamed ext $DATA alloc total:   {:>7} GB ({} bytes)", ext_unnamed_alloc_total / 1_073_741_824, ext_unnamed_alloc_total);
@@ -1236,27 +1266,215 @@ pub fn probe6(drive: char) -> Result<()> {
         println!("  named   ext $DATA alloc total:   {:>7} GB ({} bytes)", ext_named_alloc_total   / 1_073_741_824, ext_named_alloc_total);
         println!();
         println!("  special stream totals:");
-        println!("    $J             real={:>7}GB alloc={:>7}GB", j_real   / 1_073_741_824, j_alloc   / 1_073_741_824);
-        println!("    WofCompressedData real={:>4}GB alloc={:>7}GB", wof_real / 1_073_741_824, wof_alloc / 1_073_741_824);
+        println!("    $J              real={:>6}GB alloc={:>6}GB", j_real   / 1_073_741_824, j_alloc   / 1_073_741_824);
+        println!("    WofCompressedData real={:>3}GB alloc={:>6}GB", wof_real / 1_073_741_824, wof_alloc / 1_073_741_824);
         println!();
-        println!("--- top 20 base groups by extension allocated size (in-use) ---");
-        for (rank, (raw_base, g)) in bg_vec.iter().enumerate() {
-            let total_alloc = g.unnamed_alloc + g.named_alloc;
-            let streams: Vec<&str> = g.stream_names.iter().map(|s| s.as_str()).collect();
-            let streams_str = if streams.is_empty() { String::from("(unnamed only)") } else { streams.join(",") };
-            let fname = if g.file_name.is_empty() { "(no $FILE_NAME)" } else { g.file_name.as_str() };
-            println!("{:>3}. raw={} rec_num={} ext={} unname={} named={} ualloc={:>6}MB nalloc={:>6}MB total={:>6}MB streams=[{}] file={}",
+        println!("--- correlation summary ---");
+        println!("  base groups with extension records:              {:>8}", base_groups_count);
+        println!("  base alloc==0 AND ext unnamed alloc>0:           {:>8}", base_alloc_zero_with_ext_unnamed);
+        println!("  total candidate recovered (ext unnamed, base=0): {:>8} GB ({} bytes)", total_candidate_recovered / 1_073_741_824, total_candidate_recovered);
+        println!("  total named ext alloc excluded:                  {:>8} GB", ext_named_alloc_total / 1_073_741_824);
+        println!("  total $J alloc excluded:                         {:>8} GB", j_alloc / 1_073_741_824);
+        println!("  total WofCompressedData alloc separated:         {:>8} GB", wof_alloc / 1_073_741_824);
+        println!();
+        println!("--- top 30 base/extension correlation (by ext alloc total) ---");
+        println!("  cand = base_alloc if >0, else ext_unnamed_alloc  |  named streams shown separately only");
+        for (rank, (_raw_base, g)) in bg_vec.iter().enumerate() {
+            let base_entry  = base_entry_lookup.get(&g.base_record_number);
+            let base_alloc  = base_entry.map(|e| e.alloc_size).unwrap_or(0);
+            let base_kind   = base_entry.map(|e| e.data_kind).unwrap_or(255);
+            let base_has_al = base_entry.map(|e| e.has_attr_list).unwrap_or(false);
+            let base_name: &str = {
+                let from_entry = base_entry.map(|e| e.name.as_str()).unwrap_or("");
+                if !from_entry.is_empty()   { from_entry }
+                else if !g.file_name.is_empty() { g.file_name.as_str() }
+                else                        { "(no name)" }
+            };
+            let candidate    = if base_alloc == 0 { g.unnamed_alloc } else { base_alloc };
+            let total_ext    = g.unnamed_alloc + g.named_alloc;
+            let has_j        = g.j_alloc > 0;
+            let has_wof      = g.wof_alloc > 0;
+            let mut notes: Vec<&str> = Vec::new();
+            if base_alloc > 0   { notes.push("base_has_data"); }
+            if base_has_al      { notes.push("attr_list"); }
+            if base_kind == 2   { notes.push("fn_fallback"); }
+            if has_j            { notes.push("has_j"); }
+            if has_wof          { notes.push("has_wof"); }
+            if g.unnamed_alloc > 0 { notes.push("unnamed_ext"); }
+            if g.named_alloc > 0 && !has_j && !has_wof { notes.push("named_only"); }
+            println!("{:>3}. rec={:<8} base={:>7}MB uext={:>7}MB nalloc={:>7}MB $J={:>6}MB wof={:>4}MB ext_tot={:>7}MB cand={:>7}MB  {}  [{}]",
                 rank + 1,
-                raw_base,
                 g.base_record_number,
-                g.ext_count,
-                g.unnamed_data_count,
-                g.named_data_count,
-                g.unnamed_alloc / 1_048_576,
-                g.named_alloc   / 1_048_576,
-                total_alloc     / 1_048_576,
-                streams_str,
-                fname);
+                base_alloc        / 1_048_576,
+                g.unnamed_alloc   / 1_048_576,
+                g.named_alloc     / 1_048_576,
+                g.j_alloc         / 1_048_576,
+                g.wof_alloc       / 1_048_576,
+                total_ext         / 1_048_576,
+                candidate         / 1_048_576,
+                base_name,
+                notes.join(","));
+        }
+
+        // ── top-100 candidate classification ─────────────────────────────
+        {
+            let classify = |name: &str| -> &'static str {
+                let lower = name.to_lowercase();
+                let s = lower.as_str();
+                match s {
+                    "hiberfil.sys" | "pagefile.sys" | "swapfile.sys" |
+                    "$mft" | "$logfile" | "$usnjrnl" | "$bitmap" | "$volume" |
+                    "$attrdef" | "$badclus" | "$secure" | "$boot" | "$extend"
+                        => return "system",
+                    _ => {}
+                }
+                if s.starts_with('$') { return "system"; }
+                if s.contains("codex") || s.contains("claude") ||
+                   s.contains("gemini") || s.contains("vscode-server") { return "ai_tool"; }
+                if s.ends_with(".vhd") || s.ends_with(".vhdx") ||
+                   s.ends_with(".img") || s.ends_with(".iso")  { return "virtual_disk"; }
+                if s.ends_with(".msi") || s.ends_with(".exe")  ||
+                   s.ends_with(".esd") || s.ends_with(".wim")  ||
+                   s.ends_with(".cab")                          { return "installer"; }
+                if s.ends_with(".db")     || s.ends_with(".edb") ||
+                   s.ends_with(".sqlite") || s.ends_with(".vc.db") { return "database"; }
+                if s.ends_with(".zip") || s.ends_with(".gz")  ||
+                   s.ends_with(".tar") || s.ends_with(".zst") ||
+                   s.ends_with(".7z")                          { return "archive"; }
+                "other"
+            };
+
+            // candidates: base_alloc==0 AND ext unnamed alloc>0
+            let mut candidates: Vec<&BaseGroup> = base_groups.values()
+                .filter(|g| {
+                    let ba = base_entry_lookup.get(&g.base_record_number).map(|e| e.alloc_size).unwrap_or(0);
+                    ba == 0 && g.unnamed_alloc > 0
+                })
+                .collect();
+            candidates.sort_unstable_by(|a, b| b.unnamed_alloc.cmp(&a.unnamed_alloc));
+
+            let candidate_total_all: u64    = candidates.iter().map(|g| g.unnamed_alloc).sum();
+            let candidate_top100_total: u64 = candidates.iter().take(100).map(|g| g.unnamed_alloc).sum();
+            let candidate_outside_top100: u64 = candidate_total_all.saturating_sub(candidate_top100_total);
+
+            // category totals over top-100
+            let categories = ["system","virtual_disk","installer","database","archive","ai_tool","other"];
+            let mut cat_count: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+            let mut cat_alloc: std::collections::HashMap<&str, u64>   = std::collections::HashMap::new();
+            for g in candidates.iter().take(100) {
+                let from_entry = base_entry_lookup.get(&g.base_record_number).map(|e| e.name.as_str()).unwrap_or("");
+                let base_name: &str = if !from_entry.is_empty()       { from_entry }
+                                      else if !g.file_name.is_empty() { g.file_name.as_str() }
+                                      else                             { "" };
+                let cat = classify(base_name);
+                *cat_count.entry(cat).or_insert(0) += 1;
+                *cat_alloc.entry(cat).or_insert(0) = cat_alloc.get(cat).copied().unwrap_or(0).saturating_add(g.unnamed_alloc);
+            }
+
+            println!();
+            println!("=== recovered candidate top-100 classification ===");
+            println!("  total candidates (base_alloc==0, ext_unnamed>0): {}", candidates.len());
+            println!("  candidate_total_all:      {:>8} GB ({} bytes)", candidate_total_all   / 1_073_741_824, candidate_total_all);
+            println!("  candidate_top100_total:   {:>8} GB ({} bytes)", candidate_top100_total / 1_073_741_824, candidate_top100_total);
+            println!("  candidate_outside_top100: {:>8} GB ({} bytes)", candidate_outside_top100 / 1_073_741_824, candidate_outside_top100);
+            println!();
+            println!("--- category summary (top-100) ---");
+            for c in &categories {
+                println!("  {:>12}: {:>5} files  {:>8} GB ({} MB)",
+                    c,
+                    cat_count.get(c).copied().unwrap_or(0),
+                    cat_alloc.get(c).copied().unwrap_or(0) / 1_073_741_824,
+                    cat_alloc.get(c).copied().unwrap_or(0) / 1_048_576);
+            }
+            println!();
+            println!("--- top-100 candidates detail ---");
+            println!("  note: base_alloc/fn_fb/cur_used are expected to be 0 for all candidates (filter: base_alloc==0)");
+            for (rank, g) in candidates.iter().take(100).enumerate() {
+                let base_entry       = base_entry_lookup.get(&g.base_record_number);
+                let base_has_al      = base_entry.map(|e| e.has_attr_list).unwrap_or(false);
+                let parent_frn       = base_entry.map(|e| e.parent_frn).unwrap_or(0);
+                let base_alloc_bytes = base_entry.map(|e| e.alloc_size).unwrap_or(0);
+                let base_dk          = base_entry.map(|e| e.data_kind).unwrap_or(255);
+                // fn_fallback_size: fn_size used as fallback (data_kind==2); 0 for non-fallback
+                // For candidates, alloc_size==0, so if data_kind==2 then fn_size==0 too
+                let fn_fb_bytes      = if base_dk == 2 { base_entry.map(|e| e.size).unwrap_or(0) } else { 0 };
+                let cur_used_bytes   = base_alloc_bytes; // what currently contributes to total_alloc_iu
+                let repl_delta: i64  = g.unnamed_alloc as i64 - cur_used_bytes as i64;
+                let from_entry  = base_entry.map(|e| e.name.as_str()).unwrap_or("");
+                let base_name: &str  = if !from_entry.is_empty()       { from_entry }
+                                       else if !g.file_name.is_empty() { g.file_name.as_str() }
+                                       else                             { "(no name)" };
+                let cat     = classify(base_name);
+                let ext_str: &str = base_name.rfind('.').map(|i| &base_name[i..]).unwrap_or("");
+                let streams = if g.stream_names.is_empty() { "-".to_string() }
+                              else { g.stream_names.iter().cloned().collect::<Vec<_>>().join(",") };
+                println!("{:>4}. alloc={:>7}MB real={:>7}MB rec={:<8} pfn={:<8} ext={} unm={} nam={} al={} wof={} j={} base_alloc={}MB fn_fb={}MB cur_used={}MB repl_delta={:+}MB streams=[{}] fext=[{}] cat={} name={}",
+                    rank + 1,
+                    g.unnamed_alloc    / 1_048_576,
+                    g.unnamed_real     / 1_048_576,
+                    g.base_record_number,
+                    parent_frn,
+                    g.ext_count,
+                    g.unnamed_data_count,
+                    g.named_data_count,
+                    base_has_al as u8,
+                    (g.wof_alloc > 0) as u8,
+                    (g.j_alloc > 0) as u8,
+                    base_alloc_bytes / 1_048_576,
+                    fn_fb_bytes      / 1_048_576,
+                    cur_used_bytes   / 1_048_576,
+                    repl_delta       / 1_048_576_i64,
+                    streams,
+                    ext_str,
+                    cat,
+                    base_name);
+            }
+
+            // ── dry-run adjusted allocated total ─────────────────────────
+            // formula: adjusted = current_alloc - candidate_entry_size_used_total + candidate_ext_unnamed_alloc_total
+            //
+            // candidate_entry_size_used = entry.alloc_size for each candidate's base record.
+            // Because filter condition is base_alloc==0 (entry.alloc_size==0), this total is
+            // always 0 by definition. Candidates contribute NOTHING to the current total_alloc_iu.
+            //   - data_kind==2 (fallback): alloc_size = fn_size; fn_size==0 because base_alloc==0
+            //   - data_kind==0 (resident): alloc_size = content_len = 0
+            //   - data_kind==1 (nonresident): AllocatedSize==0 (no allocated clusters)
+            // Therefore adjusted = current_alloc + ext_unnamed_alloc (pure addition).
+            // If adjusted > Windows Used, not all 40GB should be added (some is already accounted
+            // for elsewhere, or belongs to excluded categories).
+            let cand_entry_size_used_total: u64 = candidates.iter()
+                .filter_map(|g| base_entry_lookup.get(&g.base_record_number).map(|e| e.alloc_size))
+                .sum();
+            // sanity check: should be 0 (base_alloc==0 is the filter)
+            let cand_nonzero_entry_used = candidates.iter()
+                .filter(|g| base_entry_lookup.get(&g.base_record_number).map(|e| e.alloc_size).unwrap_or(0) > 0)
+                .count();
+            let cand_ext_unnamed_alloc: u64 = candidate_total_all;
+            let net_recovered: i64 = cand_ext_unnamed_alloc as i64 - cand_entry_size_used_total as i64;
+            let adjusted_alloc: u64 = (total_alloc_iu as i64
+                - cand_entry_size_used_total as i64
+                + cand_ext_unnamed_alloc as i64).max(0) as u64;
+            let windows_used: u64 = (176.28f64 * 1_073_741_824f64) as u64;
+            let diff: i64 = windows_used as i64 - adjusted_alloc as i64;
+
+            println!();
+            println!("=== dry-run adjusted allocated total ===");
+            println!("  formula: adjusted = current_alloc - candidate_entry_size_used + candidate_ext_unnamed_alloc");
+            println!();
+            println!("  candidate count:                      {:>8}", candidates.len());
+            println!("  candidate entry_size_used total:      {:>8} GB  ({} bytes)", cand_entry_size_used_total / 1_073_741_824, cand_entry_size_used_total);
+            println!("    (= 0 because filter is base_alloc==0; all candidates have alloc_size==0)");
+            println!("    candidates with non-zero entry_alloc (sanity): {}", cand_nonzero_entry_used);
+            println!("  candidate ext unnamed alloc total:    {:>8} GB  ({} bytes)", cand_ext_unnamed_alloc / 1_073_741_824, cand_ext_unnamed_alloc);
+            println!("  net recovered (ext_unnamed - used):   {:>+8} GB  ({:+} bytes)", net_recovered / 1_073_741_824_i64, net_recovered);
+            println!();
+            println!("  current allocated total:              {:>8} GB  ({} bytes)", total_alloc_iu / 1_073_741_824, total_alloc_iu);
+            println!("  adjusted allocated total:             {:>8} GB  ({} bytes)", adjusted_alloc / 1_073_741_824, adjusted_alloc);
+            println!("    (= current + net_recovered, since used==0: effectively current + ext_unnamed)");
+            println!();
+            println!("  Windows Used (176.28 GB):             {:>8} GB  ({} bytes)", windows_used / 1_073_741_824, windows_used);
+            println!("  diff (Windows - adjusted):            {:>+8} GB  ({:+} bytes)", diff / 1_073_741_824_i64, diff);
+            println!("  (negative = adjusted exceeds Windows Used; not all 40GB should be added)");
         }
     }
 
