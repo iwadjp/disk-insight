@@ -1806,6 +1806,52 @@ pub fn probe6(drive: char) -> Result<()> {
                         ext_str,
                         bname);
                 }
+
+                // ── final size policy dry-run ──────────────────────────────
+                println!();
+                println!("=== final size policy dry-run ===");
+                println!("  policy: base_alloc>0 -> base; base_alloc==0 && normal ext unnamed -> ext");
+                println!("  excluded: named streams / $J / WofCompressedData / cmp / sps / rps / sys+hid");
+
+                let mut cmp_cand_alloc:    u64 = 0;
+                let mut sps_cand_alloc:    u64 = 0;
+                let mut rps_cand_alloc:    u64 = 0;
+                let mut syshid_cand_alloc: u64 = 0;
+                let mut wof_cand_alloc:    u64 = 0;
+                for (alloc, _n, _c, fa, df, wof) in &cand_details {
+                    if fa & 0x0800 != 0 || df & 0x0001 != 0 { cmp_cand_alloc    = cmp_cand_alloc.saturating_add(*alloc);    }
+                    if fa & 0x0200 != 0 || df & 0x8000 != 0 { sps_cand_alloc    = sps_cand_alloc.saturating_add(*alloc);    }
+                    if fa & 0x0400 != 0                      { rps_cand_alloc    = rps_cand_alloc.saturating_add(*alloc);    }
+                    if fa & 0x0006 != 0                      { syshid_cand_alloc = syshid_cand_alloc.saturating_add(*alloc); }
+                    if *wof                                  { wof_cand_alloc    = wof_cand_alloc.saturating_add(*alloc);    }
+                }
+
+                let final_adj  = total_alloc_iu + normal_total;
+                let final_diff = windows_used as i64 - final_adj as i64;
+
+                println!();
+                println!("  -- adopted --");
+                println!("  current allocated total (base records):   {:>6} GB  ({} bytes)", total_alloc_iu / 1_073_741_824, total_alloc_iu);
+                println!("  normal ext unnamed candidate alloc:        {:>6} GB  ({} candidates, {} bytes)", normal_total / 1_073_741_824, normal_cands.len(), normal_total);
+                println!("  final adjusted total:                      {:>6} GB  ({} bytes)", final_adj / 1_073_741_824, final_adj);
+                println!("  Windows Used (176.28 GB):                  {:>6} GB  ({} bytes)", windows_used / 1_073_741_824, windows_used);
+                println!("  diff (Windows - final):                    {:>+6} GB", final_diff / 1_073_741_824_i64);
+                println!();
+                println!("  -- excluded / separated --");
+                println!("  named stream total (all ext):              {:>6} GB  (ADS, excluded)", ext_named_alloc_total / 1_073_741_824);
+                println!("  $J stream total:                           {:>6} GB  (NTFS journal, excluded)", j_alloc / 1_073_741_824);
+                println!("  WofCompressedData total (all ext):         {:>6} GB  (WOF, separated)", wof_alloc / 1_073_741_824);
+                println!("  compressed candidates (cmp=1):             {:>6} GB  (not in normal)", cmp_cand_alloc / 1_073_741_824);
+                println!("  sparse candidates (sps=1):                 {:>6} GB  (not in normal)", sps_cand_alloc / 1_073_741_824);
+                println!("  reparse candidates (rps=1):                {:>6} GB  (not in normal)", rps_cand_alloc / 1_073_741_824);
+                println!("  system/hidden candidates:                  {:>6} GB  (not in normal)", syshid_cand_alloc / 1_073_741_824);
+                println!("  wof candidates (wof in unnamed):           {:>6} GB  (not in normal)", wof_cand_alloc / 1_073_741_824);
+                println!();
+                println!("  -- policy note --");
+                println!("  * Windows Used との完全一致は目的外");
+                println!("  * file-level deletion decision を優先");
+                println!("  * normal extension unnamed $DATA は通常ファイルサイズ候補");
+                println!("  * special/named streams は別分類");
             }
         }
     }
