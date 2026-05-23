@@ -1854,6 +1854,100 @@ pub fn probe6(drive: char) -> Result<()> {
                 println!("  * special/named streams は別分類");
             }
         }
+
+        // ── final size calculation ──────────────────────────────────────────
+        // policy:
+        //   base_alloc > 0  → use base alloc_size
+        //   base_alloc == 0 AND normal ext unnamed $DATA → use ext unnamed_alloc
+        //   otherwise       → 0 (excluded / not recoverable)
+        {
+            let windows_used: u64 = (176.28f64 * 1_073_741_824f64) as u64;
+
+            // reverse lookup: base_record_number (FRN) → &BaseGroup
+            let base_idx_to_group: std::collections::HashMap<u64, &BaseGroup> =
+                base_groups.values().map(|g| (g.base_record_number, g)).collect();
+
+            let mut final_ext_adopted:     u64   = 0;
+            let mut final_ext_adopted_cnt: usize = 0;
+            let mut excl_cmp:      u64 = 0;
+            let mut excl_sps:      u64 = 0;
+            let mut excl_rps:      u64 = 0;
+            let mut excl_syshid:   u64 = 0;
+            let mut excl_wof_cand: u64 = 0;
+
+            let mut final_entries: Vec<(&ParsedEntry, u64)> = Vec::new();
+
+            for e in entries.iter().filter(|e| e.is_in_use) {
+                let final_alloc;
+                if e.alloc_size > 0 {
+                    final_alloc = e.alloc_size;
+                } else if let Some(g) = base_idx_to_group.get(&(e.record_idx as u64)) {
+                    if g.unnamed_alloc > 0 {
+                        let fa    = e.file_attrs;
+                        let df    = g.data_flags;
+                        let wof_b = g.wof_alloc > 0;
+                        let cmp   = fa & 0x0800 != 0 || df & 0x0001 != 0;
+                        let sps   = fa & 0x0200 != 0 || df & 0x8000 != 0;
+                        let rps   = fa & 0x0400 != 0;
+                        let sys   = fa & 0x0004 != 0;
+                        let hid   = fa & 0x0002 != 0;
+                        if cmp         { excl_cmp     = excl_cmp.saturating_add(g.unnamed_alloc);     }
+                        if sps         { excl_sps     = excl_sps.saturating_add(g.unnamed_alloc);     }
+                        if rps         { excl_rps     = excl_rps.saturating_add(g.unnamed_alloc);     }
+                        if fa & 0x0006 != 0 { excl_syshid = excl_syshid.saturating_add(g.unnamed_alloc); }
+                        if wof_b       { excl_wof_cand = excl_wof_cand.saturating_add(g.unnamed_alloc); }
+                        if !cmp && !sps && !rps && !sys && !hid && !wof_b {
+                            final_alloc = g.unnamed_alloc;
+                            final_ext_adopted = final_ext_adopted.saturating_add(g.unnamed_alloc);
+                            final_ext_adopted_cnt += 1;
+                        } else {
+                            final_alloc = 0;
+                        }
+                    } else {
+                        final_alloc = 0;
+                    }
+                } else {
+                    final_alloc = 0;
+                }
+                final_entries.push((e, final_alloc));
+            }
+
+            let final_total = total_alloc_iu.saturating_add(final_ext_adopted);
+            let final_diff  = windows_used as i64 - final_total as i64;
+
+            let mut top20_final: Vec<(&ParsedEntry, u64)> = final_entries.iter()
+                .filter(|(_, fa)| *fa > 0)
+                .copied()
+                .collect();
+            top20_final.sort_unstable_by(|a, b| b.1.cmp(&a.1));
+            top20_final.truncate(20);
+
+            println!();
+            println!("=== final size calculation ===");
+            println!("  policy: base_alloc>0 -> base; base_alloc==0 && normal ext unnamed -> ext");
+            println!();
+            println!("  base allocated total (current_alloc_iu): {:>6} GB  ({} bytes)", total_alloc_iu / 1_073_741_824, total_alloc_iu);
+            println!("  adopted normal ext unnamed total:         {:>6} GB  ({} files)", final_ext_adopted / 1_073_741_824, final_ext_adopted_cnt);
+            println!("  final allocated total:                    {:>6} GB  ({} bytes)", final_total / 1_073_741_824, final_total);
+            println!("  Windows Used (176.28 GB):                 {:>6} GB  ({} bytes)", windows_used / 1_073_741_824, windows_used);
+            println!("  diff (Windows - final):                   {:>+6} GB", final_diff / 1_073_741_824_i64);
+            println!();
+            println!("  -- excluded / separated --");
+            println!("  named stream total (all ext):             {:>6} GB  (ADS, excluded)", ext_named_alloc_total / 1_073_741_824);
+            println!("  $J stream total:                          {:>6} GB  (NTFS journal, excluded)", j_alloc / 1_073_741_824);
+            println!("  WofCompressedData total (all ext):        {:>6} GB  (WOF, separated)", wof_alloc / 1_073_741_824);
+            println!("  compressed candidates:                    {:>6} GB  (not adopted)", excl_cmp     / 1_073_741_824);
+            println!("  sparse candidates:                        {:>6} GB  (not adopted)", excl_sps     / 1_073_741_824);
+            println!("  reparse candidates:                       {:>6} GB  (not adopted)", excl_rps     / 1_073_741_824);
+            println!("  system/hidden candidates:                 {:>6} GB  (not adopted)", excl_syshid  / 1_073_741_824);
+            println!("  wof candidates:                           {:>6} GB  (not adopted)", excl_wof_cand / 1_073_741_824);
+            println!();
+            println!("--- final top 20 largest files (by final allocated size) ---");
+            for (rank, (e, fa)) in top20_final.iter().enumerate() {
+                println!("{:>3}. alloc={:>8}MB  {}  (rec={}, pfn={})",
+                    rank + 1, fa / 1_048_576, e.name, e.record_idx, e.parent_frn);
+            }
+        }
     }
 
     Ok(())
