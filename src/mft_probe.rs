@@ -664,19 +664,21 @@ pub fn probe6(drive: char) -> Result<()> {
         is_in_use:     bool,
         has_attr_list: bool,
         data_kind:     u8,        // 0=resident, 1=nonresident, 2=fallback
+        file_attrs:    u32,       // from $STANDARD_INFORMATION (0x10)
     }
 
     struct ExtensionDataEntry {
-        record_idx:       usize,
-        base_record:      u64,
-        file_name:        String,
-        named_streams:    Vec<(String, u64, u64)>, // (name, real, alloc)
-        unnamed_real:     u64,
-        unnamed_alloc:    u64,
-        real_size:        u64,   // total = unnamed + named
-        alloc_size:       u64,   // total = unnamed + named
-        has_unnamed_data: bool,
-        has_named_data:   bool,
+        record_idx:         usize,
+        base_record:        u64,
+        file_name:          String,
+        named_streams:      Vec<(String, u64, u64)>, // (name, real, alloc)
+        unnamed_real:       u64,
+        unnamed_alloc:      u64,
+        real_size:          u64,   // total = unnamed + named
+        alloc_size:         u64,   // total = unnamed + named
+        has_unnamed_data:   bool,
+        has_named_data:     bool,
+        unnamed_data_flags: u16,   // OR of $DATA attr header flags for unnamed streams
     }
 
     // 診断カウンタ（全体）
@@ -757,6 +759,8 @@ pub fn probe6(drive: char) -> Result<()> {
             let mut ext_has_unnamed_data = false;
             let mut ext_has_named_data = false;
             let mut ext_named_streams: Vec<(String, u64, u64)> = Vec::new();
+            let mut file_attrs: u32 = 0;
+            let mut ext_unnamed_data_flags: u16 = 0;
 
             loop {
                 if pos + 8 > record.len() { break; }
@@ -791,6 +795,18 @@ pub fn probe6(drive: char) -> Result<()> {
                 };
 
                 match attr_type {
+                    0x10 if non_resident == 0 => {
+                        // $STANDARD_INFORMATION: file attributes DWORD at content+0x20
+                        if pos + 22 <= record.len() {
+                            let content_off = u16::from_le_bytes([record[pos+20], record[pos+21]]) as usize;
+                            let c = pos + content_off;
+                            if c + 0x24 <= record.len() {
+                                file_attrs = u32::from_le_bytes([
+                                    record[c+0x20], record[c+0x21], record[c+0x22], record[c+0x23],
+                                ]);
+                            }
+                        }
+                    }
                     0x30 if non_resident == 0 => {
                         // $FILE_NAME（常に常駐）
                         if pos + 22 > record.len() { pos += attr_len; continue; }
@@ -861,6 +877,9 @@ pub fn probe6(drive: char) -> Result<()> {
                                     ext_has_unnamed_data = true;
                                     ext_unnamed_real = ext_unnamed_real.saturating_add(real);
                                     ext_unnamed_alloc = ext_unnamed_alloc.saturating_add(alloc);
+                                    if pos + 14 <= record.len() {
+                                        ext_unnamed_data_flags |= u16::from_le_bytes([record[pos+12], record[pos+13]]);
+                                    }
                                 } else {
                                     ext_has_named_data = true;
                                     if let Some(sn) = &stream_name {
@@ -929,6 +948,7 @@ pub fn probe6(drive: char) -> Result<()> {
                     alloc_size: ext_alloc_size,
                     has_unnamed_data: ext_has_unnamed_data,
                     has_named_data: ext_has_named_data,
+                    unnamed_data_flags: ext_unnamed_data_flags,
                 })
             } else {
                 None
@@ -966,7 +986,7 @@ pub fn probe6(drive: char) -> Result<()> {
             }
             if size > 1_073_741_824 { size_1gb_count.fetch_add(1, Ordering::Relaxed); }
 
-            Some((Some(ParsedEntry { record_idx: i, name, parent_frn, size, alloc_size, is_in_use, has_attr_list, data_kind }), ext_data))
+            Some((Some(ParsedEntry { record_idx: i, name, parent_frn, size, alloc_size, is_in_use, has_attr_list, data_kind, file_attrs }), ext_data))
         })
         .collect();
 
@@ -1161,6 +1181,7 @@ pub fn probe6(drive: char) -> Result<()> {
             wof_alloc:          u64,
             stream_names:       BTreeSet<String>,
             file_name:          String,
+            data_flags:         u16,   // OR of unnamed $DATA attr header flags from ext records
         }
 
         let mut base_groups: HashMap<u64, BaseGroup> = HashMap::new();
@@ -1205,6 +1226,7 @@ pub fn probe6(drive: char) -> Result<()> {
                 wof_alloc: 0,
                 stream_names: BTreeSet::new(),
                 file_name: String::new(),
+                data_flags: 0,
             });
             group.ext_count += 1;
             if e.has_unnamed_data { group.unnamed_data_count += 1; }
@@ -1220,6 +1242,7 @@ pub fn probe6(drive: char) -> Result<()> {
             if group.file_name.is_empty() && !e.file_name.is_empty() {
                 group.file_name = e.file_name.clone();
             }
+            group.data_flags |= e.unnamed_data_flags;
         }
 
         let base_groups_count = base_groups.len();
@@ -1405,10 +1428,18 @@ pub fn probe6(drive: char) -> Result<()> {
                                        else if !g.file_name.is_empty() { g.file_name.as_str() }
                                        else                             { "(no name)" };
                 let cat     = classify(base_name);
+                let file_attrs_val = base_entry.map(|e| e.file_attrs).unwrap_or(0);
+                let data_flags_val = g.data_flags;
+                let is_cmp = file_attrs_val & 0x0800 != 0 || data_flags_val & 0x0001 != 0;
+                let is_sps = file_attrs_val & 0x0200 != 0 || data_flags_val & 0x8000 != 0;
+                let is_rps = file_attrs_val & 0x0400 != 0;
+                let is_sys = file_attrs_val & 0x0004 != 0;
+                let is_hid = file_attrs_val & 0x0002 != 0;
+                let is_off = file_attrs_val & 0x1000 != 0;
                 let ext_str: &str = base_name.rfind('.').map(|i| &base_name[i..]).unwrap_or("");
                 let streams = if g.stream_names.is_empty() { "-".to_string() }
                               else { g.stream_names.iter().cloned().collect::<Vec<_>>().join(",") };
-                println!("{:>4}. alloc={:>7}MB real={:>7}MB rec={:<8} pfn={:<8} ext={} unm={} nam={} al={} wof={} j={} base_alloc={}MB fn_fb={}MB cur_used={}MB repl_delta={:+}MB streams=[{}] fext=[{}] cat={} name={}",
+                println!("{:>4}. alloc={:>7}MB real={:>7}MB rec={:<8} pfn={:<8} ext={} unm={} nam={} al={} wof={} j={} base_alloc={}MB fn_fb={}MB cur_used={}MB repl_delta={:+}MB attrs=0x{:04X} dflags=0x{:04X} cmp={} sps={} rps={} sys={} hid={} off={} streams=[{}] fext=[{}] cat={} name={}",
                     rank + 1,
                     g.unnamed_alloc    / 1_048_576,
                     g.unnamed_real     / 1_048_576,
@@ -1424,6 +1455,14 @@ pub fn probe6(drive: char) -> Result<()> {
                     fn_fb_bytes      / 1_048_576,
                     cur_used_bytes   / 1_048_576,
                     repl_delta       / 1_048_576_i64,
+                    file_attrs_val,
+                    data_flags_val,
+                    is_cmp as u8,
+                    is_sps as u8,
+                    is_rps as u8,
+                    is_sys as u8,
+                    is_hid as u8,
+                    is_off as u8,
                     streams,
                     ext_str,
                     cat,
@@ -1479,15 +1518,18 @@ pub fn probe6(drive: char) -> Result<()> {
             // ── candidate exclusion rule dry-runs ─────────────────────────
             {
                 // compute name + category for ALL 3350 candidates (not just top-100)
-                let cand_details: Vec<(u64, String, &'static str)> = candidates.iter()
+                let cand_details: Vec<(u64, String, &'static str, u32, u16, bool)> = candidates.iter()
                     .map(|g| {
-                        let from_e = base_entry_lookup.get(&g.base_record_number)
-                            .map(|e| e.name.as_str()).unwrap_or("");
+                        let entry = base_entry_lookup.get(&g.base_record_number);
+                        let from_e = entry.map(|e| e.name.as_str()).unwrap_or("");
                         let name = if !from_e.is_empty()           { from_e.to_string() }
                                    else if !g.file_name.is_empty() { g.file_name.clone() }
                                    else                             { String::new() };
                         let cat = classify(&name);
-                        (g.unnamed_alloc, name, cat)
+                        let fa  = entry.map(|e| e.file_attrs).unwrap_or(0);
+                        let df  = g.data_flags;
+                        let wof = g.wof_alloc > 0;
+                        (g.unnamed_alloc, name, cat, fa, df, wof)
                     })
                     .collect();
 
@@ -1497,7 +1539,7 @@ pub fn probe6(drive: char) -> Result<()> {
                     let mut excl_alloc: u64   = 0;
                     let mut incl_count: usize = 0;
                     let mut incl_alloc: u64   = 0;
-                    for (alloc, name, cat) in &cand_details {
+                    for (alloc, name, cat, _fa, _df, _wof) in &cand_details {
                         let lower   = name.to_lowercase();
                         let is_excl = excl_cats.contains(cat)
                             || excl_names.iter().any(|n| *n == lower.as_str());
@@ -1561,6 +1603,209 @@ pub fn probe6(drive: char) -> Result<()> {
                 println!();
                 println!("  best rule (closest to Windows Used): {}  (|diff| ~{} GB)",
                     best_rule, best_diff_abs / 1_073_741_824_i64);
+
+                // ── flag summary ────────────────────────────────────────────
+                let flag_names = ["compressed","sparse","reparse","system_attr","hidden","offline","wof","normal"];
+                let mut fcnt  = [0usize; 8];
+                let mut falloc = [0u64; 8];
+                for (alloc, _n, _c, fa, df, wof) in &cand_details {
+                    let cmp  = fa & 0x0800 != 0 || df & 0x0001 != 0;
+                    let sps  = fa & 0x0200 != 0 || df & 0x8000 != 0;
+                    let rps  = fa & 0x0400 != 0;
+                    let sys  = fa & 0x0004 != 0;
+                    let hid  = fa & 0x0002 != 0;
+                    let off  = fa & 0x1000 != 0;
+                    let wof_b = *wof;
+                    let nrm  = !cmp && !sps && !rps && !sys && !hid && !off && !wof_b;
+                    let flags_arr = [cmp, sps, rps, sys, hid, off, wof_b, nrm];
+                    for (i, &f) in flags_arr.iter().enumerate() {
+                        if f { fcnt[i] += 1; falloc[i] = falloc[i].saturating_add(*alloc); }
+                    }
+                }
+                println!();
+                println!("=== candidate attribute flag diagnostics ===");
+                println!("--- flag summary (all {} candidates) ---", cand_details.len());
+                println!("  {:<14} {:>8} {:>10}", "flag", "count", "alloc_GB");
+                for i in 0..8 {
+                    println!("  {:<14} {:>8} {:>10}", flag_names[i], fcnt[i], falloc[i] / 1_073_741_824);
+                }
+
+                // ── category × flags cross-table ──────────────────────────
+                let cat_list = ["system","virtual_disk","installer","database","archive","ai_tool","other"];
+                let mut cat_flag_cnt:   std::collections::HashMap<&str, [usize; 8]> = std::collections::HashMap::new();
+                let mut cat_flag_alloc: std::collections::HashMap<&str, [u64;   8]> = std::collections::HashMap::new();
+                for (alloc, _n, cat, fa, df, wof) in &cand_details {
+                    let cmp  = fa & 0x0800 != 0 || df & 0x0001 != 0;
+                    let sps  = fa & 0x0200 != 0 || df & 0x8000 != 0;
+                    let rps  = fa & 0x0400 != 0;
+                    let sys  = fa & 0x0004 != 0;
+                    let hid  = fa & 0x0002 != 0;
+                    let off  = fa & 0x1000 != 0;
+                    let wof_b = *wof;
+                    let nrm  = !cmp && !sps && !rps && !sys && !hid && !off && !wof_b;
+                    let flags_arr = [cmp, sps, rps, sys, hid, off, wof_b, nrm];
+                    let cnt = cat_flag_cnt.entry(cat).or_insert([0usize; 8]);
+                    let al  = cat_flag_alloc.entry(cat).or_insert([0u64;   8]);
+                    for (i, &f) in flags_arr.iter().enumerate() {
+                        if f { cnt[i] += 1; al[i] = al[i].saturating_add(*alloc); }
+                    }
+                }
+                println!();
+                println!("--- category × flags cross-table (count/alloc_GB) ---");
+                print!("  {:<14}", "category");
+                for n in &flag_names { print!(" {:>14}", n); }
+                println!();
+                for c in &cat_list {
+                    let cnt = cat_flag_cnt.get(c).copied().unwrap_or([0; 8]);
+                    let al  = cat_flag_alloc.get(c).copied().unwrap_or([0; 8]);
+                    print!("  {:<14}", c);
+                    for i in 0..8 {
+                        print!(" {:>6}/{:>7}", cnt[i], al[i] / 1_073_741_824);
+                    }
+                    println!();
+                }
+
+                // ── flag-based dry-runs ────────────────────────────────────
+                let flag_rules: &[(&str, fn(u32, u16, bool) -> bool)] = &[
+                    ("all",              |_fa, _df, _wof| false),
+                    ("-compressed",      |fa, df, _wof| fa & 0x0800 != 0 || df & 0x0001 != 0),
+                    ("-sparse",          |fa, df, _wof| fa & 0x0200 != 0 || df & 0x8000 != 0),
+                    ("-cmp+sps",         |fa, df, _wof| fa & 0x0A00 != 0 || df & 0x8001 != 0),
+                    ("-reparse",         |fa, _df, _wof| fa & 0x0400 != 0),
+                    ("-system_attr",     |fa, _df, _wof| fa & 0x0004 != 0),
+                    ("-hidden+system",   |fa, _df, _wof| fa & 0x0006 != 0),
+                    ("-wof",             |_fa, _df, wof| wof),
+                    ("-cmp+sps+rps+sys", |fa, df, _wof| fa & 0x0E04 != 0 || df & 0x8001 != 0),
+                    ("-non-normal",      |fa, df, wof| fa & 0x1E06 != 0 || df & 0x8001 != 0 || wof),
+                ];
+
+                let run_flag_rule = |pred: fn(u32, u16, bool) -> bool| -> (usize, u64, usize, u64, u64, i64) {
+                    let mut excl_count: usize = 0;
+                    let mut excl_alloc: u64   = 0;
+                    let mut incl_count: usize = 0;
+                    let mut incl_alloc: u64   = 0;
+                    for (alloc, _n, _c, fa, df, wof) in &cand_details {
+                        if pred(*fa, *df, *wof) {
+                            excl_count += 1;
+                            excl_alloc  = excl_alloc.saturating_add(*alloc);
+                        } else {
+                            incl_count += 1;
+                            incl_alloc  = incl_alloc.saturating_add(*alloc);
+                        }
+                    }
+                    let adj  = total_alloc_iu + incl_alloc;
+                    let diff = windows_used as i64 - adj as i64;
+                    (excl_count, excl_alloc, incl_count, incl_alloc, adj, diff)
+                };
+
+                println!();
+                println!("=== flag-based dry-runs ===");
+                println!("  adjusted = current_alloc ({} GB) + included_candidate_alloc", total_alloc_iu / 1_073_741_824);
+                println!("  Windows Used = {} GB ({} bytes)", windows_used / 1_073_741_824, windows_used);
+                println!();
+                println!("  {:<24} {:>9} {:>9} {:>9} {:>9} {:>8} {:>9}",
+                    "rule", "excl_cnt", "excl_GB", "incl_cnt", "incl_GB", "adj_GB", "diff_GB");
+                println!("  {}", "-".repeat(82));
+
+                let mut best_flag_rule     = "";
+                let mut best_flag_diff_abs = i64::MAX;
+
+                for (rule_name, pred) in flag_rules {
+                    let (excl_cnt, excl_al, incl_cnt, incl_al, adj, diff) = run_flag_rule(*pred);
+                    println!("  {:<24} {:>9} {:>9} {:>9} {:>9} {:>8} {:>+9}",
+                        rule_name,
+                        excl_cnt,
+                        excl_al / 1_073_741_824,
+                        incl_cnt,
+                        incl_al / 1_073_741_824,
+                        adj / 1_073_741_824,
+                        diff / 1_073_741_824_i64);
+                    let d_abs = diff.abs();
+                    if d_abs < best_flag_diff_abs {
+                        best_flag_diff_abs = d_abs;
+                        best_flag_rule     = rule_name;
+                    }
+                }
+                println!();
+                println!("  best flag rule (closest to Windows Used): {}  (|diff| ~{} GB)",
+                    best_flag_rule, best_flag_diff_abs / 1_073_741_824_i64);
+
+                // ── normal candidates only top-100 ─────────────────────────
+                println!();
+                println!("=== normal candidates only ===");
+                println!("  filter: cmp=0 sps=0 rps=0 sys_attr=0 hid=0 wof=0");
+
+                let mut normal_cands: Vec<&BaseGroup> = candidates.iter()
+                    .copied()
+                    .filter(|g| {
+                        let fa = base_entry_lookup.get(&g.base_record_number)
+                            .map(|e| e.file_attrs).unwrap_or(0);
+                        let df = g.data_flags;
+                        let cmp = fa & 0x0800 != 0 || df & 0x0001 != 0;
+                        let sps = fa & 0x0200 != 0 || df & 0x8000 != 0;
+                        let rps = fa & 0x0400 != 0;
+                        let sys = fa & 0x0004 != 0;
+                        let hid = fa & 0x0002 != 0;
+                        let wof_b = g.wof_alloc > 0;
+                        !cmp && !sps && !rps && !sys && !hid && !wof_b
+                    })
+                    .collect();
+                normal_cands.sort_unstable_by(|a, b| b.unnamed_alloc.cmp(&a.unnamed_alloc));
+
+                let normal_total: u64 = normal_cands.iter().map(|g| g.unnamed_alloc).sum();
+                let normal_adj   = total_alloc_iu + normal_total;
+                let normal_diff  = windows_used as i64 - normal_adj as i64;
+
+                println!("  count:       {:>8}", normal_cands.len());
+                println!("  total alloc: {:>8} GB ({} bytes)", normal_total / 1_073_741_824, normal_total);
+                println!("  adjusted (current + normal_alloc): {:>8} GB  ({} bytes)", normal_adj / 1_073_741_824, normal_adj);
+                println!("  diff from Windows Used:            {:>+8} GB", normal_diff / 1_073_741_824_i64);
+                println!();
+
+                // category summary for normal candidates
+                let mut ncat_cnt:   std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+                let mut ncat_alloc: std::collections::HashMap<&str, u64>   = std::collections::HashMap::new();
+                for g in &normal_cands {
+                    let from_e = base_entry_lookup.get(&g.base_record_number).map(|e| e.name.as_str()).unwrap_or("");
+                    let bname = if !from_e.is_empty() { from_e }
+                                else if !g.file_name.is_empty() { g.file_name.as_str() }
+                                else { "" };
+                    let cat = classify(bname);
+                    *ncat_cnt.entry(cat).or_insert(0) += 1;
+                    *ncat_alloc.entry(cat).or_insert(0) =
+                        ncat_alloc.get(cat).copied().unwrap_or(0).saturating_add(g.unnamed_alloc);
+                }
+                println!("--- normal candidates category summary ---");
+                for c in &["system","virtual_disk","installer","database","archive","ai_tool","other"] {
+                    println!("  {:>12}: {:>5} files  {:>6} GB ({} MB)",
+                        c,
+                        ncat_cnt.get(c).copied().unwrap_or(0),
+                        ncat_alloc.get(c).copied().unwrap_or(0) / 1_073_741_824,
+                        ncat_alloc.get(c).copied().unwrap_or(0) / 1_048_576);
+                }
+
+                println!();
+                println!("--- normal candidates top-100 detail ---");
+                for (rank, g) in normal_cands.iter().take(100).enumerate() {
+                    let base_entry = base_entry_lookup.get(&g.base_record_number);
+                    let parent_frn = base_entry.map(|e| e.parent_frn).unwrap_or(0);
+                    let from_e = base_entry.map(|e| e.name.as_str()).unwrap_or("");
+                    let bname = if !from_e.is_empty() { from_e }
+                                else if !g.file_name.is_empty() { g.file_name.as_str() }
+                                else { "(no name)" };
+                    let cat     = classify(bname);
+                    let ext_str = bname.rfind('.').map(|i| &bname[i..]).unwrap_or("");
+                    println!("{:>4}. alloc={:>7}MB real={:>7}MB rec={:<8} pfn={:<8} ext_cnt={} cat={} fext=[{}] name={}",
+                        rank + 1,
+                        g.unnamed_alloc / 1_048_576,
+                        g.unnamed_real  / 1_048_576,
+                        g.base_record_number,
+                        parent_frn,
+                        g.ext_count,
+                        cat,
+                        ext_str,
+                        bname);
+                }
             }
         }
     }
