@@ -226,6 +226,16 @@ PFx86-DIAG-3 documents the proposed future WOF `final_alloc` policy in
 `docs/wof-final-alloc-policy.md`. This is still diagnostic/design work; WOF
 correction is not reflected in normal output.
 
+PFx86-DIAG-4 adds `--diag-wof-global`, a global WOF-adjusted simulation for
+estimating the impact before any normal-output size policy change. It reports
+current vs WOF-adjusted totals, top WOF-impact directories, and top WOF-impact
+files. Normal CLI / JSON / UI output is unchanged, and hardlink correction is
+not applied.
+
+```powershell
+.\target\release\disk-insight.exe --diag-wof-global
+```
+
 > Redirect with `cmd /c` for UTF-8 output:
 > `cmd /c ".\target\release\disk-insight.exe --diag-pfx86 > .\work\pfx86_diag.txt"`
 

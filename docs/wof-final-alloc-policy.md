@@ -188,3 +188,62 @@ WOF-adjusted simulation mode to estimate impact beyond Program Files (x86).
 
 Normal CLI, JSON, UI, Tauri TreeView, and `final_alloc` behavior remain
 unchanged until that broader simulation is reviewed.
+
+## 10. PFx86-DIAG-4 global simulation result
+
+PFx86-DIAG-4 added `--diag-wof-global`, a diagnostic-only simulation that keeps
+the existing `final_alloc` policy intact and computes a second WOF-adjusted
+subtree total after MFT tree aggregation.
+
+Major folder results from 2026-05-25:
+
+| Target | Current | WOF-adjusted | Delta | WOF files | WizTree allocated | Adjusted remaining |
+|--------|--------:|-------------:|------:|----------:|------------------:|-------------------:|
+| C: | 186.528 GB | 170.609 GB | -15.919 GB | 104884 | 174.9 GB | +4.291 GB |
+| Program Files (x86) | 10.139 GB | 8.251 GB | -1.888 GB | 6924 | 7.8 GB | -0.451 GB |
+| Program Files | 29.693 GB | 24.788 GB | -4.906 GB | 14115 | 24.6 GB | -0.188 GB |
+| Windows | 27.134 GB | 18.401 GB | -8.733 GB | 82421 | 16.1 GB | -2.301 GB |
+| Users | 85.035 GB | 84.777 GB | -0.258 GB | 941 | 85.2 GB | +0.423 GB |
+| ProgramData | 5.965 GB | 5.831 GB | -0.134 GB | 483 | unavailable | unavailable |
+| Program Files\\WindowsApps | 10.797 GB | 6.019 GB | -4.778 GB | 13823 | unavailable | unavailable |
+| Windows\\WinSxS | 11.467 GB | 8.729 GB | -2.738 GB | 19645 | unavailable | unavailable |
+| Windows\\System32 | 4.402 GB | 3.780 GB | -0.622 GB | 3886 | unavailable | unavailable |
+| Program Files (x86)\\Microsoft | 2.644 GB | 1.793 GB | -0.851 GB | 760 | 1.3 GB | -0.493 GB |
+| Program Files (x86)\\Microsoft Office | 4.250 GB | 3.235 GB | -1.014 GB | 6045 | 3.2 GB | -0.035 GB |
+| Program Files (x86)\\Windows Kits | 2.120 GB | 2.120 GB | +0.000 GB | 0 | 2.1 GB | -0.020 GB |
+
+Largest observed WOF deltas:
+
+- `C:`: -15.919 GB
+- `C:\Windows`: -8.733 GB
+- `C:\Program Files`: -4.906 GB
+- `C:\Program Files\WindowsApps`: -4.778 GB
+- `C:\Windows\servicing`: -3.072 GB
+- `C:\Windows\WinSxS`: -2.738 GB
+- `C:\Program Files (x86)`: -1.888 GB
+
+Interpretation:
+
+- WOF adjustment globally moves disk-insight C: from 186.528 GB to 170.609 GB.
+  Compared with the approximate WizTree C: allocated value of 174.9 GB, the
+  simulation overshoots by about 4.291 GB. This is still much closer than the
+  unadjusted 11.628 GB gap, but it means a production policy needs conservative
+  eligibility and more review around Windows system components.
+- `C:\Program Files` becomes very close to the known WizTree reference
+  (24.788 GB vs 24.6 GB).
+- `C:\Program Files (x86)` and Microsoft Office keep the PFx86-DIAG-2 result:
+  Program Files (x86) remaining gap is about 0.451 GB, while Microsoft Office is
+  nearly aligned.
+- `C:\Windows` still remains about 2.301 GB above the reference after WOF
+  adjustment. `WinSxS`, servicing LCU packages, hardlinks, and component-store
+  accounting remain likely residual factors.
+- `C:\Users` changes only slightly and remains close to the WizTree reference,
+  which suggests WOF adjustment is not broadly disruptive for user data on this
+  machine.
+
+Decision update:
+WOF correction remains a strong production candidate, but should still not be
+enabled in normal output immediately. The safer next step is a feature-flagged
+or diagnostic-flagged normal aggregation experiment with conservative fallback
+conditions, plus targeted review of Windows / WindowsApps / WinSxS behavior.
+Hardlink and cluster-overlap correction should remain separate work.

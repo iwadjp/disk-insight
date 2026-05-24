@@ -2977,13 +2977,15 @@ pub fn print_probe7_json_top(drive: char, top_n: usize) -> Result<()> {
 // investigation. Targets three known-suspect subtrees and reports WOF/reparse,
 // compressed/sparse, hardlink/multi-name signals plus per-file attributes.
 // Size policy is unchanged — this is observation only, no correction is applied.
-pub fn print_diag_pfx86(drive: char) -> Result<()> {
+fn print_diag_with_wof_tree(drive: char, global_only: bool) -> Result<()> {
     use rayon::prelude::*;
     use std::collections::HashMap;
     use windows::Win32::Storage::FileSystem::{ReadFile, SetFilePointerEx, FILE_BEGIN};
 
     let info = get_mft_info(drive)?;
-    eprintln!("diag-pfx86: drive={}  $MFT {} MB  {} extents",
+    let diag_name = if global_only { "diag-wof-global" } else { "diag-pfx86" };
+    eprintln!("{}: drive={}  $MFT {} MB  {} extents",
+        diag_name,
         drive, info.mft_size / 1_048_576, info.extents.len());
 
     let mut mft_buf = vec![0u8; info.mft_size as usize];
@@ -3235,6 +3237,10 @@ pub fn print_diag_pfx86(drive: char) -> Result<()> {
         is_dir: bool,
         final_alloc: u64,
         subtree_size: u64,
+        wof_adjusted_subtree_size: u64,
+        wof_file_count: u64,
+        wof_current_alloc_total: u64,
+        wof_stream_alloc_total: u64,
         direct_file_size: u64,
         children: Vec<usize>,
         file_attrs: u32,
@@ -3277,13 +3283,27 @@ pub fn print_diag_pfx86(drive: char) -> Result<()> {
         let combined_data_flags = if let Some(g) = base_groups.get(&frn) {
             e.data_flags | g.data_flags
         } else { e.data_flags };
+        let wof_adjusts = !e.is_dir && combined_wof && combined_wof_alloc > 0;
+        let wof_adjusted_alloc = if wof_adjusts {
+            combined_wof_alloc
+        } else {
+            final_alloc
+        };
+        let wof_file_count = if wof_adjusts { 1 } else { 0 };
+        let wof_current_alloc_total = if wof_adjusts { final_alloc } else { 0 };
+        let wof_stream_alloc_total = if wof_adjusts { combined_wof_alloc } else { 0 };
 
         let idx = arena.len();
         frn_to_idx.insert(frn, idx);
         arena.push(DNode {
             frn, parent_frn: e.parent_frn, name: e.name.clone(),
             is_dir: e.is_dir, final_alloc,
-            subtree_size: final_alloc, direct_file_size: 0,
+            subtree_size: final_alloc,
+            wof_adjusted_subtree_size: wof_adjusted_alloc,
+            wof_file_count,
+            wof_current_alloc_total,
+            wof_stream_alloc_total,
+            direct_file_size: 0,
             children: Vec::new(),
             file_attrs: e.file_attrs,
             data_flags: combined_data_flags,
@@ -3329,13 +3349,28 @@ pub fn print_diag_pfx86(drive: char) -> Result<()> {
         }
     }
     for &idx in &order {
-        let (subtree, pfn, frn) = {
+        let (subtree, adjusted_subtree, wof_files, wof_current, wof_stream, pfn, frn) = {
             let n = &arena[idx];
-            (n.subtree_size, n.parent_frn, n.frn)
+            (
+                n.subtree_size,
+                n.wof_adjusted_subtree_size,
+                n.wof_file_count,
+                n.wof_current_alloc_total,
+                n.wof_stream_alloc_total,
+                n.parent_frn,
+                n.frn,
+            )
         };
         if pfn != frn {
             if let Some(&pi) = frn_to_idx.get(&pfn) {
                 arena[pi].subtree_size = arena[pi].subtree_size.saturating_add(subtree);
+                arena[pi].wof_adjusted_subtree_size =
+                    arena[pi].wof_adjusted_subtree_size.saturating_add(adjusted_subtree);
+                arena[pi].wof_file_count = arena[pi].wof_file_count.saturating_add(wof_files);
+                arena[pi].wof_current_alloc_total =
+                    arena[pi].wof_current_alloc_total.saturating_add(wof_current);
+                arena[pi].wof_stream_alloc_total =
+                    arena[pi].wof_stream_alloc_total.saturating_add(wof_stream);
             }
         }
     }
@@ -3474,6 +3509,7 @@ pub fn print_diag_pfx86(drive: char) -> Result<()> {
         },
     ];
 
+    if !global_only {
     println!("=== Program Files (x86) diagnostics ===");
     println!("(observation only; size policy unchanged)");
     println!();
@@ -3792,6 +3828,196 @@ pub fn print_diag_pfx86(drive: char) -> Result<()> {
     println!("- 'fn' = number of $FILE_NAME attributes (may include DOS short name pairs).");
     println!("- 'wof_stream' = WofCompressedData stream allocation (base + extension records).");
     println!("- Sizes use the same final_alloc policy as --json output. No size correction applied.");
+    }
+
+    if global_only {
+        let fmt_short = |bytes: u64| -> String {
+            format!("{:.3} GB", bytes as f64 / 1_073_741_824.0)
+        };
+        let fmt_signed_short = |bytes: i128| -> String {
+            let sign = if bytes < 0 { "-" } else { "+" };
+            let abs = bytes.unsigned_abs() as u64;
+            format!("{}{}", sign, fmt_short(abs))
+        };
+        let delta_of = |idx: usize| -> i128 {
+            arena[idx].wof_adjusted_subtree_size as i128 - arena[idx].subtree_size as i128
+        };
+
+        struct GlobalTarget {
+            label: &'static str,
+            display_path: &'static str,
+            segments: &'static [&'static str],
+            wiztree_alloc_gb: Option<f64>,
+            wiztree_text: Option<&'static str>,
+        }
+
+        let root_display = format!("{}:", drive);
+        let global_targets = vec![
+            GlobalTarget { label: "C", display_path: Box::leak(root_display.into_boxed_str()), segments: &[], wiztree_alloc_gb: Some(174.9), wiztree_text: Some("174.9 GB") },
+            GlobalTarget { label: "Program Files (x86)", display_path: "C:\\Program Files (x86)", segments: &["Program Files (x86)"], wiztree_alloc_gb: Some(7.8), wiztree_text: Some("7.8 GB") },
+            GlobalTarget { label: "Program Files", display_path: "C:\\Program Files", segments: &["Program Files"], wiztree_alloc_gb: Some(24.6), wiztree_text: Some("24.6 GB") },
+            GlobalTarget { label: "Windows", display_path: "C:\\Windows", segments: &["Windows"], wiztree_alloc_gb: Some(16.1), wiztree_text: Some("16.1 GB") },
+            GlobalTarget { label: "Users", display_path: "C:\\Users", segments: &["Users"], wiztree_alloc_gb: Some(85.2), wiztree_text: Some("85.2 GB") },
+            GlobalTarget { label: "ProgramData", display_path: "C:\\ProgramData", segments: &["ProgramData"], wiztree_alloc_gb: None, wiztree_text: None },
+            GlobalTarget { label: "WindowsApps", display_path: "C:\\Program Files\\WindowsApps", segments: &["Program Files", "WindowsApps"], wiztree_alloc_gb: None, wiztree_text: None },
+            GlobalTarget { label: "WinSxS", display_path: "C:\\Windows\\WinSxS", segments: &["Windows", "WinSxS"], wiztree_alloc_gb: None, wiztree_text: None },
+            GlobalTarget { label: "System32", display_path: "C:\\Windows\\System32", segments: &["Windows", "System32"], wiztree_alloc_gb: None, wiztree_text: None },
+            GlobalTarget { label: "AppData", display_path: "C:\\Users\\iwadj\\AppData", segments: &["Users", "iwadj", "AppData"], wiztree_alloc_gb: None, wiztree_text: None },
+            GlobalTarget { label: "AppData Local", display_path: "C:\\Users\\iwadj\\AppData\\Local", segments: &["Users", "iwadj", "AppData", "Local"], wiztree_alloc_gb: None, wiztree_text: None },
+            GlobalTarget { label: "AppData Roaming", display_path: "C:\\Users\\iwadj\\AppData\\Roaming", segments: &["Users", "iwadj", "AppData", "Roaming"], wiztree_alloc_gb: None, wiztree_text: None },
+            GlobalTarget { label: "Microsoft", display_path: "C:\\Program Files (x86)\\Microsoft", segments: &["Program Files (x86)", "Microsoft"], wiztree_alloc_gb: Some(1.3), wiztree_text: Some("1.3 GB") },
+            GlobalTarget { label: "Microsoft Office", display_path: "C:\\Program Files (x86)\\Microsoft Office", segments: &["Program Files (x86)", "Microsoft Office"], wiztree_alloc_gb: Some(3.2), wiztree_text: Some("3.2 GB") },
+            GlobalTarget { label: "Windows Kits", display_path: "C:\\Program Files (x86)\\Windows Kits", segments: &["Program Files (x86)", "Windows Kits"], wiztree_alloc_gb: Some(2.1), wiztree_text: Some("2.1 GB") },
+        ];
+
+        let root_idx = frn_to_idx.get(&5).copied();
+        let find_target = |segments: &[&str]| -> Option<usize> {
+            if segments.is_empty() {
+                root_idx
+            } else {
+                find_by_segments(segments)
+            }
+        };
+
+        println!("=== Global WOF-adjusted simulation ===");
+        println!("diagnostic only; final_alloc policy and normal output are unchanged");
+        println!();
+        println!("{:<42} {:>12} {:>12} {:>12} {:>10}", "path", "current", "adjusted", "delta", "wof_files");
+        for target in &global_targets {
+            match find_target(target.segments) {
+                Some(idx) => {
+                    let n = &arena[idx];
+                    println!(
+                        "{:<42} {:>12} {:>12} {:>12} {:>10}",
+                        target.display_path,
+                        fmt_short(n.subtree_size),
+                        fmt_short(n.wof_adjusted_subtree_size),
+                        fmt_signed_short(delta_of(idx)),
+                        n.wof_file_count,
+                    );
+                }
+                None => {
+                    println!("{:<42} {:>12} {:>12} {:>12} {:>10}",
+                        target.display_path, "not found", "-", "-", "-");
+                }
+            }
+        }
+        println!();
+
+        let mut impact_dirs: Vec<usize> = (0..arena.len())
+            .filter(|&i| arena[i].is_dir && arena[i].wof_file_count > 0 && delta_of(i) != 0)
+            .collect();
+        impact_dirs.sort_unstable_by(|&a, &b| {
+            delta_of(b).abs().cmp(&delta_of(a).abs())
+        });
+
+        println!("--- top directories by WOF delta ---");
+        for (rank, &idx) in impact_dirs.iter().take(30).enumerate() {
+            let n = &arena[idx];
+            println!(
+                "{}. delta={} current={} adjusted={} wof_files={}",
+                rank + 1,
+                fmt_signed_short(delta_of(idx)),
+                fmt_short(n.subtree_size),
+                fmt_short(n.wof_adjusted_subtree_size),
+                n.wof_file_count,
+            );
+            println!("   {}", reconstruct(idx));
+        }
+        println!();
+
+        let mut impact_files: Vec<usize> = (0..arena.len())
+            .filter(|&i| {
+                !arena[i].is_dir
+                    && arena[i].has_wof_stream
+                    && arena[i].wof_stream_alloc > 0
+                    && arena[i].final_alloc != arena[i].wof_stream_alloc
+            })
+            .collect();
+        impact_files.sort_unstable_by(|&a, &b| {
+            let da = arena[a].wof_stream_alloc as i128 - arena[a].final_alloc as i128;
+            let db = arena[b].wof_stream_alloc as i128 - arena[b].final_alloc as i128;
+            db.abs().cmp(&da.abs())
+        });
+
+        println!("--- top files by WOF delta ---");
+        for (rank, &idx) in impact_files.iter().take(50).enumerate() {
+            let n = &arena[idx];
+            let delta = n.wof_stream_alloc as i128 - n.final_alloc as i128;
+            println!(
+                "{}. delta={} current={} wof={} rec={} link={} fn={}",
+                rank + 1,
+                fmt_signed_short(delta),
+                fmt_short(n.final_alloc),
+                fmt_short(n.wof_stream_alloc),
+                n.frn,
+                n.hard_link_count,
+                n.file_name_attr_count,
+            );
+            println!("   {}", reconstruct(idx));
+        }
+        println!();
+
+        println!("=== WOF adjustment WizTree comparison notes ===");
+        println!("reference values are approximate and environment-dependent; exact match is not the goal");
+        for target in global_targets.iter().filter(|t| t.wiztree_alloc_gb.is_some()) {
+            println!("{}:", target.label);
+            match find_target(target.segments) {
+                Some(idx) => {
+                    let n = &arena[idx];
+                    let wiztree_alloc = (target.wiztree_alloc_gb.unwrap() * 1_073_741_824.0).round() as u64;
+                    println!("  disk-insight current: {}", fmt_bytes(n.subtree_size));
+                    println!("  WOF-adjusted estimate: {}", fmt_bytes(n.wof_adjusted_subtree_size));
+                    println!("  WizTree allocated:   {} (reference)", target.wiztree_text.unwrap_or("unknown"));
+                    println!("  current remaining:   {}", fmt_signed_bytes(wiztree_alloc as i128 - n.subtree_size as i128));
+                    println!("  adjusted remaining:  {}", fmt_signed_bytes(wiztree_alloc as i128 - n.wof_adjusted_subtree_size as i128));
+                }
+                None => {
+                    println!("  disk-insight current: unavailable");
+                    println!("  WOF-adjusted estimate: unavailable");
+                    println!("  WizTree allocated:   {} (reference)", target.wiztree_text.unwrap_or("unknown"));
+                }
+            }
+        }
+        println!();
+
+        if let Some(root) = root_idx {
+            let n = &arena[root];
+            println!("=== WOF global summary ===");
+            println!("total_current_alloc:        {}", fmt_bytes(n.subtree_size));
+            println!("total_wof_adjusted_alloc:   {}", fmt_bytes(n.wof_adjusted_subtree_size));
+            println!("total_delta:                {}", fmt_signed_bytes(delta_of(root)));
+            println!("wof_files:                  {}", n.wof_file_count);
+            println!("wof_current_alloc_total:    {}", fmt_bytes(n.wof_current_alloc_total));
+            println!("wof_stream_alloc_total:     {}", fmt_bytes(n.wof_stream_alloc_total));
+            println!("largest impact dirs:");
+            for &idx in impact_dirs.iter().take(5) {
+                println!(
+                    "  {} delta={} current={} adjusted={}",
+                    reconstruct(idx),
+                    fmt_signed_short(delta_of(idx)),
+                    fmt_short(arena[idx].subtree_size),
+                    fmt_short(arena[idx].wof_adjusted_subtree_size),
+                );
+            }
+            println!("notes:");
+            println!("- This is diagnostic only.");
+            println!("- Normal output is unchanged.");
+            println!("- Hardlink correction is not applied.");
+            println!("- Remaining deltas should be checked for hardlink, cluster overlap, and WinSxS-specific effects.");
+        } else {
+            println!("=== WOF global summary ===");
+            println!("root directory (FRN 5) was not found; summary unavailable");
+        }
+    }
 
     Ok(())
+}
+
+pub fn print_diag_pfx86(drive: char) -> Result<()> {
+    print_diag_with_wof_tree(drive, false)
+}
+
+pub fn print_diag_wof_global(drive: char) -> Result<()> {
+    print_diag_with_wof_tree(drive, true)
 }

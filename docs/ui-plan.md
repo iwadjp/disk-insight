@@ -790,6 +790,9 @@ for possible future WOF size correction. This is a size-accuracy line of work,
 separate from UI functionality. Normal display, JSON output, TreeView data, and
 Tauri behavior are unchanged.
 
+PFx86-DIAG-4 adds `--diag-wof-global` for global WOF-adjusted simulation. It is
+still size-accuracy diagnostics only; normal UI sizes are unchanged.
+
 ---
 
 ## E-2 follow-up: Tree selection behavior
