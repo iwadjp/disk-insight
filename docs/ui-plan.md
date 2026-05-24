@@ -549,6 +549,30 @@ Explorer-style TreeView. The existing folder navigation sidebar is not replaced.
 - Existing folder nav (top_directories) is unchanged.
 - Full lazy TreeView is planned for E-1b and later phases.
 
+## E-2 follow-up: Tree selection behavior
+
+E-2 follow-up confirms and clarifies click behavior in the TreeView.
+
+### Behavior
+
+- **Toggle click (▶ / ▼)**: expands or collapses the directory. Does not change
+  the selected folder. `e.stopPropagation()` is added to the toggle button so it
+  cannot interfere with any ancestor click handler.
+- **Folder label click**: updates `selectedDir` to the clicked directory.
+  `SelectedFolderCard` and the prefix filter in the right pane follow immediately.
+- **File row**: not interactive (no selection, no expansion). Displayed with
+  muted color for context only.
+
+### Active highlight
+
+`selectedDir?.record_index` drives the `tree-row--active` class. After a label
+click, the clicked row is highlighted and the card shows the correct full path.
+
+### Scope guard
+
+- No change to Rust core, Tauri commands, or JSON schema.
+- No virtual scroll, delete, right-click menu, or `explorer /select`.
+
 ---
 
 ## Completed phases summary
@@ -583,6 +607,7 @@ Explorer-style TreeView. The existing folder navigation sidebar is not replaced.
 | E-1a | root_children を JSON に追加、Explorer風TreeView の第一歩 |
 | E-1b | Tauri state に children map を保持、get_children command 追加 |
 | E-2  | 左ペインを Explorer風TreeView に置き換え、lazy expansion + children cache |
+| E-2 FU | TreeView 選択動作の確認・整理（stopPropagation、label click で selected folder 更新） |
 
 ---
 

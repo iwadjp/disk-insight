@@ -285,7 +285,7 @@ function TreeNodeRow({
         {isDir ? (
           <button
             className="tree-toggle"
-            onClick={() => onToggleExpand(node)}
+            onClick={(e) => { e.stopPropagation(); onToggleExpand(node); }}
             disabled={isLoading}
             aria-label={isExpanded ? "Collapse" : "Expand"}
             title={isExpanded ? "Collapse" : "Expand"}
