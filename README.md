@@ -120,6 +120,7 @@ The app works without admin rights but scan will fail with a permission error.
 
 | File | Description |
 |------|-------------|
+| `docs/runbook.md` | Developer verification steps and minimal UI checklist |
 | `docs/json-output-schema.md` | JSON output field reference and API boundary notes |
 | `docs/ui-plan.md` | UI implementation history and remaining task list |
 | `CLAUDE.md` | Project conventions and AI usage guidelines |
@@ -152,5 +153,5 @@ Remaining tasks before milestone sign-off:
 - [x] D-9 Copy path to clipboard
 - [x] D-10 UI polish
 - [x] D-11 README
-- [ ] D-12 Build and run procedure notes
+- [x] D-12 Build and run procedure notes
 - [ ] D-13 Milestone checklist sign-off

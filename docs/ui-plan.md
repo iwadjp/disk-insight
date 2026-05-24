@@ -360,6 +360,34 @@ usable milestone.
 - No source code changes.
 - No new features.
 
+## D-12 Developer runbook
+
+D-12 adds `docs/runbook.md` as the developer verification reference before
+the D-13 milestone sign-off.
+
+### Content
+
+- Prerequisites table (Windows, Rust MSVC, Node, Tauri, admin rights)
+- Repository locations (project root, PROGRESS.md path)
+- Rust CLI build steps
+- CLI human-readable and JSON output verification
+- `cmd /c` redirect note for UTF-8 JSON
+- Tauri UI: dev and production build steps
+- Minimal UI verification checklist (14 items: data loading, scan UX,
+  folder nav, actions, safety / no-delete check)
+- Known limitations table
+- Troubleshooting (drive open failed, JSON encoding, browser invoke, slow scan, UI freeze)
+
+### README update
+
+- Added `docs/runbook.md` to the Documentation table.
+- Marked D-12 as complete in the milestone checklist.
+
+### Scope guard
+
+- No source code changes.
+- No new features.
+
 ---
 
 ## Completed phases summary
@@ -389,6 +417,7 @@ usable milestone.
 | D-9 | selected folder / top files の Copy path（クリップボード） |
 | D-10 | UI polish（ボタン文言・empty message・CSS 微調整） |
 | D-11 | README.md 作成（概要・CLI/UI使用例・既知制限） |
+| D-12 | docs/runbook.md 作成（開発者向け実行確認手順・UI チェックリスト） |
 
 ---
 
@@ -439,7 +468,7 @@ usable milestone.
 - 現時点で削除機能なし
 - 既知差分（WinSxS / WOF / hardlink など）
 
-### D-12 実行手順整理
+### D-12 実行手順整理 ✓
 
 - `cargo build --release`
 - `npm run tauri dev`
