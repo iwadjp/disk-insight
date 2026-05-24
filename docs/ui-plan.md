@@ -338,6 +338,28 @@ D-10 makes small readability and label improvements without adding new features.
 - No new features, Tauri commands, or layout restructuring.
 - MFT scan logic unchanged.
 
+## D-11 Minimal README
+
+D-11 adds `README.md` at the project root as the entry point for the minimal
+usable milestone.
+
+### Content
+
+- Project overview: WizTree-style MFT scanner, no delete action
+- What it can do (scan, folder nav, Explorer open, copy path)
+- What it cannot do yet (delete, TreeView, Treemap, right-click, /select, etc.)
+- Requirements: Windows, NTFS, Administrator privileges
+- CLI usage with PowerShell examples and UTF-16LE `cmd /c` redirect note
+- Tauri UI: `npm run tauri dev` / `npm run tauri build`, admin note
+- Documentation table pointing to `docs/json-output-schema.md`, `docs/ui-plan.md`, `CLAUDE.md`
+- Known limitations table (WinSxS, WOF, hard links, non-NTFS, accuracy)
+- Current milestone checklist (D-7 through D-13)
+
+### Scope guard
+
+- No source code changes.
+- No new features.
+
 ---
 
 ## Completed phases summary
@@ -366,6 +388,7 @@ D-10 makes small readability and label improvements without adding new features.
 | D-8 | top files 各行の Open location（親フォルダを Explorer で開く） |
 | D-9 | selected folder / top files の Copy path（クリップボード） |
 | D-10 | UI polish（ボタン文言・empty message・CSS 微調整） |
+| D-11 | README.md 作成（概要・CLI/UI使用例・既知制限） |
 
 ---
 
@@ -407,7 +430,7 @@ D-10 makes small readability and label improvements without adding new features.
 - top 件数の説明
 - empty message の文言整理
 
-### D-11 README 最小版作成
+### D-11 README 最小版作成 ✓
 
 - 目的
 - 管理者権限が必要な旨
