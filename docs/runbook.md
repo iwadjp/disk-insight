@@ -222,6 +222,10 @@ sizes, but normal CLI / JSON / UI size values are unchanged. Hardlink suspects
 are reported only as remaining discrepancy candidates; no hardlink correction is
 applied.
 
+PFx86-DIAG-3 documents the proposed future WOF `final_alloc` policy in
+`docs/wof-final-alloc-policy.md`. This is still diagnostic/design work; WOF
+correction is not reflected in normal output.
+
 > Redirect with `cmd /c` for UTF-8 output:
 > `cmd /c ".\target\release\disk-insight.exe --diag-pfx86 > .\work\pfx86_diag.txt"`
 

@@ -783,6 +783,15 @@ perspective; unlocks E-5 / E-6 cleanly.
 
 ---
 
+## PFx86-DIAG-3 WOF final_alloc policy design
+
+PFx86-DIAG-3 adds `docs/wof-final-alloc-policy.md` as a design-only document
+for possible future WOF size correction. This is a size-accuracy line of work,
+separate from UI functionality. Normal display, JSON output, TreeView data, and
+Tauri behavior are unchanged.
+
+---
+
 ## E-2 follow-up: Tree selection behavior
 
 E-2 follow-up confirms and clarifies click behavior in the TreeView.
