@@ -2395,3 +2395,492 @@ pub fn probe7(drive: char) -> Result<()> {
 
     Ok(())
 }
+
+// ─── C-1: JSON output types ───────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct JsonDirEntry {
+    pub path:             String,
+    pub record_index:     usize,
+    pub subtree_size:     u64,
+    pub direct_file_size: u64,
+    pub child_count:      usize,
+}
+
+#[derive(serde::Serialize)]
+pub struct JsonFileEntry {
+    pub path:                 String,
+    pub record_index:         usize,
+    pub parent_frn:           u64,
+    pub final_allocated_size: u64,
+}
+
+#[derive(serde::Serialize)]
+pub struct JsonSummary {
+    pub drive:                 String,
+    pub total_records:         usize,
+    pub in_use_entries:        usize,
+    pub files:                 usize,
+    pub directories:           usize,
+    pub orphans:               usize,
+    pub root_nodes:            usize,
+    pub total_final_allocated: u64,
+    pub read_time_ms:          u64,
+    pub parse_time_ms:         u64,
+    pub tree_build_time_ms:    u64,
+    pub aggregation_time_ms:   u64,
+    pub total_time_ms:         u64,
+}
+
+#[derive(serde::Serialize)]
+pub struct JsonTreeOutput {
+    pub summary:         JsonSummary,
+    pub top_directories: Vec<JsonDirEntry>,
+    pub top_files:       Vec<JsonFileEntry>,
+}
+
+// ─── C-1: Core tree computation (JSON path) ───────────────────────────────
+// Progress goes to stderr; returns structured data for JSON serialization.
+
+fn mft_tree_compute(drive: char) -> Result<JsonTreeOutput> {
+    use rayon::prelude::*;
+    use std::collections::HashMap;
+    use windows::Win32::Storage::FileSystem::{ReadFile, SetFilePointerEx, FILE_BEGIN};
+
+    let info = get_mft_info(drive)?;
+    eprintln!("mft_tree_compute: drive={}  $MFT {} MB  {} extents",
+        drive, info.mft_size / 1_048_576, info.extents.len());
+
+    let total_start = std::time::Instant::now();
+    let mut mft_buf = vec![0u8; info.mft_size as usize];
+
+    let io_start = std::time::Instant::now();
+    for (start_vcn, lcn, length) in &info.extents {
+        let disk_offset = lcn  * info.bytes_per_cluster;
+        let dst_start   = start_vcn * info.bytes_per_cluster;
+        let read_size   = length * info.bytes_per_cluster;
+        let dst_end     = dst_start + read_size;
+        unsafe {
+            SetFilePointerEx(info.handle, disk_offset as i64, None, FILE_BEGIN)
+        }.context("SetFilePointerEx失敗")?;
+        let mut bytes_read: u32 = 0;
+        unsafe {
+            ReadFile(
+                info.handle,
+                Some(&mut mft_buf[dst_start as usize..dst_end as usize]),
+                Some(&mut bytes_read),
+                None,
+            )
+        }.context("ReadFile失敗")?;
+    }
+    let io_elapsed = io_start.elapsed();
+    unsafe { windows::Win32::Foundation::CloseHandle(info.handle).ok(); }
+
+    let record_size   = info.bytes_per_record as usize;
+    let total_records = info.mft_size as usize / record_size;
+
+    struct FlatEntry {
+        record_idx: usize,
+        name:       String,
+        parent_frn: u64,
+        alloc_size: u64,
+        is_in_use:  bool,
+        is_dir:     bool,
+        file_attrs: u32,
+    }
+    struct ExtEntryC {
+        base_record:   u64,
+        unnamed_alloc: u64,
+        data_flags:    u16,
+        wof_alloc:     u64,
+    }
+
+    let parse_start = std::time::Instant::now();
+
+    let raw_parsed: Vec<(Option<FlatEntry>, Option<ExtEntryC>)> = mft_buf
+        .par_chunks_exact(record_size)
+        .enumerate()
+        .filter_map(|(i, raw)| {
+            let record = apply_fixup(raw)?;
+            if record.len() < 4 || &record[0..4] != b"FILE" { return None; }
+            if record.len() < 24 { return None; }
+
+            let flags     = u16::from_le_bytes([record[22], record[23]]);
+            let is_in_use = flags & 0x01 != 0;
+            let is_dir    = flags & 0x02 != 0;
+
+            let base_record = if record.len() >= 40 {
+                u64::from_le_bytes([record[32], record[33], record[34], record[35],
+                                    record[36], record[37], record[38], record[39]])
+            } else { 0 };
+            let is_extension = base_record != 0;
+
+            let attr_start = u16::from_le_bytes([record[20], record[21]]) as usize;
+            let mut pos              = attr_start;
+            let mut name             = String::new();
+            let mut parent_frn: u64  = 0;
+            let mut best_ns_prio: u8 = 255;
+            let mut fn_alloc: u64    = 0;
+            let mut alloc_data: Option<u64> = None;
+            let mut found_data       = false;
+            let mut file_attrs: u32  = 0;
+            let mut ext_unnamed_alloc: u64 = 0;
+            let mut ext_data_flags:    u16 = 0;
+            let mut ext_wof_alloc:     u64 = 0;
+            let mut ext_has_data           = false;
+
+            loop {
+                if pos + 8 > record.len() { break; }
+                let attr_type = u32::from_le_bytes([record[pos], record[pos+1], record[pos+2], record[pos+3]]);
+                let attr_len  = u32::from_le_bytes([record[pos+4], record[pos+5], record[pos+6], record[pos+7]]) as usize;
+                if attr_type == 0xFFFF_FFFF { break; }
+                if attr_len == 0 || pos + attr_len > record.len() { break; }
+
+                let non_resident    = record[pos + 8];
+                let stream_name_len = record[pos + 9] as usize;
+
+                match attr_type {
+                    0x10 if non_resident == 0 => {
+                        if pos + 22 <= record.len() {
+                            let c = pos + u16::from_le_bytes([record[pos+20], record[pos+21]]) as usize;
+                            if c + 0x24 <= record.len() {
+                                file_attrs = u32::from_le_bytes([record[c+0x20], record[c+0x21], record[c+0x22], record[c+0x23]]);
+                            }
+                        }
+                    }
+                    0x30 if non_resident == 0 => {
+                        if pos + 22 > record.len() { pos += attr_len; continue; }
+                        let c = pos + u16::from_le_bytes([record[pos+20], record[pos+21]]) as usize;
+                        if c + 0x42 > record.len() { pos += attr_len; continue; }
+                        let ns = record[c + 0x41];
+                        let ns_prio: u8 = match ns { 1 => 0, 3 => 1, 0 => 2, 2 => 3, _ => 4 };
+                        if ns_prio < best_ns_prio {
+                            best_ns_prio = ns_prio;
+                            if c + 8 <= record.len() {
+                                let pr = u64::from_le_bytes([record[c], record[c+1], record[c+2], record[c+3],
+                                                              record[c+4], record[c+5], record[c+6], record[c+7]]);
+                                parent_frn = pr & 0x0000_FFFF_FFFF_FFFF;
+                            }
+                            if c + 0x38 <= record.len() {
+                                fn_alloc = u64::from_le_bytes([record[c+0x30], record[c+0x31], record[c+0x32], record[c+0x33],
+                                                                record[c+0x34], record[c+0x35], record[c+0x36], record[c+0x37]]);
+                            }
+                            let nc = record[c + 0x40] as usize;
+                            let ns_start = c + 0x42;
+                            let ns_end   = ns_start + nc * 2;
+                            if ns_end <= record.len() {
+                                let wide: Vec<u16> = record[ns_start..ns_end]
+                                    .chunks_exact(2)
+                                    .map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+                                name = String::from_utf16_lossy(&wide).into();
+                            }
+                        }
+                    }
+                    0x80 => {
+                        if stream_name_len == 0 && !found_data {
+                            if non_resident == 1 && pos + 48 <= record.len() {
+                                alloc_data = Some(u64::from_le_bytes([
+                                    record[pos+40], record[pos+41], record[pos+42], record[pos+43],
+                                    record[pos+44], record[pos+45], record[pos+46], record[pos+47]]));
+                                found_data = true;
+                            } else if non_resident == 0 && pos + 20 <= record.len() {
+                                let cl = u32::from_le_bytes([record[pos+16], record[pos+17], record[pos+18], record[pos+19]]) as u64;
+                                alloc_data = Some(cl);
+                                found_data = true;
+                            }
+                        }
+                        if is_extension && is_in_use {
+                            let alloc = if non_resident == 1 && pos + 48 <= record.len() {
+                                u64::from_le_bytes([record[pos+40], record[pos+41], record[pos+42], record[pos+43],
+                                                    record[pos+44], record[pos+45], record[pos+46], record[pos+47]])
+                            } else if non_resident == 0 && pos + 20 <= record.len() {
+                                u32::from_le_bytes([record[pos+16], record[pos+17], record[pos+18], record[pos+19]]) as u64
+                            } else { 0 };
+                            if stream_name_len == 0 {
+                                ext_has_data = true;
+                                ext_unnamed_alloc = ext_unnamed_alloc.saturating_add(alloc);
+                                if pos + 14 <= record.len() {
+                                    ext_data_flags |= u16::from_le_bytes([record[pos+12], record[pos+13]]);
+                                }
+                            } else {
+                                let name_off = u16::from_le_bytes([record[pos+10], record[pos+11]]) as usize;
+                                let sn_start = pos + name_off;
+                                let sn_end   = sn_start + stream_name_len * 2;
+                                if sn_end <= pos + attr_len && sn_end <= record.len() {
+                                    let wide: Vec<u16> = record[sn_start..sn_end]
+                                        .chunks_exact(2)
+                                        .map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+                                    if String::from_utf16_lossy(&wide) == "WofCompressedData" {
+                                        ext_wof_alloc = ext_wof_alloc.saturating_add(alloc);
+                                        ext_has_data = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+                pos += attr_len;
+            }
+
+            let ext_entry = if is_extension && is_in_use && ext_has_data {
+                Some(ExtEntryC {
+                    base_record:   base_record & 0x0000_FFFF_FFFF_FFFF,
+                    unnamed_alloc: ext_unnamed_alloc,
+                    data_flags:    ext_data_flags,
+                    wof_alloc:     ext_wof_alloc,
+                })
+            } else { None };
+
+            if name.is_empty() { return Some((None, ext_entry)); }
+
+            let alloc_size = alloc_data.unwrap_or(fn_alloc);
+            Some((Some(FlatEntry { record_idx: i, name, parent_frn, alloc_size, is_in_use, is_dir, file_attrs }), ext_entry))
+        })
+        .collect();
+
+    let (flat_entries, ext_entries): (Vec<_>, Vec<_>) = raw_parsed
+        .into_iter()
+        .fold((Vec::new(), Vec::new()), |mut acc, (fe, ee)| {
+            if let Some(e) = fe { acc.0.push(e); }
+            if let Some(e) = ee { acc.1.push(e); }
+            acc
+        });
+
+    let parse_elapsed = parse_start.elapsed();
+
+    let tree_start = std::time::Instant::now();
+
+    struct BaseGroupC {
+        unnamed_alloc: u64,
+        data_flags:    u16,
+        wof_alloc:     u64,
+    }
+    let mut base_groups: HashMap<u64, BaseGroupC> = HashMap::new();
+    for e in &ext_entries {
+        let g = base_groups.entry(e.base_record).or_insert(BaseGroupC {
+            unnamed_alloc: 0, data_flags: 0, wof_alloc: 0,
+        });
+        g.unnamed_alloc = g.unnamed_alloc.saturating_add(e.unnamed_alloc);
+        g.data_flags   |= e.data_flags;
+        g.wof_alloc     = g.wof_alloc.saturating_add(e.wof_alloc);
+    }
+    let base_idx_to_group: HashMap<u64, &BaseGroupC> =
+        base_groups.iter().map(|(&k, v)| (k, v)).collect();
+
+    struct TreeNodeC {
+        frn:              u64,
+        parent_frn:       u64,
+        name:             String,
+        is_dir:           bool,
+        final_alloc:      u64,
+        subtree_size:     u64,
+        direct_file_size: u64,
+        children:         Vec<usize>,
+        is_orphan:        bool,
+    }
+
+    let mut arena: Vec<TreeNodeC> = Vec::with_capacity(flat_entries.len());
+    let mut frn_to_idx: HashMap<u64, usize> = HashMap::with_capacity(flat_entries.len());
+
+    for e in flat_entries.iter().filter(|e| e.is_in_use) {
+        let frn = e.record_idx as u64;
+        let final_alloc = if e.alloc_size > 0 {
+            e.alloc_size
+        } else if let Some(g) = base_idx_to_group.get(&frn) {
+            if g.unnamed_alloc > 0 {
+                let fa  = e.file_attrs;
+                let df  = g.data_flags;
+                let wof = g.wof_alloc > 0;
+                let cmp = fa & 0x0800 != 0 || df & 0x0001 != 0;
+                let sps = fa & 0x0200 != 0 || df & 0x8000 != 0;
+                let rps = fa & 0x0400 != 0;
+                let sys = fa & 0x0004 != 0;
+                let hid = fa & 0x0002 != 0;
+                if !cmp && !sps && !rps && !sys && !hid && !wof { g.unnamed_alloc } else { 0 }
+            } else { 0 }
+        } else { 0 };
+
+        let idx = arena.len();
+        frn_to_idx.insert(frn, idx);
+        arena.push(TreeNodeC {
+            frn, parent_frn: e.parent_frn, name: e.name.clone(),
+            is_dir: e.is_dir, final_alloc,
+            subtree_size: final_alloc, direct_file_size: 0,
+            children: Vec::new(), is_orphan: false,
+        });
+    }
+
+    let mut child_parent: Vec<(usize, usize)> = Vec::new();
+    let mut orphan_flags: Vec<bool>            = vec![false; arena.len()];
+    let mut root_indices: Vec<usize>           = Vec::new();
+    let mut orphan_count: usize                = 0;
+
+    for i in 0..arena.len() {
+        let (frn, pfn) = (arena[i].frn, arena[i].parent_frn);
+        if pfn == frn {
+            root_indices.push(i);
+        } else if let Some(&pi) = frn_to_idx.get(&pfn) {
+            child_parent.push((i, pi));
+        } else {
+            orphan_flags[i] = true;
+            orphan_count += 1;
+            root_indices.push(i);
+        }
+    }
+    for i in 0..arena.len() {
+        if orphan_flags[i] { arena[i].is_orphan = true; }
+    }
+    for (ci, pi) in child_parent {
+        arena[pi].children.push(ci);
+    }
+
+    let tree_build_elapsed = tree_start.elapsed();
+
+    let agg_start = std::time::Instant::now();
+
+    let mut order: Vec<usize> = Vec::with_capacity(arena.len());
+    {
+        let mut stack: Vec<(usize, bool)> = Vec::new();
+        for &r in &root_indices { stack.push((r, false)); }
+        while let Some((idx, expanded)) = stack.pop() {
+            if expanded {
+                order.push(idx);
+            } else {
+                stack.push((idx, true));
+                for &child in arena[idx].children.iter().rev() {
+                    stack.push((child, false));
+                }
+            }
+        }
+    }
+
+    for &idx in &order {
+        let (subtree, pfn, frn) = {
+            let n = &arena[idx];
+            (n.subtree_size, n.parent_frn, n.frn)
+        };
+        if pfn != frn {
+            if let Some(&pi) = frn_to_idx.get(&pfn) {
+                arena[pi].subtree_size = arena[pi].subtree_size.saturating_add(subtree);
+            }
+        }
+    }
+
+    // Compute direct_file_size for each directory
+    let direct_sizes: Vec<(usize, u64)> = (0..arena.len())
+        .filter(|&i| arena[i].is_dir)
+        .map(|i| {
+            let dfs: u64 = arena[i].children.iter()
+                .filter(|&&c| !arena[c].is_dir)
+                .map(|&c| arena[c].final_alloc)
+                .sum();
+            (i, dfs)
+        })
+        .collect();
+    for (i, dfs) in direct_sizes {
+        arena[i].direct_file_size = dfs;
+    }
+
+    let agg_elapsed   = agg_start.elapsed();
+    let total_elapsed = total_start.elapsed();
+
+    // Statistics
+    let total_file_count: usize = arena.iter().filter(|n| !n.is_dir).count();
+    let total_dir_count:  usize = arena.iter().filter(|n|  n.is_dir).count();
+    let total_final_alloc: u64  = arena.iter().filter(|n| !n.is_dir).map(|n| n.final_alloc).sum();
+
+    // Path reconstruction (depth-limited, same policy as probe7)
+    let reconstruct_path = |start_idx: usize| -> String {
+        let mut parts: Vec<String> = Vec::new();
+        let mut cur = start_idx;
+        for _ in 0..64 {
+            let (name_opt, pfn, frn, is_orphan) = {
+                let n = &arena[cur];
+                (if n.frn != 5 { Some(n.name.clone()) } else { None },
+                 n.parent_frn, n.frn, n.is_orphan)
+            };
+            if let Some(nm) = name_opt { parts.push(nm); }
+            if pfn == frn {
+                let mut path = format!("{}:", drive);
+                for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
+                return path;
+            }
+            if is_orphan {
+                let mut path = String::from("(orphan)");
+                for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
+                return path;
+            }
+            match frn_to_idx.get(&pfn) {
+                Some(&pi) => { cur = pi; }
+                None => {
+                    let mut path = String::from("(orphan)");
+                    for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
+                    return path;
+                }
+            }
+        }
+        let mut path = String::from("(deep)");
+        for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
+        path
+    };
+
+    // Top-100 dirs
+    let mut top_dir_idx: Vec<usize> = arena.iter().enumerate()
+        .filter(|(_, n)| n.is_dir && n.subtree_size > 0)
+        .map(|(i, _)| i)
+        .collect();
+    top_dir_idx.sort_unstable_by(|&a, &b| arena[b].subtree_size.cmp(&arena[a].subtree_size));
+    top_dir_idx.truncate(100);
+
+    // Top-100 files
+    let mut top_file_idx: Vec<usize> = arena.iter().enumerate()
+        .filter(|(_, n)| !n.is_dir && n.final_alloc > 0)
+        .map(|(i, _)| i)
+        .collect();
+    top_file_idx.sort_unstable_by(|&a, &b| arena[b].final_alloc.cmp(&arena[a].final_alloc));
+    top_file_idx.truncate(100);
+
+    let top_directories: Vec<JsonDirEntry> = top_dir_idx.iter().map(|&idx| {
+        JsonDirEntry {
+            path:             reconstruct_path(idx),
+            record_index:     arena[idx].frn as usize,
+            subtree_size:     arena[idx].subtree_size,
+            direct_file_size: arena[idx].direct_file_size,
+            child_count:      arena[idx].children.len(),
+        }
+    }).collect();
+
+    let top_files: Vec<JsonFileEntry> = top_file_idx.iter().map(|&idx| {
+        JsonFileEntry {
+            path:                 reconstruct_path(idx),
+            record_index:         arena[idx].frn as usize,
+            parent_frn:           arena[idx].parent_frn,
+            final_allocated_size: arena[idx].final_alloc,
+        }
+    }).collect();
+
+    let summary = JsonSummary {
+        drive:                 format!("{}:", drive),
+        total_records,
+        in_use_entries:        arena.len(),
+        files:                 total_file_count,
+        directories:           total_dir_count,
+        orphans:               orphan_count,
+        root_nodes:            root_indices.len(),
+        total_final_allocated: total_final_alloc,
+        read_time_ms:          io_elapsed.as_millis() as u64,
+        parse_time_ms:         parse_elapsed.as_millis() as u64,
+        tree_build_time_ms:    tree_build_elapsed.as_millis() as u64,
+        aggregation_time_ms:   agg_elapsed.as_millis() as u64,
+        total_time_ms:         total_elapsed.as_millis() as u64,
+    };
+
+    Ok(JsonTreeOutput { summary, top_directories, top_files })
+}
+
+pub fn probe7_json(drive: char) -> Result<()> {
+    let output = mft_tree_compute(drive)?;
+    println!("{}", serde_json::to_string_pretty(&output)?);
+    Ok(())
+}

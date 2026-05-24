@@ -13,9 +13,19 @@ fn main() -> Result<()> {
     // TODO: 引数でドライブ文字を受け取る（暫定でCドライブ固定）
     let drive = 'C';
 
-    match mft_probe::probe7(drive) {
-        Ok(_) => {}
-        Err(e) => println!("probe7 エラー: {}", e),
+    let args: Vec<String> = std::env::args().collect();
+    let json_mode = args.iter().any(|a| a == "--json");
+
+    if json_mode {
+        match mft_probe::probe7_json(drive) {
+            Ok(_) => {}
+            Err(e) => eprintln!("probe7_json エラー: {}", e),
+        }
+    } else {
+        match mft_probe::probe7(drive) {
+            Ok(_) => {}
+            Err(e) => eprintln!("probe7 エラー: {}", e),
+        }
     }
     return Ok(());
 
