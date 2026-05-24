@@ -3413,28 +3413,87 @@ pub fn print_diag_pfx86(drive: char) -> Result<()> {
         out
     };
 
-    let targets: &[(&str, &[&str])] = &[
-        ("C:\\Program Files (x86)\\Microsoft\\EdgeCore",
-         &["Program Files (x86)", "Microsoft", "EdgeCore"]),
-        ("C:\\Program Files (x86)\\Microsoft Office\\root\\Office16",
-         &["Program Files (x86)", "Microsoft Office", "root", "Office16"]),
-        ("C:\\Program Files (x86)\\Microsoft Office\\root\\VFS",
-         &["Program Files (x86)", "Microsoft Office", "root", "VFS"]),
+    struct DiagTarget {
+        display_path: &'static str,
+        segments: &'static [&'static str],
+        comparison_label: Option<&'static str>,
+    }
+    struct TargetSummary {
+        path: String,
+        comparison_label: Option<&'static str>,
+        likely_wof: String,
+        likely_hl: String,
+        current_alloc: Option<u64>,
+        wof_adjusted_alloc: Option<u64>,
+    }
+
+    let fmt_bytes = |bytes: u64| -> String {
+        format!(
+            "{} bytes ({} MB / {:.3} GB)",
+            bytes,
+            bytes / 1_048_576,
+            bytes as f64 / 1_073_741_824.0
+        )
+    };
+    let fmt_signed_bytes = |bytes: i128| -> String {
+        let sign = if bytes < 0 { "-" } else { "+" };
+        let abs = bytes.unsigned_abs() as u64;
+        format!("{}{}", sign, fmt_bytes(abs))
+    };
+
+    let targets: &[DiagTarget] = &[
+        DiagTarget {
+            display_path: "C:\\Program Files (x86)\\Microsoft\\EdgeCore",
+            segments: &["Program Files (x86)", "Microsoft", "EdgeCore"],
+            comparison_label: None,
+        },
+        DiagTarget {
+            display_path: "C:\\Program Files (x86)\\Microsoft Office\\root\\Office16",
+            segments: &["Program Files (x86)", "Microsoft Office", "root", "Office16"],
+            comparison_label: None,
+        },
+        DiagTarget {
+            display_path: "C:\\Program Files (x86)\\Microsoft Office\\root\\VFS",
+            segments: &["Program Files (x86)", "Microsoft Office", "root", "VFS"],
+            comparison_label: None,
+        },
+        DiagTarget {
+            display_path: "C:\\Program Files (x86)\\Microsoft",
+            segments: &["Program Files (x86)", "Microsoft"],
+            comparison_label: Some("Microsoft"),
+        },
+        DiagTarget {
+            display_path: "C:\\Program Files (x86)\\Microsoft Office",
+            segments: &["Program Files (x86)", "Microsoft Office"],
+            comparison_label: Some("Microsoft Office"),
+        },
+        DiagTarget {
+            display_path: "C:\\Program Files (x86)",
+            segments: &["Program Files (x86)"],
+            comparison_label: Some("Program Files (x86)"),
+        },
     ];
 
     println!("=== Program Files (x86) diagnostics ===");
     println!("(observation only; size policy unchanged)");
     println!();
 
-    let mut summary_notes: Vec<(String, String, String)> = Vec::new();
+    let mut summary_notes: Vec<TargetSummary> = Vec::new();
 
-    for (display_path, segments) in targets {
-        println!("=== PFx86 diagnostics: {} ===", display_path);
-        match find_by_segments(segments) {
+    for target in targets {
+        println!("=== PFx86 diagnostics: {} ===", target.display_path);
+        match find_by_segments(target.segments) {
             None => {
                 println!("found: no");
                 println!();
-                summary_notes.push((display_path.to_string(), "not_found".into(), "not_found".into()));
+                summary_notes.push(TargetSummary {
+                    path: target.display_path.to_string(),
+                    comparison_label: target.comparison_label,
+                    likely_wof: "not_found".into(),
+                    likely_hl: "not_found".into(),
+                    current_alloc: None,
+                    wof_adjusted_alloc: None,
+                });
                 continue;
             }
             Some(idx) => {
@@ -3527,6 +3586,45 @@ pub fn print_diag_pfx86(drive: char) -> Result<()> {
                 }
                 println!();
 
+                let wof_files_for_adjustment: Vec<usize> = descendants.iter().copied()
+                    .filter(|&i| !arena[i].is_dir && arena[i].wof_stream_alloc > 0)
+                    .collect();
+                let current_alloc_of_wof_files: u64 = wof_files_for_adjustment.iter()
+                    .map(|&i| arena[i].final_alloc)
+                    .sum();
+                let wof_stream_alloc_total: u64 = wof_files_for_adjustment.iter()
+                    .map(|&i| arena[i].wof_stream_alloc)
+                    .sum();
+                let wof_delta: i128 =
+                    wof_stream_alloc_total as i128 - current_alloc_of_wof_files as i128;
+                let adjusted_i128 = subtree_size as i128 + wof_delta;
+                let wof_adjusted_subtree_alloc = if adjusted_i128 <= 0 {
+                    0
+                } else if adjusted_i128 > u64::MAX as i128 {
+                    u64::MAX
+                } else {
+                    adjusted_i128 as u64
+                };
+                let adjustment_ratio = if subtree_size > 0 {
+                    wof_delta as f64 / subtree_size as f64 * 100.0
+                } else { 0.0 };
+                let adjusted_ratio = if subtree_size > 0 {
+                    wof_adjusted_subtree_alloc as f64 / subtree_size as f64 * 100.0
+                } else { 0.0 };
+
+                println!("--- WOF adjusted estimate ---");
+                println!("current_subtree_alloc:        {}", fmt_bytes(subtree_size));
+                println!("wof_files:                    {}", wof_files_for_adjustment.len());
+                println!("current_alloc_of_wof_files:   {}", fmt_bytes(current_alloc_of_wof_files));
+                println!("wof_stream_alloc_total:       {}", fmt_bytes(wof_stream_alloc_total));
+                println!("wof_delta:                    {}", fmt_signed_bytes(wof_delta));
+                println!("wof_adjusted_subtree_alloc:   {}", fmt_bytes(wof_adjusted_subtree_alloc));
+                println!("adjustment_ratio:             {:+.1}% (adjusted/current: {:.1}%)",
+                    adjustment_ratio, adjusted_ratio);
+                println!("note: wof_files counts files with WofCompressedData allocated size > 0.");
+                println!("note: diagnostic estimate only; final_alloc policy is unchanged.");
+                println!();
+
                 // compressed / sparse summary
                 let cmp_records: usize = descendants.iter().filter(|&&i| {
                     let fa = arena[i].file_attrs; let df = arena[i].data_flags;
@@ -3612,20 +3710,78 @@ pub fn print_diag_pfx86(drive: char) -> Result<()> {
                     if needs_deeper { "yes" } else { "no" });
                 println!();
 
-                summary_notes.push((
-                    display_path.to_string(),
-                    likely_wof.to_string(),
-                    likely_hl.to_string(),
-                ));
+                summary_notes.push(TargetSummary {
+                    path: target.display_path.to_string(),
+                    comparison_label: target.comparison_label,
+                    likely_wof: likely_wof.to_string(),
+                    likely_hl: likely_hl.to_string(),
+                    current_alloc: Some(subtree_size),
+                    wof_adjusted_alloc: Some(wof_adjusted_subtree_alloc),
+                });
             }
         }
     }
 
     println!("=== PFx86 diagnostics summary ===");
-    for (path, wof_note, hl_note) in &summary_notes {
-        println!("{}:", path);
-        println!("  likely WOF/compression: {}", wof_note);
-        println!("  likely hardlink:        {}", hl_note);
+    for summary in &summary_notes {
+        println!("{}:", summary.path);
+        println!("  likely WOF/compression: {}", summary.likely_wof);
+        println!("  likely hardlink:        {}", summary.likely_hl);
+    }
+    println!();
+
+    struct WizTreeNote {
+        label: &'static str,
+        wiztree_text: &'static str,
+        wiztree_alloc_gb: f64,
+    }
+    let wiztree_notes: &[WizTreeNote] = &[
+        WizTreeNote { label: "Program Files (x86)", wiztree_text: "7.8 GB", wiztree_alloc_gb: 7.8 },
+        WizTreeNote { label: "Microsoft", wiztree_text: "1.3 GB", wiztree_alloc_gb: 1.3 },
+        WizTreeNote { label: "Microsoft Office", wiztree_text: "3.2 GB", wiztree_alloc_gb: 3.2 },
+        WizTreeNote { label: "Windows Kits", wiztree_text: "2.1 GB", wiztree_alloc_gb: 2.1 },
+        WizTreeNote { label: "Google", wiztree_text: "842.9 MB", wiztree_alloc_gb: 842.9 / 1024.0 },
+    ];
+
+    println!("=== WOF adjustment comparison notes ===");
+    for note in wiztree_notes {
+        let wiztree_alloc = (note.wiztree_alloc_gb * 1_073_741_824.0).round() as u64;
+        let summary = summary_notes.iter()
+            .find(|s| s.comparison_label == Some(note.label));
+        println!("{}:", note.label);
+        match summary {
+            Some(summary) => {
+                match summary.current_alloc {
+                    Some(current) => {
+                        println!("  disk-insight current: {}", fmt_bytes(current));
+                        println!("  WizTree allocated:   {} (known reference)", note.wiztree_text);
+                        println!("  target delta:        {}", fmt_signed_bytes(wiztree_alloc as i128 - current as i128));
+                    }
+                    None => {
+                        println!("  disk-insight current: unavailable");
+                        println!("  WizTree allocated:   {} (known reference)", note.wiztree_text);
+                        println!("  target delta:        unavailable");
+                    }
+                }
+                match (summary.wof_adjusted_alloc, summary.current_alloc) {
+                    (Some(adjusted), Some(_)) => {
+                        println!("  WOF-adjusted estimate: {}", fmt_bytes(adjusted));
+                        println!("  remaining delta:        {}", fmt_signed_bytes(wiztree_alloc as i128 - adjusted as i128));
+                    }
+                    _ => {
+                        println!("  WOF-adjusted estimate: unavailable");
+                        println!("  remaining delta:        unavailable");
+                    }
+                }
+            }
+            None => {
+                println!("  disk-insight current: unavailable");
+                println!("  WizTree allocated:   {} (known reference)", note.wiztree_text);
+                println!("  target delta:        unavailable");
+                println!("  WOF-adjusted estimate: unavailable");
+                println!("  remaining delta:        unavailable");
+            }
+        }
     }
     println!();
     println!("notes:");

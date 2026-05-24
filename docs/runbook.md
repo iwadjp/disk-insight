@@ -210,13 +210,17 @@ Per-subtree output:
 - record_index / parent / subtree_size / descendant counts
 - top 30 files with attribute flags (cmp/sps/rps/sys/hid/wof) + hard link count
 - WOF / reparse summary (counts and totals)
+- WOF adjusted estimate (PFx86-DIAG-2): diagnostic-only replacement of WOF
+  files with `WofCompressedData` stream allocation
 - compressed / sparse summary
 - hardlink / multi-name suspects (top 10)
 - diagnostic notes (likely WOF / hardlink / needs deeper check)
 
-**Purpose**: observation only. No size correction is applied. WizTree alignment
-is not attempted by this command. Use this to confirm whether a given subtree's
-discrepancy is dominated by WOF compression, hard links, or both.
+**Purpose**: observation only. PFx86-DIAG-2 estimates whether WOF stream
+allocation would move Program Files (x86) results closer to WizTree allocated
+sizes, but normal CLI / JSON / UI size values are unchanged. Hardlink suspects
+are reported only as remaining discrepancy candidates; no hardlink correction is
+applied.
 
 > Redirect with `cmd /c` for UTF-8 output:
 > `cmd /c ".\target\release\disk-insight.exe --diag-pfx86 > .\work\pfx86_diag.txt"`
