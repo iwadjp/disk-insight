@@ -2442,7 +2442,7 @@ pub struct JsonTreeOutput {
 // ─── C-1: Core tree computation (JSON path) ───────────────────────────────
 // Progress goes to stderr; returns structured data for JSON serialization.
 
-fn mft_tree_compute(drive: char) -> Result<JsonTreeOutput> {
+pub fn build_mft_tree_output(drive: char, top_n: usize) -> Result<JsonTreeOutput> {
     use rayon::prelude::*;
     use std::collections::HashMap;
     use windows::Win32::Storage::FileSystem::{ReadFile, SetFilePointerEx, FILE_BEGIN};
@@ -2831,15 +2831,15 @@ fn mft_tree_compute(drive: char) -> Result<JsonTreeOutput> {
         .map(|(i, _)| i)
         .collect();
     top_dir_idx.sort_unstable_by(|&a, &b| arena[b].subtree_size.cmp(&arena[a].subtree_size));
-    top_dir_idx.truncate(100);
+    top_dir_idx.truncate(top_n);
 
-    // Top-100 files
+    // Top-N files
     let mut top_file_idx: Vec<usize> = arena.iter().enumerate()
         .filter(|(_, n)| !n.is_dir && n.final_alloc > 0)
         .map(|(i, _)| i)
         .collect();
     top_file_idx.sort_unstable_by(|&a, &b| arena[b].final_alloc.cmp(&arena[a].final_alloc));
-    top_file_idx.truncate(100);
+    top_file_idx.truncate(top_n);
 
     let top_directories: Vec<JsonDirEntry> = top_dir_idx.iter().map(|&idx| {
         JsonDirEntry {
@@ -2880,7 +2880,15 @@ fn mft_tree_compute(drive: char) -> Result<JsonTreeOutput> {
 }
 
 pub fn probe7_json(drive: char) -> Result<()> {
-    let output = mft_tree_compute(drive)?;
+    let output = build_mft_tree_output(drive, 100)?;
     println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())
+}
+
+pub fn print_probe7_human(drive: char) -> Result<()> {
+    probe7(drive)
+}
+
+pub fn print_probe7_json(drive: char) -> Result<()> {
+    probe7_json(drive)
 }

@@ -6,52 +6,25 @@ mod mft_probe;
 mod mft_raw;
 
 use anyhow::Result;
-use std::time::Instant;
 
-#[allow(unreachable_code)]
 fn main() -> Result<()> {
     // TODO: 引数でドライブ文字を受け取る（暫定でCドライブ固定）
     let drive = 'C';
 
     let args: Vec<String> = std::env::args().collect();
-    let json_mode = args.iter().any(|a| a == "--json");
+    let flag = args.iter().skip(1).find(|a| a.starts_with("--")).map(String::as_str);
 
-    if json_mode {
-        match mft_probe::probe7_json(drive) {
-            Ok(_) => {}
-            Err(e) => eprintln!("probe7_json エラー: {}", e),
+    match flag {
+        Some("--json") => {
+            if let Err(e) = mft_probe::print_probe7_json(drive) {
+                eprintln!("エラー: {}", e);
+            }
         }
-    } else {
-        match mft_probe::probe7(drive) {
-            Ok(_) => {}
-            Err(e) => eprintln!("probe7 エラー: {}", e),
+        _ => {
+            if let Err(e) = mft_probe::print_probe7_human(drive) {
+                eprintln!("エラー: {}", e);
+            }
         }
-    }
-    return Ok(());
-
-    println!("disk-insight Phase 1: MFT列挙");
-    println!("対象ドライブ: {}:\\", drive);
-    println!("※ 管理者権限で実行してください");
-    println!();
-
-    let start = Instant::now();
-    let result = mft::enumerate(drive)?;
-    let elapsed = start.elapsed();
-
-    println!("--- 結果 ---");
-    println!("ファイル数    : {}", result.file_count);
-    println!("ディレクトリ数: {}", result.dir_count);
-    println!("総サイズ      : {} GB ({} bytes)",
-        result.total_bytes / 1_073_741_824,
-        result.total_bytes);
-    println!("スキャン時間  : {:.2}秒", elapsed.as_secs_f64());
-    println!();
-    println!("--- サイズ上位10件（ファイル）---");
-    for (i, entry) in result.top_files.iter().enumerate() {
-        println!("{:>3}. {:>12} MB  {}",
-            i + 1,
-            entry.size / 1_048_576,
-            entry.name);
     }
 
     Ok(())
