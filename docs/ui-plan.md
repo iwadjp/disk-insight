@@ -308,6 +308,36 @@ D-9 adds clipboard copy buttons for the selected folder and each top-files row.
 - Copies the file path — no `explorer /select`, no file deletion, no cmd open.
 - No new Tauri commands; clipboard uses the standard Web API.
 
+## D-10 UI polish
+
+D-10 makes small readability and label improvements without adding new features.
+
+### Button labels
+
+- "Open in Explorer" (SelectedFolderCard) → "Open folder"
+- "Open location" (FilesTable row) → "Open folder"
+- Both now use consistent language: you open the folder, whether it's the
+  selected folder itself or the parent folder of a file.
+
+### Empty state message
+
+- Old: "No top files in this filtered result. Current JSON only contains global top entries."
+- New: "No top files under this folder. Top entries shown are global — not scoped to this folder."
+- Removes implementation-detail word "JSON"; adds plain English explanation.
+
+### CSS tweaks
+
+- `.actions-col`: 210 px → 190 px (fits shorter "Open folder" label); added
+  `vertical-align: middle` so buttons align to row centre.
+- `.actions-cell`: added `align-items: center` for consistent vertical alignment.
+- `.selected-folder-stats`: added `margin-top: 6px` to separate stats from path.
+- `.selected-folder-actions`: added `align-items: flex-start` for button group alignment.
+
+### Scope guard
+
+- No new features, Tauri commands, or layout restructuring.
+- MFT scan logic unchanged.
+
 ---
 
 ## Completed phases summary
@@ -335,6 +365,7 @@ D-9 adds clipboard copy buttons for the selected folder and each top-files row.
 | D-7 | 選択フォルダを Explorer で開く |
 | D-8 | top files 各行の Open location（親フォルダを Explorer で開く） |
 | D-9 | selected folder / top files の Copy path（クリップボード） |
+| D-10 | UI polish（ボタン文言・empty message・CSS 微調整） |
 
 ---
 
@@ -368,7 +399,7 @@ D-9 adds clipboard copy buttons for the selected folder and each top-files row.
 - クリップボードコピーのみ
 - 削除はしない
 
-### D-10 UI 小整理
+### D-10 UI 小整理 ✓
 
 - ボタン配置の見直し
 - 表示名の整理

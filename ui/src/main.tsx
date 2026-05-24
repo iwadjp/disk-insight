@@ -264,7 +264,7 @@ function SelectedFolderCard({
         </div>
         <div className="selected-folder-actions">
           <button className="btn" onClick={() => onOpenExplorer(dir.path)}>
-            Open in Explorer
+            Open folder
           </button>
           <CopyButton text={dir.path} onError={onCopyError} />
         </div>
@@ -332,8 +332,8 @@ function FilesTable({
       <div className="table-wrap">
         {rows.length === 0 ? (
           <p className="empty-note">
-            No top files in this filtered result.{" "}
-            Current JSON only contains global top entries.
+            No top files under this folder.{" "}
+            Top entries shown are global — not scoped to this folder.
           </p>
         ) : (
           <table className="files-table">
@@ -355,7 +355,7 @@ function FilesTable({
                         className="btn btn-sm"
                         onClick={() => onOpenLocation(getParentDir(row.path))}
                       >
-                        Open location
+                        Open folder
                       </button>
                       <CopyButton text={row.path} onError={onCopyError} />
                     </div>

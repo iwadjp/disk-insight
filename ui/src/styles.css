@@ -225,13 +225,15 @@ tbody tr:last-child td {
 }
 
 .actions-col {
-  width: 210px;
+  width: 190px;
   white-space: nowrap;
+  vertical-align: middle;
 }
 
 .actions-cell {
   display: flex;
   gap: 4px;
+  align-items: center;
 }
 
 .error,
@@ -496,6 +498,7 @@ tbody tr:last-child td {
   display: flex;
   gap: 8px;
   flex-shrink: 0;
+  align-items: flex-start;
 }
 
 .selected-folder-label {
@@ -521,6 +524,7 @@ tbody tr:last-child td {
   flex-wrap: wrap;
   font-size: 13px;
   color: #5e6b78;
+  margin-top: 6px;
 }
 
 .selected-folder-stats strong {
