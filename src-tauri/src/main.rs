@@ -9,7 +9,7 @@ fn load_sample_json() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-fn scan_drive(drive: String, top: Option<usize>) -> Result<JsonTreeOutput, String> {
+async fn scan_drive(drive: String, top: Option<usize>) -> Result<JsonTreeOutput, String> {
     let top_n = top.unwrap_or(100).max(1);
     let drive_char = drive
         .trim_end_matches(':')
@@ -19,7 +19,11 @@ fn scan_drive(drive: String, top: Option<usize>) -> Result<JsonTreeOutput, Strin
         .map(|c| c.to_ascii_uppercase())
         .ok_or_else(|| format!("invalid drive: {}", drive))?;
 
-    build_mft_tree_output(drive_char, top_n).map_err(|e| format!("{e:#}"))
+    tauri::async_runtime::spawn_blocking(move || {
+        build_mft_tree_output(drive_char, top_n).map_err(|e| format!("{e:#}"))
+    })
+    .await
+    .map_err(|e| format!("scan task failed: {e}"))?
 }
 
 fn main() {

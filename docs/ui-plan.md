@@ -90,6 +90,26 @@ D-3b-2 improves the visual feedback around scan state without changing the MFT s
 - In Tauri runtime: "Please run the app as administrator (required for MFT access)."
 - In browser: "Run `npm run tauri dev` or use the built app."
 
+## D-3b-3 Scan responsiveness improvement
+
+D-3b-3 moves the blocking MFT scan off the Tauri main thread so the UI remains
+responsive during a 6–11 second scan.
+
+### Rust side
+
+- `scan_drive` is now an `async` Tauri command.
+- `build_mft_tree_output` is called inside `tauri::async_runtime::spawn_blocking`,
+  which delegates the blocking work to a dedicated thread pool managed by Tauri's
+  tokio runtime.
+- The outer `.await` propagates task panics as `"scan task failed: ..."` errors.
+- Return type and error format are unchanged from D-3b-1.
+
+### Scope guard
+
+- No progress events, progress bar, or cancel support.
+- MFT scan logic (`build_mft_tree_output`) is unchanged.
+- Drive selection and top-count UI are not added.
+
 ## Next candidates
 
 - Add drive selection UI.
