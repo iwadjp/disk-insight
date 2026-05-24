@@ -1,0 +1,151 @@
+{
+  "summary": {
+    "drive": "C:",
+    "total_records": 1985536,
+    "in_use_entries": 1673775,
+    "files": 1326465,
+    "directories": 347310,
+    "orphans": 0,
+    "root_nodes": 1,
+    "total_final_allocated": 195131804071,
+    "read_time_ms": 4853,
+    "parse_time_ms": 505,
+    "tree_build_time_ms": 477,
+    "aggregation_time_ms": 183,
+    "total_time_ms": 6020
+  },
+  "top_directories": [
+    {
+      "path": "C:",
+      "record_index": 5,
+      "subtree_size": 195131804071,
+      "direct_file_size": 6671745167,
+      "child_count": 53
+    },
+    {
+      "path": "C:\\Users",
+      "record_index": 992644,
+      "subtree_size": 87067044659,
+      "direct_file_size": 174,
+      "child_count": 6
+    },
+    {
+      "path": "C:\\Users\\iwadj",
+      "record_index": 6588,
+      "subtree_size": 87064268105,
+      "direct_file_size": 14791523,
+      "child_count": 71
+    },
+    {
+      "path": "C:\\Users\\iwadj\\AppData",
+      "record_index": 6599,
+      "subtree_size": 67726921544,
+      "direct_file_size": 0,
+      "child_count": 3
+    },
+    {
+      "path": "C:\\Users\\iwadj\\AppData\\Local",
+      "record_index": 6618,
+      "subtree_size": 48279256424,
+      "direct_file_size": 163968,
+      "child_count": 62
+    },
+    {
+      "path": "C:\\Program Files",
+      "record_index": 984393,
+      "subtree_size": 31882771110,
+      "direct_file_size": 174,
+      "child_count": 50
+    },
+    {
+      "path": "C:\\Windows",
+      "record_index": 992705,
+      "subtree_size": 29171285927,
+      "direct_file_size": 11451979,
+      "child_count": 101
+    },
+    {
+      "path": "C:\\Users\\iwadj\\AppData\\Roaming",
+      "record_index": 6600,
+      "subtree_size": 19438080308,
+      "direct_file_size": 0,
+      "child_count": 29
+    },
+    {
+      "path": "C:\\Users\\iwadj\\AppData\\Roaming\\Claude",
+      "record_index": 181069,
+      "subtree_size": 13450899034,
+      "direct_file_size": 3941535,
+      "child_count": 36
+    },
+    {
+      "path": "C:\\Users\\iwadj\\AppData\\Local\\Docker",
+      "record_index": 1531885,
+      "subtree_size": 12814333088,
+      "direct_file_size": 4099,
+      "child_count": 9
+    }
+  ],
+  "top_files": [
+    {
+      "path": "C:\\Users\\iwadj\\AppData\\Local\\Docker\\wsl\\disk\\docker_data.vhdx",
+      "record_index": 158980,
+      "parent_frn": 48318,
+      "final_allocated_size": 12674138112
+    },
+    {
+      "path": "C:\\Users\\iwadj\\AppData\\Roaming\\Claude\\vm_bundles\\claudevm.bundle\\rootfs.vhdx",
+      "record_index": 103581,
+      "parent_frn": 103570,
+      "final_allocated_size": 9453961216
+    },
+    {
+      "path": "C:\\ESD\\Windows\\sources\\install.esd",
+      "record_index": 1775543,
+      "parent_frn": 304044,
+      "final_allocated_size": 4117942272
+    },
+    {
+      "path": "C:\\Users\\iwadj\\AppData\\Local\\Android\\Sdk\\system-images\\android-34\\google_apis_playstore\\x86_64\\system.img",
+      "record_index": 1644831,
+      "parent_frn": 1644796,
+      "final_allocated_size": 3101687808
+    },
+    {
+      "path": "C:\\Users\\iwadj\\AppData\\Local\\Microsoft\\vscode-cpptools\\b6bed9c59bc7d333a01d2f9e9a52dc9e\\.BROWSE.VC.DB",
+      "record_index": 298868,
+      "parent_frn": 298866,
+      "final_allocated_size": 2994315264
+    },
+    {
+      "path": "C:\\Users\\iwadj\\AppData\\Local\\Google\\Chrome\\User Data\\OptGuideOnDeviceModel\\2025.8.21.1028\\weights.bin",
+      "record_index": 9856,
+      "parent_frn": 9806,
+      "final_allocated_size": 2862923776
+    },
+    {
+      "path": "C:\\Users\\iwadj\\AppData\\Roaming\\Claude\\vm_bundles\\claudevm.bundle\\rootfs.vhdx.zst",
+      "record_index": 103569,
+      "parent_frn": 103570,
+      "final_allocated_size": 2342440655
+    },
+    {
+      "path": "C:\\System Volume Information\\{e5cc1b66-5620-11f1-aa36-d0509981f08c}{3808876b-c176-4e48-b7ae-04046e6cc752}",
+      "record_index": 189470,
+      "parent_frn": 46029,
+      "final_allocated_size": 2147483648
+    },
+    {
+      "path": "C:\\$MFT",
+      "record_index": 0,
+      "parent_frn": 5,
+      "final_allocated_size": 2033188864
+    },
+    {
+      "path": "C:\\rtrDAC9.tmp",
+      "record_index": 74754,
+      "parent_frn": 5,
+      "final_allocated_size": 1073741824
+    }
+  ]
+}
