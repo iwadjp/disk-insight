@@ -549,6 +549,44 @@ Explorer-style TreeView. The existing folder navigation sidebar is not replaced.
 - Existing folder nav (top_directories) is unchanged.
 - Full lazy TreeView is planned for E-1b and later phases.
 
+## E-3 TreeView performance plan
+
+E-3 is **planning only**. No source code changes. It produces
+`docs/treeview-performance-plan.md`, the design map for scaling the TreeView
+to large NTFS volumes without painting later phases into a corner.
+
+### Scope
+
+- Document the post-E-2 architecture (root_children + lazy `get_children` +
+  `childrenByParent` cache + frontend state).
+- Capture order-of-magnitude scale from the development C: drive
+  (~1.33M files, ~347k directories, 53 root children, ~5–11 s scan).
+- Enumerate large-tree risks (DOM blow-up, recursive render cost, expand
+  storm, AppData/node_modules hot spots, sample-mode confusion).
+- Define rules to follow **until** virtual scroll lands (initial render
+  bounded, expansion user-driven only, sample mode read-only, etc.).
+- Compare windowing options: `@tanstack/react-virtual` vs `react-window`
+  vs hand-rolled.
+- Propose E-4 → E-7 incremental tasks (flatten, safety limits, virtual
+  scroll PoC, polish).
+
+### Recommended next step
+
+**E-4: Flattened visible-tree list.** Replace recursive `TreeNodeRow`
+rendering with a `visibleRows` flat array derived from `root_children`,
+`expandedIds`, and `childrenByParent`. Behavior unchanged from the user's
+perspective; unlocks E-5 / E-6 cleanly.
+
+### Out of scope
+
+- Virtual scroll is deferred to E-6 at the earliest.
+- No new dependencies in E-3.
+- No changes to Rust core, Tauri commands, or JSON schema.
+- File deletion, `explorer /select`, right-click menu, Treemap, and
+  auto-expansion remain explicitly out of scope.
+
+---
+
 ## E-2 follow-up: Tree selection behavior
 
 E-2 follow-up confirms and clarifies click behavior in the TreeView.
@@ -608,6 +646,7 @@ click, the clicked row is highlighted and the card shows the correct full path.
 | E-1b | Tauri state に children map を保持、get_children command 追加 |
 | E-2  | 左ペインを Explorer風TreeView に置き換え、lazy expansion + children cache |
 | E-2 FU | TreeView 選択動作の確認・整理（stopPropagation、label click で selected folder 更新） |
+| E-3 | TreeView performance plan 作成（docs/treeview-performance-plan.md、実装なし） |
 
 ---
 
