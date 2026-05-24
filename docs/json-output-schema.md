@@ -8,6 +8,7 @@ This document describes the JSON output produced by disk-insight for the MFT tre
 disk-insight.exe --json
 disk-insight.exe --json --top 100
 disk-insight.exe --drive C --json --top 100
+disk-insight.exe --json --top 100 --wof-adjusted
 ```
 
 ## PowerShell redirection note
@@ -45,6 +46,8 @@ The number of entries in `top_directories` and `top_files` can be changed with `
 | `orphans` | integer | Number of entries whose parent record was not found in the in-use tree. |
 | `root_nodes` | integer | Number of root-level nodes used for tree traversal. |
 | `total_final_allocated` | integer | Total final allocated file size. |
+| `allocated_size` | integer | Alias for `total_final_allocated`, intended for quick policy comparisons. |
+| `storage_policy` | string | Allocation policy used for this output: `current` or `wof_adjusted`. |
 | `read_time_ms` | integer | Time spent reading MFT extents, in milliseconds. |
 | `parse_time_ms` | integer | Time spent parsing MFT records, in milliseconds. |
 | `tree_build_time_ms` | integer | Time spent building parent-child links, in milliseconds. |
@@ -98,6 +101,20 @@ All size values are integer byte counts.
 All time values are integer millisecond counts.
 
 All `path` values are Windows path strings.
+
+## Storage policy
+
+`summary.storage_policy` identifies how `final_allocated_size`,
+`subtree_size`, `direct_file_size`, `total_final_allocated`, and
+`allocated_size` were computed.
+
+| Value | Meaning |
+| --- | --- |
+| `current` | Existing disk-insight allocation policy. This is the default for CLI, JSON, UI, and Tauri scans. |
+| `wof_adjusted` | Experimental policy enabled by `--wof-adjusted`. WOF-compressed files use the `WofCompressedData` stream allocation when safely detected. |
+
+`wof_adjusted` does not apply hardlink deduplication, component-store
+deduplication, cluster deduplication, or WinSxS-specific accounting.
 
 ## API boundary notes
 

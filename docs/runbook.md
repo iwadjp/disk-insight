@@ -70,6 +70,17 @@ Expected (without admin rights):
 
 Expected: valid JSON printed to stdout.
 
+Experimental WOF-adjusted policy for CLI / JSON comparison:
+
+```powershell
+.\target\release\disk-insight.exe --drive C --top 100 --wof-adjusted
+.\target\release\disk-insight.exe --json --top 100 --wof-adjusted
+```
+
+Default output remains `current`. `--wof-adjusted` uses `WofCompressedData`
+stream allocation for safely detected WOF-compressed files, but does not apply
+hardlink, WinSxS/component-store, or cluster deduplication.
+
 ### Save to file
 
 PowerShell 5.1 `>` may produce UTF-16LE output, which breaks JSON parsers.

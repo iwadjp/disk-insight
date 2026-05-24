@@ -293,3 +293,38 @@ Interpretation:
   paths until hardlink or cluster-sharing diagnostics are better understood.
 - The next investigation should be a cluster/data-run or component-sharing
   diagnostic mode, not a production hardlink correction.
+
+## 12. WOF-1 optional storage policy
+
+WOF-1 adds an experimental `--wof-adjusted` option for normal CLI and JSON
+output. The default remains the existing `current` policy, so normal CLI, JSON,
+UI, Tauri scans, TreeView data, and Explorer actions continue to use the same
+sizes as before.
+
+When `--wof-adjusted` is passed, safely detected WOF files use the
+`WofCompressedData` stream allocation as `final_alloc`. The policy still falls
+back to the existing allocation result when WOF identity or stream allocation is
+not available.
+
+Scope:
+
+- CLI human output supports `--wof-adjusted`.
+- CLI JSON output supports `--wof-adjusted`.
+- JSON `summary.storage_policy` is `current` or `wof_adjusted`.
+- JSON `summary.allocated_size` mirrors `summary.total_final_allocated` for
+  easier policy comparison.
+- Tauri / UI live scan remains `current`.
+- Hardlink, component-store, WinSxS-specific, and cluster deduplication are not
+  applied.
+
+Initial comparison on 2026-05-25:
+
+| Policy | C: allocated |
+|--------|-------------:|
+| current | 186.530 GB |
+| wof_adjusted | 170.612 GB |
+
+`C:\Program Files (x86)` moved from 10.139 GB to 8.251 GB, matching the earlier
+PFx86-DIAG-4 simulation. This makes `--wof-adjusted` useful for CLI/JSON
+comparison, but UI exposure should still be a separate decision because WinSxS
+and component-store residuals remain unresolved.

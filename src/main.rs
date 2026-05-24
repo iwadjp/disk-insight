@@ -2,7 +2,7 @@
 //! 実行には管理者権限が必要です。
 
 use anyhow::Result;
-use disk_insight::mft_probe;
+use disk_insight::mft_probe::{self, StoragePolicy};
 
 fn print_help() {
     eprintln!("disk-insight - WizTree風高速ディスク分析ツール");
@@ -14,6 +14,7 @@ fn print_help() {
     eprintln!("  --drive <letter>   対象ドライブ (例: C  C:  D  d) [デフォルト: C]");
     eprintln!("  --top <number>     上位件数 [デフォルト: human=30 / json=100]");
     eprintln!("  --json             JSON形式で stdout に出力");
+    eprintln!("  --wof-adjusted     Experimental WOF-adjusted allocation policy (no hardlink/component-store dedup)");
     eprintln!("  --diag-pfx86       Program Files (x86) 差分診断 (EdgeCore / Office16 / VFS)");
     eprintln!("  --diag-wof-global  WOF adjusted global simulation (diagnostic only)");
     eprintln!("  --diag-winsxs      WinSxS / Windows component store diagnostics");
@@ -23,8 +24,10 @@ fn print_help() {
     eprintln!("  disk-insight.exe");
     eprintln!("  disk-insight.exe --json");
     eprintln!("  disk-insight.exe --json --top 200");
+    eprintln!("  disk-insight.exe --json --top 200 --wof-adjusted");
     eprintln!("  disk-insight.exe --drive C --top 50");
     eprintln!("  disk-insight.exe --drive C --json --top 100");
+    eprintln!("  disk-insight.exe --drive C --top 50 --wof-adjusted");
     eprintln!("  disk-insight.exe --diag-pfx86");
     eprintln!("  disk-insight.exe --diag-wof-global");
     eprintln!("  disk-insight.exe --diag-winsxs");
@@ -56,6 +59,7 @@ fn main() -> Result<()> {
     let mut diag_pfx86 = false;
     let mut diag_wof_global = false;
     let mut diag_winsxs = false;
+    let mut storage_policy = StoragePolicy::Current;
     let mut drive = 'C';
     let mut top_n: Option<usize> = None;
 
@@ -64,6 +68,10 @@ fn main() -> Result<()> {
         match args[i].as_str() {
             "--json" => {
                 json_mode = true;
+                i += 1;
+            }
+            "--wof-adjusted" => {
+                storage_policy = StoragePolicy::WofAdjusted;
                 i += 1;
             }
             "--diag-pfx86" => {
@@ -162,9 +170,9 @@ fn main() -> Result<()> {
     let top = top_n.unwrap_or(if json_mode { 100 } else { 30 });
 
     let result = if json_mode {
-        mft_probe::print_probe7_json_top(drive, top)
+        mft_probe::print_probe7_json_top_with_policy(drive, top, storage_policy)
     } else {
-        mft_probe::print_probe7_human(drive, top)
+        mft_probe::print_probe7_human_with_policy(drive, top, storage_policy)
     };
 
     if let Err(e) = result {

@@ -2440,6 +2440,8 @@ pub struct JsonSummary {
     pub orphans:               usize,
     pub root_nodes:            usize,
     pub total_final_allocated: u64,
+    pub allocated_size:        u64,
+    pub storage_policy:        &'static str,
     pub read_time_ms:          u64,
     pub parse_time_ms:         u64,
     pub tree_build_time_ms:    u64,
@@ -2464,13 +2466,32 @@ pub struct MftTreeModel {
     pub children_map: std::collections::HashMap<u64, Vec<JsonTreeNode>>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StoragePolicy {
+    Current,
+    WofAdjusted,
+}
+
+impl StoragePolicy {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            StoragePolicy::Current => "current",
+            StoragePolicy::WofAdjusted => "wof_adjusted",
+        }
+    }
+}
+
 // Core API boundary:
 // - builds structured MFT tree data and returns it to the caller
 // - never writes JSON or human output to stdout
 // - may write progress/diagnostics to stderr
 // - returns anyhow::Result so CLI, Tauri, or future library layers can decide
 //   how to present errors
-pub fn build_mft_tree_model(drive: char, top_n: usize) -> Result<MftTreeModel> {
+pub fn build_mft_tree_model_with_policy(
+    drive: char,
+    top_n: usize,
+    storage_policy: StoragePolicy,
+) -> Result<MftTreeModel> {
     use rayon::prelude::*;
     use std::collections::HashMap;
     use windows::Win32::Storage::FileSystem::{ReadFile, SetFilePointerEx, FILE_BEGIN};
@@ -2515,12 +2536,16 @@ pub fn build_mft_tree_model(drive: char, top_n: usize) -> Result<MftTreeModel> {
         is_in_use:  bool,
         is_dir:     bool,
         file_attrs: u32,
+        reparse_tag: u32,
+        has_wof_stream: bool,
+        wof_stream_alloc: u64,
     }
     struct ExtEntryC {
         base_record:   u64,
         unnamed_alloc: u64,
         data_flags:    u16,
         wof_alloc:     u64,
+        has_wof:        bool,
     }
 
     let parse_start = std::time::Instant::now();
@@ -2552,9 +2577,13 @@ pub fn build_mft_tree_model(drive: char, top_n: usize) -> Result<MftTreeModel> {
             let mut alloc_data: Option<u64> = None;
             let mut found_data       = false;
             let mut file_attrs: u32  = 0;
+            let mut reparse_tag: u32 = 0;
+            let mut has_wof_stream = false;
+            let mut wof_stream_alloc: u64 = 0;
             let mut ext_unnamed_alloc: u64 = 0;
             let mut ext_data_flags:    u16 = 0;
             let mut ext_wof_alloc:     u64 = 0;
+            let mut ext_has_wof        = false;
             let mut ext_has_data           = false;
 
             loop {
@@ -2605,44 +2634,52 @@ pub fn build_mft_tree_model(drive: char, top_n: usize) -> Result<MftTreeModel> {
                         }
                     }
                     0x80 => {
-                        if stream_name_len == 0 && !found_data {
-                            if non_resident == 1 && pos + 48 <= record.len() {
-                                alloc_data = Some(u64::from_le_bytes([
-                                    record[pos+40], record[pos+41], record[pos+42], record[pos+43],
-                                    record[pos+44], record[pos+45], record[pos+46], record[pos+47]]));
-                                found_data = true;
-                            } else if non_resident == 0 && pos + 20 <= record.len() {
-                                let cl = u32::from_le_bytes([record[pos+16], record[pos+17], record[pos+18], record[pos+19]]) as u64;
-                                alloc_data = Some(cl);
+                        let alloc = if non_resident == 1 && pos + 48 <= record.len() {
+                            u64::from_le_bytes([record[pos+40], record[pos+41], record[pos+42], record[pos+43],
+                                                record[pos+44], record[pos+45], record[pos+46], record[pos+47]])
+                        } else if non_resident == 0 && pos + 20 <= record.len() {
+                            u32::from_le_bytes([record[pos+16], record[pos+17], record[pos+18], record[pos+19]]) as u64
+                        } else { 0 };
+                        if stream_name_len == 0 {
+                            if !found_data {
+                                alloc_data = Some(alloc);
                                 found_data = true;
                             }
-                        }
-                        if is_extension && is_in_use {
-                            let alloc = if non_resident == 1 && pos + 48 <= record.len() {
-                                u64::from_le_bytes([record[pos+40], record[pos+41], record[pos+42], record[pos+43],
-                                                    record[pos+44], record[pos+45], record[pos+46], record[pos+47]])
-                            } else if non_resident == 0 && pos + 20 <= record.len() {
-                                u32::from_le_bytes([record[pos+16], record[pos+17], record[pos+18], record[pos+19]]) as u64
-                            } else { 0 };
-                            if stream_name_len == 0 {
+                            if is_extension && is_in_use {
                                 ext_has_data = true;
                                 ext_unnamed_alloc = ext_unnamed_alloc.saturating_add(alloc);
                                 if pos + 14 <= record.len() {
                                     ext_data_flags |= u16::from_le_bytes([record[pos+12], record[pos+13]]);
                                 }
-                            } else {
-                                let name_off = u16::from_le_bytes([record[pos+10], record[pos+11]]) as usize;
-                                let sn_start = pos + name_off;
-                                let sn_end   = sn_start + stream_name_len * 2;
-                                if sn_end <= pos + attr_len && sn_end <= record.len() {
-                                    let wide: Vec<u16> = record[sn_start..sn_end]
-                                        .chunks_exact(2)
-                                        .map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
-                                    if String::from_utf16_lossy(&wide) == "WofCompressedData" {
+                            }
+                        } else {
+                            let name_off = u16::from_le_bytes([record[pos+10], record[pos+11]]) as usize;
+                            let sn_start = pos + name_off;
+                            let sn_end   = sn_start + stream_name_len * 2;
+                            if sn_end <= pos + attr_len && sn_end <= record.len() {
+                                let wide: Vec<u16> = record[sn_start..sn_end]
+                                    .chunks_exact(2)
+                                    .map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+                                if String::from_utf16_lossy(&wide) == "WofCompressedData" {
+                                    if is_extension && is_in_use {
                                         ext_wof_alloc = ext_wof_alloc.saturating_add(alloc);
+                                        ext_has_wof = true;
                                         ext_has_data = true;
+                                    } else {
+                                        has_wof_stream = true;
+                                        wof_stream_alloc = wof_stream_alloc.saturating_add(alloc);
                                     }
                                 }
+                            }
+                        }
+                    }
+                    0xC0 => {
+                        if non_resident == 0 && pos + 22 <= record.len() {
+                            let content_size = u32::from_le_bytes([record[pos+16], record[pos+17], record[pos+18], record[pos+19]]) as usize;
+                            let content_off = u16::from_le_bytes([record[pos+20], record[pos+21]]) as usize;
+                            let c = pos + content_off;
+                            if content_size >= 4 && c + 4 <= record.len() {
+                                reparse_tag = u32::from_le_bytes([record[c], record[c+1], record[c+2], record[c+3]]);
                             }
                         }
                     }
@@ -2657,13 +2694,17 @@ pub fn build_mft_tree_model(drive: char, top_n: usize) -> Result<MftTreeModel> {
                     unnamed_alloc: ext_unnamed_alloc,
                     data_flags:    ext_data_flags,
                     wof_alloc:     ext_wof_alloc,
+                    has_wof:        ext_has_wof,
                 })
             } else { None };
 
             if name.is_empty() { return Some((None, ext_entry)); }
 
             let alloc_size = alloc_data.unwrap_or(fn_alloc);
-            Some((Some(FlatEntry { record_idx: i, name, parent_frn, alloc_size, is_in_use, is_dir, file_attrs }), ext_entry))
+            Some((Some(FlatEntry {
+                record_idx: i, name, parent_frn, alloc_size, is_in_use, is_dir, file_attrs,
+                reparse_tag, has_wof_stream, wof_stream_alloc,
+            }), ext_entry))
         })
         .collect();
 
@@ -2683,15 +2724,17 @@ pub fn build_mft_tree_model(drive: char, top_n: usize) -> Result<MftTreeModel> {
         unnamed_alloc: u64,
         data_flags:    u16,
         wof_alloc:     u64,
+        has_wof:       bool,
     }
     let mut base_groups: HashMap<u64, BaseGroupC> = HashMap::new();
     for e in &ext_entries {
         let g = base_groups.entry(e.base_record).or_insert(BaseGroupC {
-            unnamed_alloc: 0, data_flags: 0, wof_alloc: 0,
+            unnamed_alloc: 0, data_flags: 0, wof_alloc: 0, has_wof: false,
         });
         g.unnamed_alloc = g.unnamed_alloc.saturating_add(e.unnamed_alloc);
         g.data_flags   |= e.data_flags;
         g.wof_alloc     = g.wof_alloc.saturating_add(e.wof_alloc);
+        if e.has_wof { g.has_wof = true; }
     }
     let base_idx_to_group: HashMap<u64, &BaseGroupC> =
         base_groups.iter().map(|(&k, v)| (k, v)).collect();
@@ -2713,7 +2756,7 @@ pub fn build_mft_tree_model(drive: char, top_n: usize) -> Result<MftTreeModel> {
 
     for e in flat_entries.iter().filter(|e| e.is_in_use) {
         let frn = e.record_idx as u64;
-        let final_alloc = if e.alloc_size > 0 {
+        let current_final_alloc = if e.alloc_size > 0 {
             e.alloc_size
         } else if let Some(g) = base_idx_to_group.get(&frn) {
             if g.unnamed_alloc > 0 {
@@ -2728,6 +2771,25 @@ pub fn build_mft_tree_model(drive: char, top_n: usize) -> Result<MftTreeModel> {
                 if !cmp && !sps && !rps && !sys && !hid && !wof { g.unnamed_alloc } else { 0 }
             } else { 0 }
         } else { 0 };
+        let (combined_has_wof_stream, combined_wof_alloc) = if let Some(g) = base_idx_to_group.get(&frn) {
+            (
+                e.has_wof_stream || g.has_wof,
+                e.wof_stream_alloc.saturating_add(g.wof_alloc),
+            )
+        } else {
+            (e.has_wof_stream, e.wof_stream_alloc)
+        };
+        let wof_reparse = e.reparse_tag == 0x80000017 || e.file_attrs & 0x0400 != 0;
+        let final_alloc = if storage_policy == StoragePolicy::WofAdjusted
+            && !e.is_dir
+            && wof_reparse
+            && combined_has_wof_stream
+            && combined_wof_alloc > 0
+        {
+            combined_wof_alloc
+        } else {
+            current_final_alloc
+        };
 
         let idx = arena.len();
         frn_to_idx.insert(frn, idx);
@@ -2897,6 +2959,8 @@ pub fn build_mft_tree_model(drive: char, top_n: usize) -> Result<MftTreeModel> {
         orphans:               orphan_count,
         root_nodes:            root_indices.len(),
         total_final_allocated: total_final_alloc,
+        allocated_size:        total_final_alloc,
+        storage_policy:        storage_policy.as_str(),
         read_time_ms:          io_elapsed.as_millis() as u64,
         parse_time_ms:         parse_elapsed.as_millis() as u64,
         tree_build_time_ms:    tree_build_elapsed.as_millis() as u64,
@@ -2946,9 +3010,21 @@ pub fn build_mft_tree_model(drive: char, top_n: usize) -> Result<MftTreeModel> {
     Ok(MftTreeModel { output, children_map })
 }
 
+pub fn build_mft_tree_model(drive: char, top_n: usize) -> Result<MftTreeModel> {
+    build_mft_tree_model_with_policy(drive, top_n, StoragePolicy::Current)
+}
+
 // Thin wrapper for callers (CLI) that only need the JSON-serializable output.
 pub fn build_mft_tree_output(drive: char, top_n: usize) -> Result<JsonTreeOutput> {
     Ok(build_mft_tree_model(drive, top_n)?.output)
+}
+
+pub fn build_mft_tree_output_with_policy(
+    drive: char,
+    top_n: usize,
+    storage_policy: StoragePolicy,
+) -> Result<JsonTreeOutput> {
+    Ok(build_mft_tree_model_with_policy(drive, top_n, storage_policy)?.output)
 }
 
 pub fn probe7_json(drive: char) -> Result<()> {
@@ -2963,12 +3039,86 @@ pub fn print_probe7_human(drive: char, top_n: usize) -> Result<()> {
     probe7(drive, top_n)
 }
 
+pub fn print_probe7_human_with_policy(
+    drive: char,
+    top_n: usize,
+    storage_policy: StoragePolicy,
+) -> Result<()> {
+    if storage_policy == StoragePolicy::Current {
+        return print_probe7_human(drive, top_n);
+    }
+
+    let output = build_mft_tree_output_with_policy(drive, top_n, storage_policy)?;
+    let summary = &output.summary;
+
+    println!("probe7: MFT tree aggregation");
+    println!("storage policy: {} (experimental; no hardlink/component-store dedup)", summary.storage_policy);
+    println!("drive: {}", summary.drive);
+    println!();
+    println!("=== probe7: MFT tree aggregation ===");
+    println!("  total records:           {}", summary.total_records);
+    println!("  in-use entries:          {}", summary.in_use_entries);
+    println!("  files:                   {}", summary.files);
+    println!("  directories:             {}", summary.directories);
+    println!("  orphans:                 {}", summary.orphans);
+    println!("  root nodes:              {}", summary.root_nodes);
+    println!("  total final_alloc:       {} GB ({} bytes)",
+        summary.total_final_allocated / 1_073_741_824,
+        summary.total_final_allocated);
+    println!();
+    println!("  timing:");
+    println!("    I/O:         {} ms", summary.read_time_ms);
+    println!("    parse:       {} ms", summary.parse_time_ms);
+    println!("    tree build:  {} ms", summary.tree_build_time_ms);
+    println!("    aggregation: {} ms", summary.aggregation_time_ms);
+    println!("    total:       {} ms", summary.total_time_ms);
+    println!();
+
+    println!("--- top {} directories by subtree_size ---", top_n);
+    for (rank, dir) in output.top_directories.iter().enumerate() {
+        println!(
+            "{:>3}. {:>6} MB subtree  direct={:>6} MB  children={:<5} rec={:<8} {}",
+            rank + 1,
+            dir.subtree_size / 1_048_576,
+            dir.direct_file_size / 1_048_576,
+            dir.child_count,
+            dir.record_index,
+            dir.path,
+        );
+    }
+    println!();
+
+    println!("--- top {} files by final_allocated_size ---", top_n);
+    for (rank, file) in output.top_files.iter().enumerate() {
+        println!(
+            "{:>3}. {:>6} MB  rec={:<8} parent={}  {}",
+            rank + 1,
+            file.final_allocated_size / 1_048_576,
+            file.record_index,
+            file.parent_frn,
+            file.path,
+        );
+    }
+
+    Ok(())
+}
+
 pub fn print_probe7_json(drive: char) -> Result<()> {
     probe7_json(drive)
 }
 
 pub fn print_probe7_json_top(drive: char, top_n: usize) -> Result<()> {
     let output = build_mft_tree_output(drive, top_n)?;
+    println!("{}", serde_json::to_string_pretty(&output)?);
+    Ok(())
+}
+
+pub fn print_probe7_json_top_with_policy(
+    drive: char,
+    top_n: usize,
+    storage_policy: StoragePolicy,
+) -> Result<()> {
+    let output = build_mft_tree_output_with_policy(drive, top_n, storage_policy)?;
     println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())
 }

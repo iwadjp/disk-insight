@@ -66,12 +66,19 @@ cargo build --release
 # JSON output, top 100 entries
 .\target\release\disk-insight.exe --json --top 100
 
+# Experimental WOF-adjusted allocation policy
+.\target\release\disk-insight.exe --json --top 100 --wof-adjusted
+
 # Scan a different drive
 .\target\release\disk-insight.exe --drive D --top 50
 
 # Help
 .\target\release\disk-insight.exe --help
 ```
+
+`--wof-adjusted` is experimental. Default output remains unchanged, and the
+option does not include hardlink, WinSxS/component-store, or cluster
+deduplication.
 
 ### Save JSON output
 
