@@ -328,3 +328,17 @@ Initial comparison on 2026-05-25:
 PFx86-DIAG-4 simulation. This makes `--wof-adjusted` useful for CLI/JSON
 comparison, but UI exposure should still be a separate decision because WinSxS
 and component-store residuals remain unresolved.
+
+## 13. Current decision summary
+
+- WOF adjustment is useful for `C:\Program Files`, `C:\Program Files (x86)`,
+  WindowsApps, and Microsoft Office.
+- `--wof-adjusted` lets CLI / JSON users compare WizTree-leaning values without
+  changing the default output.
+- The default `current` policy remains unchanged.
+- UI / Tauri live scan still uses `current`.
+- WinSxS does not get close enough with WOF alone.
+- WinSxS remains a separate hardlink / component-store accounting problem.
+- Hardlink and component-store correction are not implemented.
+- The next heavy work should be either a WinSxS hardlink accounting design or a
+  decision on whether `--wof-adjusted` should be exposed in the UI.

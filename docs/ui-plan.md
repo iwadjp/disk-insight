@@ -797,6 +797,9 @@ PFx86-DIAG-5 adds `--diag-winsxs` for WinSxS / component-store residual
 diagnostics. This remains separate from UI work and does not change displayed
 sizes.
 
+WOF-1 adds `--wof-adjusted` as an experimental CLI / JSON option. The UI and
+Tauri live scan still use the default `current` storage policy.
+
 ---
 
 ## E-2 follow-up: Tree selection behavior
@@ -975,6 +978,21 @@ click, the clicked row is highlighted and the card shows the correct full path.
 
 minimal usable milestone（D-13 PASS）の次の一区切り。
 Explorer 風の TreeView を中心に据えた実用品として、以下がすべて揃った状態を目標とする。
+
+### Current status snapshot
+
+- `v0.1.0-minimal` is tagged as the no-delete minimal usable milestone.
+- `next-phase` targets an Explorer-style TreeView usable as the primary folder
+  navigation surface.
+- Lazy TreeView, `visibleRows` flat rendering, and TreeView safety guards are
+  implemented.
+- Explorer "Select file", the select-file success message, and Drive selector
+  are implemented.
+- Size accuracy work is a separate line from UI functionality.
+- `--wof-adjusted` is available as an experimental CLI / JSON option only.
+- UI / Tauri live scan remains on the default `current` storage policy.
+- Delete, virtual scroll, hardlink correction, and WinSxS/component-store
+  correction are not implemented.
 
 ### 達成済み（next-phase で完了）
 

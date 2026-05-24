@@ -31,6 +31,40 @@ Without admin rights, scans will fail with a drive-open error.
 
 ---
 
+## Current command quick reference
+
+```powershell
+# Normal current-policy scan
+.\target\release\disk-insight.exe --drive C --top 30
+
+# JSON output
+cmd /c ".\target\release\disk-insight.exe --json --top 30 > .\work\probe7.json"
+
+# Experimental WOF-adjusted CLI / JSON output
+.\target\release\disk-insight.exe --drive C --top 30 --wof-adjusted
+cmd /c ".\target\release\disk-insight.exe --json --top 30 --wof-adjusted > .\work\probe7-wof.json"
+
+# Size accuracy diagnostics
+.\target\release\disk-insight.exe --diag-pfx86
+.\target\release\disk-insight.exe --diag-wof-global
+.\target\release\disk-insight.exe --diag-winsxs
+
+# Tauri UI
+npm run tauri dev
+npm run tauri build
+```
+
+Notes:
+
+- Default output is `current`.
+- `--wof-adjusted` is experimental and applies only to CLI / JSON output.
+- UI / Tauri live scan remains `current`.
+- Delete is not implemented.
+- Hardlink, WinSxS/component-store, and cluster deduplication are not
+  implemented.
+
+---
+
 ## 1. Rust CLI build
 
 ```powershell

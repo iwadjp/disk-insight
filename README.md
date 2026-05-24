@@ -161,10 +161,13 @@ not to produce byte-exact matches with the OS disk usage report.
 - [x] E-1〜E-5 Lazy TreeView with flat render and safety guards
 - [x] F-1 Select file in Explorer (`explorer /select,file`)
 - [x] G-1 Drive auto-detection selector
+- [x] Size accuracy CLI/JSON experiments, including `--wof-adjusted`
 - [ ] G-2 Drive selector polish
 - [ ] H-1 TreeView UX polish
 - [ ] H-2 README / runbook update
 - [ ] H-3 Next-phase milestone sign-off
+
+`--wof-adjusted` is experimental and does not affect the default UI/Tauri scan.
 
 ---
 
