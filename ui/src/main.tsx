@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
 import "./styles.css";
@@ -43,6 +43,12 @@ type TreeNode = {
   subtree_size: number;
   direct_file_size: number;
   child_count: number;
+};
+
+type VisibleTreeRow = {
+  node: TreeNode;
+  depth: number;
+  isEmpty?: true;
 };
 
 type DiskInsightOutput = {
@@ -124,6 +130,31 @@ function treeNodeToDirEntry(node: TreeNode): DirectoryEntry {
     direct_file_size: node.direct_file_size,
     child_count: node.child_count,
   };
+}
+
+function buildVisibleRows(
+  rootChildren: TreeNode[],
+  expandedIds: Set<number>,
+  childrenByParent: Record<number, TreeNode[]>,
+): VisibleTreeRow[] {
+  const rows: VisibleTreeRow[] = [];
+  function visit(nodes: TreeNode[], depth: number) {
+    for (const node of nodes) {
+      rows.push({ node, depth });
+      if (node.is_directory && expandedIds.has(node.record_index)) {
+        const children = childrenByParent[node.record_index];
+        if (children) {
+          if (children.length === 0) {
+            rows.push({ node, depth: depth + 1, isEmpty: true });
+          } else {
+            visit(children, depth + 1);
+          }
+        }
+      }
+    }
+  }
+  visit(rootChildren, 0);
+  return rows;
 }
 
 function CopyButton({
@@ -250,7 +281,6 @@ type TreeRowProps = {
   depth: number;
   expandedIds: Set<number>;
   loadingIds: Set<number>;
-  childrenByParent: Record<number, TreeNode[]>;
   selectedRecordIndex: number | undefined;
   onToggleExpand: (node: TreeNode) => void;
   onSelect: (node: TreeNode) => void;
@@ -261,7 +291,6 @@ function TreeNodeRow({
   depth,
   expandedIds,
   loadingIds,
-  childrenByParent,
   selectedRecordIndex,
   onToggleExpand,
   onSelect,
@@ -270,7 +299,6 @@ function TreeNodeRow({
   const isExpanded  = expandedIds.has(node.record_index);
   const isLoading   = loadingIds.has(node.record_index);
   const isSelected  = selectedRecordIndex === node.record_index;
-  const cached      = childrenByParent[node.record_index];
   const indent      = 8 + depth * 16;
   const displayName = node.name || node.path;
 
@@ -280,79 +308,53 @@ function TreeNodeRow({
     + (isDir ? "" : " tree-row--file");
 
   return (
-    <>
-      <div className={rowClass} style={{ paddingLeft: indent }}>
-        {isDir ? (
-          <button
-            className="tree-toggle"
-            onClick={(e) => { e.stopPropagation(); onToggleExpand(node); }}
-            disabled={isLoading}
-            aria-label={isExpanded ? "Collapse" : "Expand"}
-            title={isExpanded ? "Collapse" : "Expand"}
-          >
-            {isLoading ? "…" : isExpanded ? "▼" : "▶"}
-          </button>
-        ) : (
-          <span className="tree-toggle tree-toggle--leaf" aria-hidden="true">·</span>
-        )}
-        {isDir ? (
-          <button
-            className="tree-label"
-            onClick={() => onSelect(node)}
-            title={node.path}
-          >
-            <span className="tree-name">{displayName}</span>
-            <span className="tree-size">{formatBytes(node.subtree_size)}</span>
-          </button>
-        ) : (
-          <div className="tree-label tree-label--file" title={node.path}>
-            <span className="tree-name">{displayName}</span>
-            <span className="tree-size">{formatBytes(node.subtree_size)}</span>
-          </div>
-        )}
-      </div>
-      {isDir && isExpanded && cached && (
-        cached.length === 0 ? (
-          <div
-            className="tree-empty"
-            style={{ paddingLeft: indent + 26 }}
-          >
-            (empty)
-          </div>
-        ) : (
-          cached.map((child) => (
-            <TreeNodeRow
-              key={child.record_index}
-              node={child}
-              depth={depth + 1}
-              expandedIds={expandedIds}
-              loadingIds={loadingIds}
-              childrenByParent={childrenByParent}
-              selectedRecordIndex={selectedRecordIndex}
-              onToggleExpand={onToggleExpand}
-              onSelect={onSelect}
-            />
-          ))
-        )
+    <div className={rowClass} style={{ paddingLeft: indent }}>
+      {isDir ? (
+        <button
+          className="tree-toggle"
+          onClick={(e) => { e.stopPropagation(); onToggleExpand(node); }}
+          disabled={isLoading}
+          aria-label={isExpanded ? "Collapse" : "Expand"}
+          title={isExpanded ? "Collapse" : "Expand"}
+        >
+          {isLoading ? "…" : isExpanded ? "▼" : "▶"}
+        </button>
+      ) : (
+        <span className="tree-toggle tree-toggle--leaf" aria-hidden="true">·</span>
       )}
-    </>
+      {isDir ? (
+        <button
+          className="tree-label"
+          onClick={() => onSelect(node)}
+          title={node.path}
+        >
+          <span className="tree-name">{displayName}</span>
+          <span className="tree-size">{formatBytes(node.subtree_size)}</span>
+        </button>
+      ) : (
+        <div className="tree-label tree-label--file" title={node.path}>
+          <span className="tree-name">{displayName}</span>
+          <span className="tree-size">{formatBytes(node.subtree_size)}</span>
+        </div>
+      )}
+    </div>
   );
 }
 
 function TreeView({
-  rootNodes,
+  rootCount,
+  visibleRows,
   expandedIds,
   loadingIds,
-  childrenByParent,
   selectedRecordIndex,
   treeError,
   onToggleExpand,
   onSelect,
 }: {
-  rootNodes: TreeNode[];
+  rootCount: number;
+  visibleRows: VisibleTreeRow[];
   expandedIds: Set<number>;
   loadingIds: Set<number>;
-  childrenByParent: Record<number, TreeNode[]>;
   selectedRecordIndex: number | undefined;
   treeError: string | null;
   onToggleExpand: (node: TreeNode) => void;
@@ -362,30 +364,41 @@ function TreeView({
     <aside className="folder-nav">
       <div className="folder-nav-header">Folders</div>
       <div className="folder-nav-list">
-        {rootNodes.length === 0 ? (
+        {visibleRows.length === 0 ? (
           <p className="empty-note">
             No root entries available. Run a live scan to load the folder tree.
           </p>
         ) : (
-          rootNodes.map((node) => (
-            <TreeNodeRow
-              key={node.record_index}
-              node={node}
-              depth={0}
-              expandedIds={expandedIds}
-              loadingIds={loadingIds}
-              childrenByParent={childrenByParent}
-              selectedRecordIndex={selectedRecordIndex}
-              onToggleExpand={onToggleExpand}
-              onSelect={onSelect}
-            />
-          ))
+          visibleRows.map((row) =>
+            row.isEmpty ? (
+              <div
+                key={`empty-${row.node.record_index}`}
+                className="tree-empty"
+                style={{ paddingLeft: 8 + row.depth * 16 }}
+              >
+                (empty)
+              </div>
+            ) : (
+              <TreeNodeRow
+                key={row.node.record_index}
+                node={row.node}
+                depth={row.depth}
+                expandedIds={expandedIds}
+                loadingIds={loadingIds}
+                selectedRecordIndex={selectedRecordIndex}
+                onToggleExpand={onToggleExpand}
+                onSelect={onSelect}
+              />
+            )
+          )
         )}
       </div>
       {treeError && (
         <div className="folder-nav-footer folder-nav-footer--error">{treeError}</div>
       )}
-      <div className="folder-nav-footer">Root children: {rootNodes.length}</div>
+      <div className="folder-nav-footer">
+        Root children: {rootCount} · Visible rows: {visibleRows.length}
+      </div>
     </aside>
   );
 }
@@ -530,6 +543,11 @@ function App() {
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
   const [childrenByParent, setChildrenByParent] = useState<Record<number, TreeNode[]>>({});
   const [treeError, setTreeError] = useState<string | null>(null);
+
+  const visibleRows = useMemo(
+    () => buildVisibleRows(data?.root_children ?? [], expandedIds, childrenByParent),
+    [data?.root_children, expandedIds, childrenByParent],
+  );
 
   function runLoad(
     loader: () => Promise<DiskInsightOutput>,
@@ -744,10 +762,10 @@ function App() {
           <SummaryCard summary={data.summary} />
           <div className="content-pane">
             <TreeView
-              rootNodes={data.root_children ?? []}
+              rootCount={data.root_children?.length ?? 0}
+              visibleRows={visibleRows}
               expandedIds={expandedIds}
               loadingIds={loadingIds}
-              childrenByParent={childrenByParent}
               selectedRecordIndex={selectedDir?.record_index}
               treeError={treeError}
               onToggleExpand={handleToggleExpand}

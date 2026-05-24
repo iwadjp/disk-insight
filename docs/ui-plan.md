@@ -549,6 +549,38 @@ Explorer-style TreeView. The existing folder navigation sidebar is not replaced.
 - Existing folder nav (top_directories) is unchanged.
 - Full lazy TreeView is planned for E-1b and later phases.
 
+## E-4 Flattened visible-tree list
+
+E-4 replaces the recursive `TreeNodeRow` render with a flat `visibleRows`
+array, preparing the structure for virtual scroll (E-6) without introducing
+it yet. Behavior and appearance are unchanged from the user's perspective.
+
+### Changes
+
+- Added `VisibleTreeRow` type: `{ node: TreeNode; depth: number; isEmpty?: true }`.
+- Added `buildVisibleRows(rootChildren, expandedIds, childrenByParent)`
+  module-level function. Walks the expanded tree and emits flat rows, including
+  `isEmpty` placeholder rows for expanded directories with no children.
+- `useMemo` in `App` computes `visibleRows` from `[data?.root_children,
+  expandedIds, childrenByParent]`. Recomputes only when those references change.
+- `TreeNodeRow` is now a non-recursive single-row component. Removed:
+  `childrenByParent` prop, the `cached` variable, the `<>` fragment wrapper,
+  and all recursive child rendering. Returns a plain `<div>`.
+- `TreeView` receives `rootCount` and `visibleRows` instead of `rootNodes` +
+  `childrenByParent`. Renders `visibleRows.map(...)` flat. Shows
+  `(empty)` divs inline for `row.isEmpty` entries.
+- Footer updated: `Root children: N · Visible rows: M`.
+
+### Scope guard
+
+- No virtual scroll.
+- No safety limits / large-node warnings (E-5).
+- No new dependencies.
+- Rust core, Tauri commands, and JSON schema unchanged.
+- No delete, `explorer /select`, right-click menu, or Treemap.
+
+---
+
 ## E-3 TreeView performance plan
 
 E-3 is **planning only**. No source code changes. It produces
@@ -647,6 +679,7 @@ click, the clicked row is highlighted and the card shows the correct full path.
 | E-2  | 左ペインを Explorer風TreeView に置き換え、lazy expansion + children cache |
 | E-2 FU | TreeView 選択動作の確認・整理（stopPropagation、label click で selected folder 更新） |
 | E-3 | TreeView performance plan 作成（docs/treeview-performance-plan.md、実装なし） |
+| E-4 | visibleRows flat list 導入（非再帰 render、virtual scroll 前提構造） |
 
 ---
 

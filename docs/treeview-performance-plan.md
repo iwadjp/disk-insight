@@ -357,3 +357,23 @@ liability we don't want to ship.
 
 E-3 is **planning only** — no source code changes. Implementation begins
 at E-4.
+
+---
+
+## E-4 implementation note
+
+E-4 introduced `buildVisibleRows` and `VisibleTreeRow` in `ui/src/main.tsx`.
+
+- `buildVisibleRows(rootChildren, expandedIds, childrenByParent)` produces a flat
+  `VisibleTreeRow[]`, including `isEmpty` placeholder rows for expanded empty
+  directories. O(visibleRows) — bounded by user interactions.
+- `useMemo` in `App` re-derives `visibleRows` only when `root_children`,
+  `expandedIds`, or `childrenByParent` change reference.
+- `TreeNodeRow` is now a non-recursive single-`<div>` component; `TreeView`
+  renders `visibleRows.map(...)` directly.
+- Footer shows `Root children: N · Visible rows: M`.
+- All E-3 invariants remain in force (user-driven expansion, bounded initial
+  render, tree state reset on scan, etc.).
+
+**Next step**: E-5 safety limits — child-count chips, large-node warnings,
+duplicate-request guard tightening, and optional "Collapse all" affordance.
