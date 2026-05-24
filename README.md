@@ -28,10 +28,10 @@ The tool is safe to use for disk analysis. Destructive operations are not implem
 ## What it cannot do yet
 
 - File or folder deletion
-- Full TreeView with expand/collapse
+- Virtual scroll for large TreeView expansions
 - Treemap visualization
 - Right-click context menu
-- `explorer /select` file highlighting for folders (available for top files only)
+- `explorer /select` for folders (available for top-files rows only)
 - Drive capacity / free space display
 - Full accuracy for WinSxS, WOF-compressed files, and hard links
 
@@ -145,25 +145,28 @@ not to produce byte-exact matches with the OS disk usage report.
 
 ## Current milestone
 
-**Minimal usable milestone — PASS (2026-05-24).**
+**Minimal usable milestone — PASS (2026-05-24).** Tagged as `v0.1.0-minimal`.
 
-- [x] D-7 Open selected folder in Explorer
-- [x] D-8 Open file parent folder in Explorer
-- [x] D-9 Copy path to clipboard
-- [x] D-10 UI polish
-- [x] D-11 README
-- [x] D-12 Build and run procedure notes
 - [x] D-13 Milestone sign-off
+
+**Next-phase milestone: Explorer-style TreeView** — in progress (`next-phase` branch).
+
+- [x] E-1〜E-5 Lazy TreeView with flat render and safety guards
+- [x] F-1 Select file in Explorer (`explorer /select,file`)
+- [x] G-1 Drive auto-detection selector
+- [ ] G-2 Drive selector polish
+- [ ] H-1 TreeView UX polish
+- [ ] H-2 README / runbook update
+- [ ] H-3 Next-phase milestone sign-off
 
 ---
 
-## Next-phase candidates
+## Deferred
 
 | Feature | Notes |
 |---------|-------|
-| `explorer /select` | Highlight the file in Explorer instead of opening parent folder |
-| Drive auto-detection | Enumerate available drives without manual entry |
-| TreeView expand/collapse | Full folder tree with virtual scroll |
+| Virtual scroll | @tanstack/react-virtual — after TreeView polish |
 | Treemap visualization | Proportional rectangle view of disk usage |
+| Drive NTFS detection | Non-NTFS drives fail at scan time; detection is future work |
 | WinSxS / hard link dedup | Avoid double-counting hard-linked files |
 | Delete action | Requires safety design (confirmation, recycle bin, undo) — intentionally deferred |

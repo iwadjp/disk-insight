@@ -934,13 +934,86 @@ click, the clicked row is highlighted and the card shows the correct full path.
 
 ## Deferred tasks
 
-以下は minimal usable milestone 以降に検討する。
+以下は next-phase milestone 以降に検討する。
 
-- ファイル削除
+- ファイル削除（安全設計・確認ダイアログ必須）
 - 右クリックメニュー
-- 本格 TreeView（折りたたみ・仮想スクロール）
+- 本格 virtual scroll（@tanstack/react-virtual、E-6）
 - Treemap
-- 複数ドライブ自動列挙
 - WinSxS / hardlink / WOF 精度追求
-- `explorer /select` によるファイル選択表示
+- drive NTFS 判定・容量/空き領域表示
 - コマンドプロンプトで開く
+
+完了済み（以前 deferred だったもの）:
+- `explorer /select` によるファイル選択表示 → F-1 で実装
+- ドライブ自動列挙 → G-1 で実装
+- TreeView 折りたたみ（仮想スクロールなし） → E-2〜E-5 で実装
+
+---
+
+## next-phase milestone: Explorer風TreeView実用品
+
+**STATUS: 進行中 (next-phase ブランチ)**
+
+minimal usable milestone（D-13 PASS）の次の一区切り。
+Explorer 風の TreeView を中心に据えた実用品として、以下がすべて揃った状態を目標とする。
+
+### 達成済み（next-phase で完了）
+
+| フェーズ | 内容 |
+|----------|------|
+| E-1a | root_children をスキャン結果に追加 |
+| E-1b | `get_children` Tauri command（lazy children cache） |
+| E-2 | 左ペインを Explorer 風 TreeView に置き換え（lazy expansion） |
+| E-2 FU | TreeView 選択動作の確認・整理（toggle / label 分離） |
+| E-3 | TreeView performance plan ドキュメント作成 |
+| E-4 | `visibleRows` flat list 導入（非再帰 render、virtual scroll 前提） |
+| E-5 | TreeView safety guards（duplicate guard・per-node error・large folder warning） |
+| F-1 | top files に Select file ボタン追加（`explorer /select,file`） |
+| F-1 FU | Select file 成功時ステータスメッセージ表示 |
+| G-1 | Drive 自動検出（`GetLogicalDrives` / `GetDriveTypeW`）、Drive selector 化 |
+
+### 残タスク候補
+
+#### G-2: Drive selector polish（小）
+
+- `drive_type` 表示（fixed / removable など）を option text や tooltip で見せる
+- 選択中ドライブの補足（例: 現在スキャン済みの drive を badge 表示）
+- NTFS 判定はまだ後回し
+
+#### H-1: TreeView 操作性 polish（中）
+
+- 選択行の視認性向上
+- 展開中 / エラー行の見え方改善
+- サイズ列の揃え
+- root / folder / file の見た目整理
+
+#### H-2: README / runbook 更新（小）
+
+- next-phase で追加された機能（TreeView / Select file / Drive selector）を反映
+- TreeView の使い方・展開方法を追記
+- runbook のチェックリストを next-phase 対応に更新
+
+#### H-3: next-phase milestone 判定（確認のみ）
+
+- Explorer 風 TreeView 実用品として一区切りできるか確認
+- チェックリスト:
+  - [ ] TreeView で任意フォルダまで展開できる
+  - [ ] 選択フォルダが right pane に反映される
+  - [ ] top files の Select file が動作する
+  - [ ] Drive selector に検出ドライブが表示される
+  - [ ] Scan / Load sample が動作する
+  - [ ] Open folder / Copy path が動作する
+  - [ ] delete 機能が追加されていない
+  - [ ] virtual scroll は未実装のままで問題ない
+  - [ ] drive NTFS 判定は未実装のままで問題ない
+
+### 後回し（next-phase milestone より後）
+
+- delete action（安全設計・確認ダイアログ必須）
+- virtual scroll 本実装（E-6: @tanstack/react-virtual）
+- drive NTFS 判定・容量 / 空き領域表示
+- Treemap
+- 右クリックメニュー
+- cmd open
+- WinSxS / hardlink / WOF 精度改善
