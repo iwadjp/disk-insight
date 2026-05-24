@@ -20,6 +20,15 @@ D-2 improves the sample viewer tables without changing the app flow:
 - improved path readability with wrapping and monospace rendering
 - monospace, right-aligned numeric table columns
 
+## D-3a Tauri command wiring
+
+D-3a changes the sample viewer data path from frontend `fetch` to Tauri `invoke`.
+
+- frontend calls the `load_sample_json` Tauri command on startup
+- the command returns the committed sample JSON only
+- real scan commands are not implemented yet
+- `build_mft_tree_output` is not called from the UI yet
+
 ## Next candidates
 
 - Add a Tauri command that calls `build_mft_tree_output`.

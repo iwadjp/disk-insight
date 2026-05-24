@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { invoke } from "@tauri-apps/api/core";
 import "./styles.css";
 
 type Summary = {
@@ -38,8 +39,6 @@ type DiskInsightOutput = {
   top_directories: DirectoryEntry[];
   top_files: FileEntry[];
 };
-
-const sampleUrl = "/sample/probe7.sample.json";
 
 function formatBytes(bytes: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -148,13 +147,7 @@ function App() {
   useEffect(() => {
     let ignore = false;
 
-    fetch(sampleUrl)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`Failed to load sample JSON: ${response.status}`);
-        }
-        return response.json() as Promise<DiskInsightOutput>;
-      })
+    invoke<DiskInsightOutput>("load_sample_json")
       .then((json) => {
         if (!ignore) {
           setData(json);
@@ -162,7 +155,7 @@ function App() {
       })
       .catch((err: unknown) => {
         if (!ignore) {
-          setError(err instanceof Error ? err.message : String(err));
+          setError(`Failed to load sample data: ${err instanceof Error ? err.message : String(err)}`);
         }
       });
 
@@ -178,7 +171,7 @@ function App() {
           <h1>disk-insight</h1>
           <p>Sample JSON viewer</p>
         </div>
-        <span className="source">public/sample/probe7.sample.json</span>
+        <span className="source">Tauri command: load_sample_json</span>
       </header>
 
       {error && <div className="error">{error}</div>}
