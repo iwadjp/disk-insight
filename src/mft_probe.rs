@@ -528,7 +528,7 @@ pub fn probe4(drive: char) -> Result<()> {
 
                 let mut total_clusters: u64 = 0;
                 for (i, (vcn, lcn, len)) in extents.iter().enumerate() {
-                    let byte_offset = lcn * bytes_per_cluster;
+                    let _byte_offset = lcn * bytes_per_cluster;
                     let size_mb = len * bytes_per_cluster / 1_048_576;
                     println!("  [{:2}] VCN={:8} LCN={:8} clusters={:6} size={}MB",
                         i, vcn, lcn, len, size_mb);
