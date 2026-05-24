@@ -237,8 +237,32 @@ the yen sign (¥) on Japanese Windows where Inter/sans-serif maps U+005C to ¥.
 - No layout changes.
 - No changes to MFT scan logic or data model.
 
+## D-7 Explorer open for selected folder
+
+D-7 adds a minimal "Open in Explorer" action for the selected folder.
+
+### Rust side
+
+- Added `open_in_explorer(path: String) -> Result<(), String>` Tauri command.
+- Validates that `path` is non-empty and exists on disk (`Path::new(&path).exists()`).
+- Launches Explorer via `std::process::Command::new("explorer.exe").arg(&path).spawn()`.
+- Shell injection is avoided by passing the path as a single argument, not through a shell.
+
+### UI side
+
+- Added `openInExplorer(path)` async helper that calls the Tauri command.
+  In a normal browser it throws "Explorer open is available only in the Tauri desktop app."
+- `SelectedFolderCard` gains an `onOpenExplorer` prop and an "Open in Explorer" button.
+- The card header is now a flex row: path info on the left, button on the right.
+- On error, the existing error display is reused (`setError`); `isScanError` stays false.
+
+### Scope guard
+
+- Folder paths only — no `explorer /select` for files.
+- No right-click menu, delete action, cmd open, or path copy.
+- No admin privilege escalation.
+
 ## Next candidates
 
-- Add Explorer open for the selected folder.
 - Evolve toward a hierarchy-aware TreeView with JSON extension.
 - Keep delete actions for a later phase.

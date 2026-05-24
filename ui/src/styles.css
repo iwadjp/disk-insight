@@ -469,6 +469,14 @@ tbody tr:last-child td {
   margin-bottom: 16px;
 }
 
+.selected-folder-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
 .selected-folder-label {
   font-size: 11px;
   font-weight: 700;
@@ -484,7 +492,6 @@ tbody tr:last-child td {
   color: #17202a;
   overflow-wrap: anywhere;
   word-break: break-all;
-  margin-bottom: 10px;
 }
 
 .selected-folder-stats {

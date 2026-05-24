@@ -90,6 +90,13 @@ async function scanDrive(drive: string, top: number): Promise<DiskInsightOutput>
   return invoke<DiskInsightOutput>("scan_drive", { drive, top });
 }
 
+async function openInExplorer(path: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    throw new Error("Explorer open is available only in the Tauri desktop app.");
+  }
+  return invoke<void>("open_in_explorer", { path });
+}
+
 function formatBytes(bytes: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
   let value = bytes;
@@ -203,11 +210,24 @@ function FolderNav({
   );
 }
 
-function SelectedFolderCard({ dir }: { dir: DirectoryEntry }) {
+function SelectedFolderCard({
+  dir,
+  onOpenExplorer,
+}: {
+  dir: DirectoryEntry;
+  onOpenExplorer: (path: string) => void;
+}) {
   return (
     <div className="selected-folder-card">
-      <div className="selected-folder-label">Selected folder</div>
-      <div className="selected-folder-path">{dir.path}</div>
+      <div className="selected-folder-header">
+        <div>
+          <div className="selected-folder-label">Selected folder</div>
+          <div className="selected-folder-path">{dir.path}</div>
+        </div>
+        <button className="btn" onClick={() => onOpenExplorer(dir.path)}>
+          Open in Explorer
+        </button>
+      </div>
       <div className="selected-folder-stats">
         <span>Subtree: <strong>{formatBytes(dir.subtree_size)}</strong></span>
         <span>Direct files: <strong>{formatBytes(dir.direct_file_size)}</strong></span>
@@ -327,6 +347,13 @@ function App() {
       });
   }
 
+  function handleOpenExplorer(path: string) {
+    openInExplorer(path).catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : String(err));
+      setIsScanError(false);
+    });
+  }
+
   function handleScan() {
     const drive = parseDriveLetter(driveInput);
     if (!drive) {
@@ -436,7 +463,9 @@ function App() {
               onSelect={setSelectedDir}
             />
             <div className="content-right">
-              {selectedDir && <SelectedFolderCard dir={selectedDir} />}
+              {selectedDir && (
+                <SelectedFolderCard dir={selectedDir} onOpenExplorer={handleOpenExplorer} />
+              )}
               <DirectoriesTable
                 rows={
                   selectedDir
