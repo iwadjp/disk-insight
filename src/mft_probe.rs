@@ -2418,7 +2418,7 @@ pub struct JsonFileEntry {
     pub final_allocated_size: u64,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Clone, serde::Serialize)]
 pub struct JsonTreeNode {
     pub name:                String,
     pub path:                String,
@@ -2455,13 +2455,22 @@ pub struct JsonTreeOutput {
     pub root_children:   Vec<JsonTreeNode>,
 }
 
+// Richer model returned to callers (Tauri layer) that need lazy children
+// lookups. `output` is what the UI receives as the scan result; `children_map`
+// indexes every directory's full child list (sorted by subtree_size desc, name
+// asc) so the get_children command can answer without re-scanning the MFT.
+pub struct MftTreeModel {
+    pub output:       JsonTreeOutput,
+    pub children_map: std::collections::HashMap<u64, Vec<JsonTreeNode>>,
+}
+
 // Core API boundary:
 // - builds structured MFT tree data and returns it to the caller
 // - never writes JSON or human output to stdout
 // - may write progress/diagnostics to stderr
 // - returns anyhow::Result so CLI, Tauri, or future library layers can decide
 //   how to present errors
-pub fn build_mft_tree_output(drive: char, top_n: usize) -> Result<JsonTreeOutput> {
+pub fn build_mft_tree_model(drive: char, top_n: usize) -> Result<MftTreeModel> {
     use rayon::prelude::*;
     use std::collections::HashMap;
     use windows::Win32::Storage::FileSystem::{ReadFile, SetFilePointerEx, FILE_BEGIN};
@@ -2895,32 +2904,51 @@ pub fn build_mft_tree_output(drive: char, top_n: usize) -> Result<JsonTreeOutput
         total_time_ms:         total_elapsed.as_millis() as u64,
     };
 
-    // Root children: direct children of the NTFS root directory (FRN 5).
-    // Sorted by subtree_size desc so the largest folders appear first.
-    let root_children: Vec<JsonTreeNode> = match frn_to_idx.get(&5) {
-        Some(&root_idx) => {
-            let mut children: Vec<JsonTreeNode> = arena[root_idx].children.iter().map(|&ci| {
-                JsonTreeNode {
-                    name:                arena[ci].name.clone(),
-                    path:                reconstruct_path(ci),
-                    record_index:        arena[ci].frn as usize,
-                    parent_record_index: arena[ci].parent_frn as usize,
-                    is_directory:        arena[ci].is_dir,
-                    subtree_size:        arena[ci].subtree_size,
-                    direct_file_size:    arena[ci].direct_file_size,
-                    child_count:         arena[ci].children.len(),
-                }
-            }).collect();
-            children.sort_unstable_by(|a, b| {
-                b.subtree_size.cmp(&a.subtree_size).then_with(|| a.name.cmp(&b.name))
-            });
-            children.truncate(200);
-            children
+    // Build a JsonTreeNode for an arena index, using the shared path closure.
+    let make_node = |ci: usize| -> JsonTreeNode {
+        JsonTreeNode {
+            name:                arena[ci].name.clone(),
+            path:                reconstruct_path(ci),
+            record_index:        arena[ci].frn as usize,
+            parent_record_index: arena[ci].parent_frn as usize,
+            is_directory:        arena[ci].is_dir,
+            subtree_size:        arena[ci].subtree_size,
+            direct_file_size:    arena[ci].direct_file_size,
+            child_count:         arena[ci].children.len(),
         }
-        None => Vec::new(),
     };
 
-    Ok(JsonTreeOutput { summary, top_directories, top_files, root_children })
+    // children_map: for every directory in the arena, store all its direct
+    // children (files and directories) sorted by subtree_size desc, name asc.
+    // Used by the Tauri get_children command to back lazy TreeView expansion.
+    let dir_count_hint = arena.iter().filter(|n| n.is_dir).count();
+    let mut children_map: HashMap<u64, Vec<JsonTreeNode>> =
+        HashMap::with_capacity(dir_count_hint);
+    for i in 0..arena.len() {
+        if !arena[i].is_dir { continue; }
+        let mut children: Vec<JsonTreeNode> = arena[i].children.iter()
+            .map(|&ci| make_node(ci))
+            .collect();
+        children.sort_unstable_by(|a, b| {
+            b.subtree_size.cmp(&a.subtree_size).then_with(|| a.name.cmp(&b.name))
+        });
+        children_map.insert(arena[i].frn, children);
+    }
+
+    // Root children: direct children of the NTFS root directory (FRN 5).
+    // Reuses the children_map entry; truncated to 200 for the embedded JSON.
+    let root_children: Vec<JsonTreeNode> = children_map
+        .get(&5)
+        .map(|v| v.iter().take(200).cloned().collect())
+        .unwrap_or_default();
+
+    let output = JsonTreeOutput { summary, top_directories, top_files, root_children };
+    Ok(MftTreeModel { output, children_map })
+}
+
+// Thin wrapper for callers (CLI) that only need the JSON-serializable output.
+pub fn build_mft_tree_output(drive: char, top_n: usize) -> Result<JsonTreeOutput> {
+    Ok(build_mft_tree_model(drive, top_n)?.output)
 }
 
 pub fn probe7_json(drive: char) -> Result<()> {

@@ -103,9 +103,11 @@ All `path` values are Windows path strings.
 
 `build_mft_tree_output(drive, top_n)` is the core API for generating the structured MFT tree output.
 
-The CLI should only call this function through thin CLI-layer wrappers. `print_probe7_human` and `print_probe7_json` are CLI-layer functions and are allowed to write formatted output to stdout.
+`build_mft_tree_model(drive, top_n)` returns a richer `MftTreeModel` containing the same `JsonTreeOutput` plus a `children_map: HashMap<u64, Vec<JsonTreeNode>>` keyed by directory record index. The Tauri layer uses this map to back the `get_children` command without re-scanning the MFT.
 
-Future Tauri commands are expected to call `build_mft_tree_output` directly and return the structured data without going through CLI stdout formatting.
+The CLI should only call `build_mft_tree_output` through thin CLI-layer wrappers. `print_probe7_human` and `print_probe7_json` are CLI-layer functions and are allowed to write formatted output to stdout.
+
+Tauri commands call `build_mft_tree_model` directly to populate the in-memory children cache, and return the embedded `output` to the UI.
 
 The JSON schema in this document is treated as the UI contract.
 
@@ -115,3 +117,16 @@ Stdout/stderr separation policy:
 | --- | --- |
 | stdout | JSON output only in `--json` mode. |
 | stderr | Progress, diagnostics, and errors. |
+
+## Tauri commands (UI ↔ Rust boundary)
+
+These are not part of the JSON file output but share the schema for shared types.
+
+| Command | Arguments | Returns | Notes |
+| --- | --- | --- | --- |
+| `load_sample_json` | none | embedded sample JSON | Same shape as `--json` output. |
+| `scan_drive` | `drive: string`, `top?: usize` | `JsonTreeOutput` | Populates the in-memory `children_map` for `get_children`. |
+| `get_children` | `parentRecordIndex: u64` | `Vec<JsonTreeNode>` | Direct children of the given directory record index, sorted by `subtree_size` desc, `name` asc. Returns an error string if no live scan data is loaded yet. Returns `[]` when the parent index is unknown. |
+| `open_in_explorer` | `path: string` | `void` | Opens the given path in Explorer. |
+
+`get_children` is the lazy children API that backs Explorer-style TreeView expansion. It is populated after each successful `scan_drive` and replaced on every subsequent scan. The embedded sample data is not backed by `children_map`, so `get_children` returns an error until a live scan has been run.

@@ -390,6 +390,59 @@ the D-13 milestone sign-off.
 
 ---
 
+## E-1b Lazy children command
+
+E-1b adds the `get_children(parent_record_index)` Tauri command, backed by an
+in-memory cache populated by `scan_drive`. This is the API foundation for
+Explorer-style TreeView expansion; the full expand/collapse UI is not added
+yet.
+
+### Rust side
+
+- Added `MftTreeModel { output, children_map }` in `mft_probe.rs`.
+  - `output` is the existing `JsonTreeOutput`.
+  - `children_map: HashMap<u64, Vec<JsonTreeNode>>` is keyed by directory FRN,
+    with each value sorted by `subtree_size` desc, `name` asc.
+- Renamed `build_mft_tree_output` to `build_mft_tree_model` (returns model).
+- Added `build_mft_tree_output` as a thin wrapper returning only `output` for
+  CLI use; existing CLI behavior is unchanged.
+- `JsonTreeNode` now derives `Clone` so the cache can serve copies to callers.
+
+### Tauri side
+
+- Added `AppState { children_map: Mutex<Option<HashMap<u64, Vec<JsonTreeNode>>>> }`
+  registered via `.manage()`.
+- `scan_drive` now populates the state on success and returns `model.output`.
+- Added `get_children(state, parent_record_index) -> Vec<JsonTreeNode>`:
+  - Returns the cached children list for the given FRN.
+  - Returns an error `"No live scan data is loaded. Run Scan first."` if no
+    live scan has run in this session.
+  - Returns `[]` if the FRN exists but has no entry in the map (e.g. a file).
+
+### UI side
+
+- Added `getChildren(parentRecordIndex)` helper invoking the Tauri command.
+- `SelectedFolderCard` gained a "Load children" button next to "Open folder" /
+  "Copy path".
+- On click: calls `get_children` with the selected directory's `record_index`
+  and shows a small preview:
+  - `Children loaded: N` header.
+  - First 5 entries with a `DIR`/`FILE` badge, path, and `subtree_size`.
+  - `+ K more` footer when N > 5.
+- Sample data or browser runtime show a clear message: "Children API is
+  available after a live scan in the Tauri app."
+- `childrenPreview` and `childrenError` are reset when the selected folder
+  changes, a new scan starts, or sample data is reloaded.
+
+### Scope guard
+
+- No expand/collapse UI, no recursive expansion, no virtual scroll.
+- Children list is returned in full (no top-N truncation per directory).
+- `top_directories`, `top_files`, and `root_children` are preserved.
+- CLI JSON output is unchanged.
+
+---
+
 ## E-1a Root children data model
 
 E-1a adds `root_children` to the JSON/API output as the first step toward an
@@ -450,6 +503,7 @@ Explorer-style TreeView. The existing folder navigation sidebar is not replaced.
 | D-12 | docs/runbook.md 作成（開発者向け実行確認手順・UI チェックリスト） |
 | D-13 | Minimal usable milestone 判定: **PASS** (2026-05-24) |
 | E-1a | root_children を JSON に追加、Explorer風TreeView の第一歩 |
+| E-1b | Tauri state に children map を保持、get_children command 追加 |
 
 ---
 

@@ -109,6 +109,19 @@ async function openInExplorer(path: string): Promise<void> {
   return invoke<void>("open_in_explorer", { path });
 }
 
+async function getChildren(parentRecordIndex: number): Promise<TreeNode[]> {
+  if (!isTauriRuntime()) {
+    throw new Error("Children API is available only in the Tauri desktop app.");
+  }
+  return invoke<TreeNode[]>("get_children", { parentRecordIndex });
+}
+
+type ChildrenPreview = {
+  parentIndex: number;
+  parentPath: string;
+  items: TreeNode[];
+};
+
 function CopyButton({
   text,
   onError,
@@ -265,11 +278,19 @@ function SelectedFolderCard({
   dir,
   onOpenExplorer,
   onCopyError,
+  onLoadChildren,
+  childrenPreview,
+  childrenError,
 }: {
   dir: DirectoryEntry;
   onOpenExplorer: (path: string) => void;
   onCopyError: (msg: string) => void;
+  onLoadChildren: () => void;
+  childrenPreview: ChildrenPreview | null;
+  childrenError: string | null;
 }) {
+  const matchesSelection =
+    childrenPreview !== null && childrenPreview.parentIndex === dir.record_index;
   return (
     <div className="selected-folder-card">
       <div className="selected-folder-header">
@@ -282,6 +303,9 @@ function SelectedFolderCard({
             Open folder
           </button>
           <CopyButton text={dir.path} onError={onCopyError} />
+          <button className="btn" onClick={onLoadChildren}>
+            Load children
+          </button>
         </div>
       </div>
       <div className="selected-folder-stats">
@@ -290,6 +314,42 @@ function SelectedFolderCard({
         <span>Children: <strong>{formatNumber(dir.child_count)}</strong></span>
       </div>
       <div className="selected-folder-note">Filtered within current top results</div>
+      {childrenError && (
+        <div className="children-preview children-preview--error">{childrenError}</div>
+      )}
+      {matchesSelection && (
+        <div className="children-preview">
+          <div className="children-preview-header">
+            Children loaded: {formatNumber(childrenPreview!.items.length)}
+          </div>
+          {childrenPreview!.items.length === 0 ? (
+            <div className="children-preview-empty">No children returned for this folder.</div>
+          ) : (
+            <>
+              {childrenPreview!.items.slice(0, 5).map((c) => (
+                <div key={c.record_index} className="children-preview-item">
+                  <span
+                    className={
+                      c.is_directory
+                        ? "children-preview-kind children-preview-kind--dir"
+                        : "children-preview-kind children-preview-kind--file"
+                    }
+                  >
+                    {c.is_directory ? "DIR" : "FILE"}
+                  </span>
+                  <span className="children-preview-path">{c.path}</span>
+                  <span className="children-preview-size">{formatBytes(c.subtree_size)}</span>
+                </div>
+              ))}
+              {childrenPreview!.items.length > 5 && (
+                <div className="children-preview-more">
+                  + {formatNumber(childrenPreview!.items.length - 5)} more
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -397,6 +457,8 @@ function App() {
   const [topN, setTopN] = useState(100);
   const [scanTopN, setScanTopN] = useState<number | null>(null);
   const [selectedDir, setSelectedDir] = useState<DirectoryEntry | undefined>(undefined);
+  const [childrenPreview, setChildrenPreview] = useState<ChildrenPreview | null>(null);
+  const [childrenError, setChildrenError] = useState<string | null>(null);
 
   function runLoad(
     loader: () => Promise<DiskInsightOutput>,
@@ -409,6 +471,8 @@ function App() {
     setLoadingMsg(msg);
     setError(null);
     setIsScanError(false);
+    setChildrenPreview(null);
+    setChildrenError(null);
     loader()
       .then((json) => {
         setData(json);
@@ -422,6 +486,32 @@ function App() {
         setError(err instanceof Error ? err.message : String(err));
         setIsScanError(isScan);
         setIsLoading(false);
+      });
+  }
+
+  function handleSelectDir(dir: DirectoryEntry) {
+    setSelectedDir(dir);
+    setChildrenPreview(null);
+    setChildrenError(null);
+  }
+
+  function handleLoadChildren() {
+    if (!selectedDir) return;
+    setChildrenError(null);
+    if (sourceKind !== "live") {
+      setChildrenPreview(null);
+      setChildrenError("Children API is available after a live scan in the Tauri app.");
+      return;
+    }
+    const targetIndex = selectedDir.record_index;
+    const targetPath  = selectedDir.path;
+    getChildren(targetIndex)
+      .then((items) => {
+        setChildrenPreview({ parentIndex: targetIndex, parentPath: targetPath, items });
+      })
+      .catch((err: unknown) => {
+        setChildrenPreview(null);
+        setChildrenError(err instanceof Error ? err.message : String(err));
       });
   }
 
@@ -543,7 +633,7 @@ function App() {
             <FolderNav
               dirs={data.top_directories}
               selectedDir={selectedDir}
-              onSelect={setSelectedDir}
+              onSelect={handleSelectDir}
               rootChildrenCount={data.root_children?.length ?? 0}
             />
             <div className="content-right">
@@ -552,6 +642,9 @@ function App() {
                   dir={selectedDir}
                   onOpenExplorer={handleOpenExplorer}
                   onCopyError={handleCopyError}
+                  onLoadChildren={handleLoadChildren}
+                  childrenPreview={childrenPreview}
+                  childrenError={childrenError}
                 />
               )}
               <DirectoriesTable

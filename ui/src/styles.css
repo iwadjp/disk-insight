@@ -547,6 +547,82 @@ tbody tr:last-child td {
   font-style: italic;
 }
 
+.children-preview {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #edf1f5;
+}
+
+.children-preview--error {
+  color: #9b1c1c;
+  border-top-color: #e2a9a9;
+  font-size: 13px;
+}
+
+.children-preview-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #465563;
+  margin-bottom: 6px;
+}
+
+.children-preview-empty {
+  font-size: 12px;
+  color: #5e6b78;
+  font-style: italic;
+}
+
+.children-preview-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-size: 12px;
+}
+
+.children-preview-kind {
+  display: inline-block;
+  min-width: 38px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  flex-shrink: 0;
+}
+
+.children-preview-kind--dir {
+  background: #e8f0fe;
+  color: #1a56db;
+}
+
+.children-preview-kind--file {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.children-preview-path {
+  flex: 1;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.children-preview-size {
+  color: #5e6b78;
+  white-space: nowrap;
+}
+
+.children-preview-more {
+  margin-top: 4px;
+  font-size: 11px;
+  font-style: italic;
+  color: #5e6b78;
+}
+
 .empty-note {
   padding: 18px 16px;
   margin: 0;
