@@ -47,6 +47,14 @@ type TauriWindow = Window & {
 
 type SourceKind = "sample" | "live";
 
+const TOP_OPTIONS = [10, 30, 50, 100, 200, 500];
+
+function parseDriveLetter(input: string): string | null {
+  const s = input.trim().replace(/:$/, "");
+  if (s.length === 1 && /^[A-Za-z]$/.test(s)) return s.toUpperCase();
+  return null;
+}
+
 function isTauriRuntime(): boolean {
   const tauriWindow = window as TauriWindow;
   return Boolean(tauriWindow.__TAURI__ || tauriWindow.__TAURI_INTERNALS__);
@@ -101,11 +109,13 @@ function StatusBar({
   lastUpdated,
   data,
   isLoading,
+  scanTopN,
 }: {
   sourceKind: SourceKind | null;
   lastUpdated: Date | null;
   data: DiskInsightOutput | null;
   isLoading: boolean;
+  scanTopN: number | null;
 }) {
   if (!sourceKind || !lastUpdated || !data) return null;
 
@@ -122,6 +132,9 @@ function StatusBar({
   return (
     <div className="status-bar">
       <span className={`source-badge source-badge--${sourceKind}`}>{sourceLabel}</span>
+      {sourceKind === "live" && scanTopN !== null && (
+        <span className="status-meta">Top {scanTopN}</span>
+      )}
       <span className="status-meta">{updatedLabel}</span>
       {durationLabel && <span className="status-meta">{durationLabel}</span>}
       {isLoading && <span className="status-meta status-updating">(updating…)</span>}
@@ -211,9 +224,6 @@ function FilesTable({ rows }: { rows: FileEntry[] }) {
   );
 }
 
-const SCAN_MSG =
-  "Scanning C: — reading NTFS metadata. This may take several seconds.";
-
 function App() {
   const [data, setData] = useState<DiskInsightOutput | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -222,12 +232,16 @@ function App() {
   const [isScanError, setIsScanError] = useState(false);
   const [sourceKind, setSourceKind] = useState<SourceKind | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [driveInput, setDriveInput] = useState("C");
+  const [topN, setTopN] = useState(100);
+  const [scanTopN, setScanTopN] = useState<number | null>(null);
 
   function runLoad(
     loader: () => Promise<DiskInsightOutput>,
     msg: string,
     isScan: boolean,
     kind: SourceKind,
+    usedTopN?: number,
   ) {
     setIsLoading(true);
     setLoadingMsg(msg);
@@ -238,6 +252,7 @@ function App() {
         setData(json);
         setSourceKind(kind);
         setLastUpdated(new Date());
+        if (usedTopN !== undefined) setScanTopN(usedTopN);
         setIsLoading(false);
       })
       .catch((err: unknown) => {
@@ -247,16 +262,53 @@ function App() {
       });
   }
 
+  function handleScan() {
+    const drive = parseDriveLetter(driveInput);
+    if (!drive) {
+      setError("Drive must be a single letter (A–Z).");
+      setIsScanError(false);
+      return;
+    }
+    const msg = `Scanning ${drive}: — reading NTFS metadata. Top ${topN} entries.`;
+    runLoad(() => scanDrive(drive, topN), msg, true, "live", topN);
+  }
+
   useEffect(() => {
     runLoad(loadSampleData, "Loading sample data...", false, "sample");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const driveLabel = parseDriveLetter(driveInput) ?? driveInput.slice(0, 1).toUpperCase();
 
   return (
     <main className="app">
       <header className="app-header">
         <h1>disk-insight</h1>
         <div className="toolbar">
+          <label className="toolbar-label">
+            Drive
+            <input
+              className="drive-input"
+              value={driveInput}
+              onChange={(e) => setDriveInput(e.target.value)}
+              disabled={isLoading}
+              maxLength={2}
+            />
+          </label>
+          <label className="toolbar-label">
+            Top
+            <select
+              className="top-select"
+              value={topN}
+              onChange={(e) => setTopN(Number(e.target.value))}
+              disabled={isLoading}
+            >
+              {TOP_OPTIONS.map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </label>
+          <div className="toolbar-separator" />
           <button
             className="btn"
             onClick={() =>
@@ -268,10 +320,10 @@ function App() {
           </button>
           <button
             className="btn btn-primary"
-            onClick={() => runLoad(() => scanDrive("C", 100), SCAN_MSG, true, "live")}
+            onClick={handleScan}
             disabled={isLoading}
           >
-            Scan C:
+            Scan {driveLabel}:
           </button>
         </div>
       </header>
@@ -309,6 +361,7 @@ function App() {
             lastUpdated={lastUpdated}
             data={data}
             isLoading={isLoading}
+            scanTopN={scanTopN}
           />
           <SummaryCard summary={data.summary} />
           <DirectoriesTable rows={data.top_directories} />

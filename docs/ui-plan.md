@@ -110,9 +110,44 @@ responsive during a 6–11 second scan.
 - MFT scan logic (`build_mft_tree_output`) is unchanged.
 - Drive selection and top-count UI are not added.
 
+## D-4 Drive and top-count controls
+
+D-4 adds drive letter input and top-count selector to the toolbar so the user
+can configure the scan target without touching the CLI.
+
+### Drive input
+
+- Text input in the toolbar, initial value `C`, max length 2.
+- Accepts `C`, `C:`, or `c` — normalized to uppercase before invoking `scan_drive`.
+- Empty or non-letter input shows an inline error; no scan is started.
+- Auto-enumeration of available drives is not implemented.
+
+### Top-count selector
+
+- `<select>` with fixed options: 10 / 30 / 50 / 100 / 200 / 500.
+- Initial value: 100.
+- The selected value is passed directly to `scan_drive(drive, top)`.
+- Maximum option is 500; values above that are not offered.
+
+### Scan button
+
+- Label tracks the drive input: `Scan C:`, `Scan D:`, etc.
+- `handleScan()` validates drive and top before calling `runLoad`.
+
+### Status bar
+
+- After a live scan, shows `Top N` (e.g. `Top 100`) next to the source badge.
+- Scanning banner message includes the top count:
+  `Scanning C: — reading NTFS metadata. Top 100 entries.`
+
+### Scope guard
+
+- Drive auto-enumeration is not implemented.
+- No progress bar, cancel, TreeView, delete action, or Explorer open.
+- MFT scan logic is unchanged.
+
 ## Next candidates
 
-- Add drive selection UI.
 - Add a TreeView for directory navigation.
 - Add Explorer open support.
 - Keep delete actions for a later phase.
