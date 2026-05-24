@@ -162,6 +162,50 @@ function SummaryCard({ summary }: { summary: Summary }) {
   );
 }
 
+function FolderNav({
+  dirs,
+  selectedDir,
+  onSelect,
+}: {
+  dirs: DirectoryEntry[];
+  selectedDir: DirectoryEntry | undefined;
+  onSelect: (dir: DirectoryEntry) => void;
+}) {
+  return (
+    <aside className="folder-nav">
+      <div className="folder-nav-header">Folders</div>
+      <div className="folder-nav-list">
+        {dirs.map((dir) => (
+          <button
+            key={dir.record_index}
+            className={`folder-row${
+              selectedDir?.record_index === dir.record_index ? " folder-row--active" : ""
+            }`}
+            onClick={() => onSelect(dir)}
+          >
+            <span className="folder-row-path">{dir.path}</span>
+            <span className="folder-row-size">{formatBytes(dir.subtree_size)}</span>
+          </button>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
+function SelectedFolderCard({ dir }: { dir: DirectoryEntry }) {
+  return (
+    <div className="selected-folder-card">
+      <div className="selected-folder-label">Selected folder</div>
+      <div className="selected-folder-path">{dir.path}</div>
+      <div className="selected-folder-stats">
+        <span>Subtree: <strong>{formatBytes(dir.subtree_size)}</strong></span>
+        <span>Direct files: <strong>{formatBytes(dir.direct_file_size)}</strong></span>
+        <span>Children: <strong>{formatNumber(dir.child_count)}</strong></span>
+      </div>
+    </div>
+  );
+}
+
 function DirectoriesTable({ rows }: { rows: DirectoryEntry[] }) {
   return (
     <section className="table-section">
@@ -235,6 +279,7 @@ function App() {
   const [driveInput, setDriveInput] = useState("C");
   const [topN, setTopN] = useState(100);
   const [scanTopN, setScanTopN] = useState<number | null>(null);
+  const [selectedDir, setSelectedDir] = useState<DirectoryEntry | undefined>(undefined);
 
   function runLoad(
     loader: () => Promise<DiskInsightOutput>,
@@ -253,6 +298,7 @@ function App() {
         setSourceKind(kind);
         setLastUpdated(new Date());
         if (usedTopN !== undefined) setScanTopN(usedTopN);
+        setSelectedDir(json.top_directories[0]);
         setIsLoading(false);
       })
       .catch((err: unknown) => {
@@ -364,8 +410,18 @@ function App() {
             scanTopN={scanTopN}
           />
           <SummaryCard summary={data.summary} />
-          <DirectoriesTable rows={data.top_directories} />
-          <FilesTable rows={data.top_files} />
+          <div className="content-pane">
+            <FolderNav
+              dirs={data.top_directories}
+              selectedDir={selectedDir}
+              onSelect={setSelectedDir}
+            />
+            <div className="content-right">
+              {selectedDir && <SelectedFolderCard dir={selectedDir} />}
+              <DirectoriesTable rows={data.top_directories} />
+              <FilesTable rows={data.top_files} />
+            </div>
+          </div>
         </>
       )}
     </main>

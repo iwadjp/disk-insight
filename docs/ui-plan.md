@@ -146,8 +146,44 @@ can configure the scan target without touching the CLI.
 - No progress bar, cancel, TreeView, delete action, or Explorer open.
 - MFT scan logic is unchanged.
 
+## D-5 Simple folder navigation pane
+
+D-5 adds a two-pane layout with a lightweight folder navigation sidebar built
+from the existing `top_directories` list.
+
+### Layout
+
+- `.content-pane` — flex row containing the left and right panes.
+- Left pane (`.folder-nav`, 360 px fixed) — scrollable list of top directories.
+- Right pane (`.content-right`, flex: 1) — selected-folder card + existing tables.
+
+### FolderNav (left pane)
+
+- Lists every entry in `top_directories`.
+- Each row shows the directory path (monospace) and subtree size.
+- Active row is highlighted in blue.
+- Clicking a row updates `selectedDir` state.
+
+### SelectedFolderCard (right pane top)
+
+- Shows the selected directory's path, subtree size, direct file size, and child count.
+- Rendered above the existing DirectoriesTable and FilesTable.
+
+### selectedDir state
+
+- `selectedDir: DirectoryEntry | undefined` in App.
+- Initialized / reset to `top_directories[0]` whenever new data is loaded.
+- Updated by clicking a folder row.
+
+### Scope guard
+
+- No hierarchy expansion or collapse (not a real TreeView).
+- Files table is not filtered by selected folder.
+- No virtual scroll, delete action, Explorer open, or right-click menu.
+
 ## Next candidates
 
-- Add a TreeView for directory navigation.
-- Add Explorer open support.
+- Filter files table by selected folder.
+- Add Explorer open for the selected folder.
+- Evolve toward a hierarchy-aware TreeView.
 - Keep delete actions for a later phase.
