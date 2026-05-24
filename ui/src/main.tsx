@@ -97,6 +97,13 @@ async function openInExplorer(path: string): Promise<void> {
   return invoke<void>("open_in_explorer", { path });
 }
 
+function getParentDir(filePath: string): string {
+  const i = filePath.lastIndexOf("\\");
+  if (i < 0) return filePath;
+  if (i <= 2) return filePath.slice(0, 3); // drive root: "C:\"
+  return filePath.slice(0, i);
+}
+
 function formatBytes(bytes: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
   let value = bytes;
@@ -271,7 +278,15 @@ function DirectoriesTable({ rows, title }: { rows: DirectoryEntry[]; title: Reac
   );
 }
 
-function FilesTable({ rows, title }: { rows: FileEntry[]; title: React.ReactNode }) {
+function FilesTable({
+  rows,
+  title,
+  onOpenLocation,
+}: {
+  rows: FileEntry[];
+  title: React.ReactNode;
+  onOpenLocation: (path: string) => void;
+}) {
   return (
     <section className="table-section">
       <div className="section-header">
@@ -290,6 +305,7 @@ function FilesTable({ rows, title }: { rows: FileEntry[]; title: React.ReactNode
               <tr>
                 <th>Path</th>
                 <th className="numeric">Allocated size</th>
+                <th className="actions-col">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -297,6 +313,14 @@ function FilesTable({ rows, title }: { rows: FileEntry[]; title: React.ReactNode
                 <tr key={row.record_index}>
                   <td className="path">{row.path}</td>
                   <td className="numeric">{formatBytes(row.final_allocated_size)}</td>
+                  <td className="actions-col">
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => onOpenLocation(getParentDir(row.path))}
+                    >
+                      Open location
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -489,6 +513,7 @@ function App() {
                     ? <>Top files under <span className="heading-path">{selectedDir.path}</span></>
                     : "Top files"
                 }
+                onOpenLocation={handleOpenExplorer}
               />
             </div>
           </div>

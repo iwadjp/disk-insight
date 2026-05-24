@@ -262,6 +262,31 @@ D-7 adds a minimal "Open in Explorer" action for the selected folder.
 - No right-click menu, delete action, cmd open, or path copy.
 - No admin privilege escalation.
 
+## D-8 Open location for top files
+
+D-8 adds an "Open location" action to each row of the top files table.
+
+### UI side
+
+- Added `getParentDir(filePath)` helper that extracts the parent directory
+  from a Windows path.
+  - `C:\Users\user\file.exe` → `C:\Users\user`
+  - Root-level files (`C:\$MFT`, `i <= 2`) → `C:\`
+- `FilesTable` gains an `onOpenLocation` prop (required).
+- A new "Actions" column is added to the right of the files table.
+- Each row has a small "Open location" button (`btn btn-sm`) that calls
+  `onOpenLocation(getParentDir(row.path))`.
+- In App, `onOpenLocation` is wired to `handleOpenExplorer`, which reuses
+  the existing `openInExplorer` Tauri command.
+- Browser runtime: same error as D-7 ("Explorer open is available only in
+  the Tauri desktop app.").
+
+### Scope guard
+
+- Opens the parent folder — no `explorer /select` file highlighting.
+- No file deletion, direct open, right-click menu, or path copy.
+- No new Tauri command — reuses `open_in_explorer` from D-7.
+
 ---
 
 ## Completed phases summary
@@ -287,6 +312,7 @@ D-7 adds a minimal "Open in Explorer" action for the selected folder.
 | D-6 | 選択フォルダ配下の簡易フィルタ |
 | D-6 FU | backslash / yen sign 表示対策（`.heading-path`） |
 | D-7 | 選択フォルダを Explorer で開く |
+| D-8 | top files 各行の Open location（親フォルダを Explorer で開く） |
 
 ---
 
@@ -307,7 +333,7 @@ D-7 adds a minimal "Open in Explorer" action for the selected folder.
 
 ## Remaining tasks before minimal usable milestone
 
-### D-8 Top files の場所を Explorer で開く
+### D-8 Top files の場所を Explorer で開く ✓
 
 - top files の各行に "Open location" ボタンを追加
 - 親フォルダを `open_in_explorer` で開く（`explorer /select` は後回し）

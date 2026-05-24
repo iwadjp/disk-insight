@@ -219,6 +219,16 @@ tbody tr:last-child td {
   border-color: #1649c0;
 }
 
+.btn-sm {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+.actions-col {
+  width: 120px;
+  white-space: nowrap;
+}
+
 .error,
 .loading {
   padding: 16px;
