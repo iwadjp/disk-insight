@@ -124,12 +124,13 @@ disk-insight.exe --help
 
 | タスク | 担当 |
 |--------|------|
-| 実装本体・Tauri/Rust 連携・ビルド・コミット | Claude Code (Sonnet 4.6) |
-| UI polish・docs 更新・軽微な実装 | Claude Code (Sonnet 4.6) |
-| TreeView/Tauri state/大量ノード設計・安全設計・方針判断 | Opus 4.7（節目のみ） |
-| 管理者権限・実スキャン設計・セキュリティ判断 | Opus 4.7 または ChatGPT Thinking |
+| 実装本体・Tauri/Rust 連携・ビルド・コミット | Claude Code (Sonnet 4.6)（引き続き主実装） |
+| UI polish・docs 更新・軽微な実装 | Claude Code (Sonnet 4.6)（引き続き主実装） |
+| TreeView/Tauri state/大量ノード設計・安全設計・方針判断 | Opus 4.7（クレジットに余裕がある時の重い設計・安全設計向け、節目のみ） |
+| 管理者権限・実スキャン設計・セキュリティ判断 | Opus 4.7 または gpt-5.5 High/Extra high |
+| 複雑な診断・設計判断 | gpt-5.5 High/Extra high |
 | 指示文作成・進行整理・軽い判断 | ChatGPT Instant |
-| 大規模コードベース横断分析・長文仕様解析 | Gemini CLI |
+| 大規模コードベース横断分析・調査・軽作業・ドキュメント整理 | Antigravity CLI（Gemini CLI の代替） |
 | Claude Code 節約が必要な長時間・大量生成タスク | Codex |
 
 ### Sonnet 4.6 で進めてよい場面
@@ -145,3 +146,5 @@ disk-insight.exe --help
 - 新しい Tauri command の安全設計
 - フェーズ節目の方針転換判断
 - delete action の設計（将来）
+- クレジットに余裕がある時の重い設計・安全設計
+
