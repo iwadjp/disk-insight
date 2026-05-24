@@ -549,6 +549,40 @@ Explorer-style TreeView. The existing folder navigation sidebar is not replaced.
 - Existing folder nav (top_directories) is unchanged.
 - Full lazy TreeView is planned for E-1b and later phases.
 
+## F-1 follow-up: Select file status message
+
+F-1 follow-up adds a short success message when "Select file" is invoked, so
+users can tell the command was received even when Explorer opens in the background.
+
+### Background
+
+F-1 real-device testing showed the feature worked correctly, but Explorer sometimes
+opened behind other windows without becoming the active application. The result
+looked like no response.
+
+### Changes
+
+- Added `statusMessage: string | null` state in `App`.
+  - Initialized to `null`; cleared on every `runLoad` (scan start / sample load).
+- Added `getFileName(filePath)` helper that extracts the filename from a Windows path.
+- `handleSelectFile` updated: on success, sets
+  `statusMessage = "Explorer selection requested: <filename>"` and schedules
+  `setTimeout(() => setStatusMessage(null), 3000)` to clear it after 3 seconds.
+  On failure, routes the error to `setError` as before.
+- `statusMessage` is rendered immediately below the error block:
+  `<div className="status-message status-message--success">`.
+- CSS added: `.status-message` (shared padding/border), `.status-message--success`
+  (green — `#dcfce7` background, `#166534` text, `#86efac` border).
+
+### What is NOT changed
+
+- Explorer foreground/focus is not attempted — OS-dependent behavior, deferred.
+- Open folder success is not shown — avoids UI noise for the common action.
+- Rust core, Tauri commands, and JSON schema unchanged.
+- No delete, right-click menu, Treemap, virtual scroll, or drive auto-detection.
+
+---
+
 ## F-1 Explorer file selection for top files
 
 F-1 adds a "Select file" action to each top-files row, opening the file highlighted
@@ -772,6 +806,7 @@ click, the clicked row is highlighted and the card shows the correct full path.
 | E-4 | visibleRows flat list 導入（非再帰 render、virtual scroll 前提構造） |
 | E-5 | TreeView safety guards（duplicate guard、per-node error、large folder warning） |
 | F-1 | top files に Select file 追加（Explorer `/select,file` でファイル選択表示） |
+| F-1 FU | Select file 成功時ステータスメッセージ表示（Explorer 背面表示の無反応感を軽減） |
 
 ---
 

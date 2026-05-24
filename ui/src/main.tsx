@@ -213,6 +213,11 @@ function getParentDir(filePath: string): string {
   return filePath.slice(0, i);
 }
 
+function getFileName(filePath: string): string {
+  const i = filePath.lastIndexOf("\\");
+  return i >= 0 ? filePath.slice(i + 1) : filePath;
+}
+
 function formatBytes(bytes: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
   let value = bytes;
@@ -592,6 +597,7 @@ function App() {
   const [childrenByParent, setChildrenByParent] = useState<Record<number, TreeNode[]>>({});
   const [childrenErrors, setChildrenErrors] = useState<Record<number, string>>({});
   const [treeError, setTreeError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const visibleRows = useMemo(
     () => buildVisibleRows(data?.root_children ?? [], expandedIds, childrenByParent, childrenErrors),
@@ -609,6 +615,7 @@ function App() {
     setLoadingMsg(msg);
     setError(null);
     setIsScanError(false);
+    setStatusMessage(null);
     setExpandedIds(new Set());
     setLoadingIds(new Set());
     setChildrenByParent({});
@@ -718,10 +725,17 @@ function App() {
   }
 
   function handleSelectFile(path: string) {
-    selectInExplorer(path).catch((err: unknown) => {
-      setError(err instanceof Error ? err.message : String(err));
-      setIsScanError(false);
-    });
+    selectInExplorer(path)
+      .then(() => {
+        setError(null);
+        const fileName = getFileName(path);
+        setStatusMessage(`Explorer selection requested: ${fileName}`);
+        setTimeout(() => setStatusMessage(null), 3000);
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : String(err));
+        setIsScanError(false);
+      });
   }
 
   function handleCopyError(msg: string) {
@@ -819,6 +833,10 @@ function App() {
             </div>
           )}
         </div>
+      )}
+
+      {statusMessage && (
+        <div className="status-message status-message--success">{statusMessage}</div>
       )}
 
       {data && (

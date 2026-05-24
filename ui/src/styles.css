@@ -252,6 +252,18 @@ tbody tr:last-child td {
   opacity: 0.85;
 }
 
+.status-message {
+  padding: 16px;
+  border: 1px solid;
+  border-radius: 8px;
+}
+
+.status-message--success {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #166534;
+}
+
 /* ── Status bar ── */
 .status-bar {
   display: flex;
