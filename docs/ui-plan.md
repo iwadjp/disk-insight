@@ -418,21 +418,32 @@ the D-13 milestone sign-off.
 | D-10 | UI polish（ボタン文言・empty message・CSS 微調整） |
 | D-11 | README.md 作成（概要・CLI/UI使用例・既知制限） |
 | D-12 | docs/runbook.md 作成（開発者向け実行確認手順・UI チェックリスト） |
+| D-13 | Minimal usable milestone 判定: **PASS** (2026-05-24) |
 
 ---
 
 ## Minimal usable milestone: 削除なし最小実用品
 
+**STATUS: PASS — 2026-05-24**
+
 短期ゴール。以下がすべて揃った状態を一区切りとする。
 
-- C ドライブを高速スキャンできる
-- フォルダ容量が見える
-- 大きいファイルが見える
-- フォルダを選択できる
-- 選択フォルダ配下の候補が見える
-- Explorer で場所を開ける
-- 削除機能はまだ入れない
-- 危険操作なしで容量調査に使える状態
+- [x] C ドライブを高速スキャンできる
+- [x] フォルダ容量が見える
+- [x] 大きいファイルが見える
+- [x] フォルダを選択できる
+- [x] 選択フォルダ配下の候補が見える
+- [x] Explorer で場所を開ける
+- [x] 削除機能はまだ入れない
+- [x] 危険操作なしで容量調査に使える状態
+
+### 次候補（milestone 以降）
+
+- `explorer /select` によるファイル選択表示
+- ドライブ自動列挙
+- 本格 TreeView（折りたたみ・仮想スクロール）
+- WinSxS / hardlink 精度改善
+- delete action（安全設計・確認ダイアログ付きで後フェーズ）
 
 ---
 
@@ -476,19 +487,19 @@ the D-13 milestone sign-off.
 - JSON 出力確認手順
 - PowerShell `>` の UTF-16LE 問題（`cmd /c` リダイレクト推奨）
 
-### D-13 Minimal usable milestone 判定
+### D-13 Minimal usable milestone 判定 ✓ PASS — 2026-05-24
 
 チェックリスト:
 
-- [ ] Scan C: が動作する
-- [ ] Top folders / top files が表示される
-- [ ] Folder selection が動作する
-- [ ] Explorer open が動作する
-- [ ] Path copy が動作する
-- [ ] README がある
-- [ ] Clean build（TypeScript エラーなし・Rust 警告なし）
-- [ ] disk-insight / private_notes 両リポジトリ clean
-- [ ] 削除機能なし最小実用品として一区切り
+- [x] Scan C: が動作する
+- [x] Top folders / top files が表示される
+- [x] Folder selection が動作する
+- [x] Explorer open が動作する（selected folder / top files 両方）
+- [x] Path copy が動作する（selected folder / top files 両方）
+- [x] README がある
+- [x] Clean build（TypeScript エラーなし・Rust 警告なし）
+- [x] disk-insight / private_notes 両リポジトリ clean
+- [x] 削除機能なし最小実用品として一区切り
 
 ---
 

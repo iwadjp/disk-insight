@@ -144,9 +144,7 @@ not to produce byte-exact matches with the OS disk usage report.
 
 ## Current milestone
 
-**Minimal usable milestone — no delete action.**
-
-Remaining tasks before milestone sign-off:
+**Minimal usable milestone — PASS (2026-05-24).**
 
 - [x] D-7 Open selected folder in Explorer
 - [x] D-8 Open file parent folder in Explorer
@@ -154,4 +152,4 @@ Remaining tasks before milestone sign-off:
 - [x] D-10 UI polish
 - [x] D-11 README
 - [x] D-12 Build and run procedure notes
-- [ ] D-13 Milestone checklist sign-off
+- [x] D-13 Milestone sign-off
