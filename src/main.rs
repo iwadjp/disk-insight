@@ -14,6 +14,7 @@ fn print_help() {
     eprintln!("  --drive <letter>   対象ドライブ (例: C  C:  D  d) [デフォルト: C]");
     eprintln!("  --top <number>     上位件数 [デフォルト: human=30 / json=100]");
     eprintln!("  --json             JSON形式で stdout に出力");
+    eprintln!("  --diag-pfx86       Program Files (x86) 差分診断 (EdgeCore / Office16 / VFS)");
     eprintln!("  --help             このヘルプを表示");
     eprintln!();
     eprintln!("使用例:");
@@ -22,6 +23,7 @@ fn print_help() {
     eprintln!("  disk-insight.exe --json --top 200");
     eprintln!("  disk-insight.exe --drive C --top 50");
     eprintln!("  disk-insight.exe --drive C --json --top 100");
+    eprintln!("  disk-insight.exe --diag-pfx86");
     eprintln!();
     eprintln!("注意:");
     eprintln!("  管理者権限で実行してください (MFTアクセスに必要)。");
@@ -47,6 +49,7 @@ fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
 
     let mut json_mode = false;
+    let mut diag_pfx86 = false;
     let mut drive = 'C';
     let mut top_n: Option<usize> = None;
 
@@ -55,6 +58,10 @@ fn main() -> Result<()> {
         match args[i].as_str() {
             "--json" => {
                 json_mode = true;
+                i += 1;
+            }
+            "--diag-pfx86" => {
+                diag_pfx86 = true;
                 i += 1;
             }
             "--help" | "-h" => {
@@ -112,6 +119,14 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
         }
+    }
+
+    if diag_pfx86 {
+        if let Err(e) = mft_probe::print_diag_pfx86(drive) {
+            eprintln!("エラー: {}", e);
+            std::process::exit(1);
+        }
+        return Ok(());
     }
 
     let top = top_n.unwrap_or(if json_mode { 100 } else { 30 });

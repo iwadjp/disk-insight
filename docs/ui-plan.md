@@ -943,6 +943,8 @@ click, the clicked row is highlighted and the card shows the correct full path.
 - WinSxS / hardlink / WOF 精度追求
 - drive NTFS 判定・容量/空き領域表示
 - コマンドプロンプトで開く
+- size discrepancy diagnostics の拡張（PFx86-DIAG-1 が CLI 診断のみで実装済み、
+  他の主要サブツリー（WinSxS / WindowsApps / AppData/Local/Docker など）への展開）
 
 完了済み（以前 deferred だったもの）:
 - `explorer /select` によるファイル選択表示 → F-1 で実装

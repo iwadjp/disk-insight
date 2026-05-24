@@ -2972,3 +2972,670 @@ pub fn print_probe7_json_top(drive: char, top_n: usize) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())
 }
+
+// PFx86-DIAG-1: diagnostic CLI for Program Files (x86) size discrepancy
+// investigation. Targets three known-suspect subtrees and reports WOF/reparse,
+// compressed/sparse, hardlink/multi-name signals plus per-file attributes.
+// Size policy is unchanged — this is observation only, no correction is applied.
+pub fn print_diag_pfx86(drive: char) -> Result<()> {
+    use rayon::prelude::*;
+    use std::collections::HashMap;
+    use windows::Win32::Storage::FileSystem::{ReadFile, SetFilePointerEx, FILE_BEGIN};
+
+    let info = get_mft_info(drive)?;
+    eprintln!("diag-pfx86: drive={}  $MFT {} MB  {} extents",
+        drive, info.mft_size / 1_048_576, info.extents.len());
+
+    let mut mft_buf = vec![0u8; info.mft_size as usize];
+    for (start_vcn, lcn, length) in &info.extents {
+        let disk_offset = lcn * info.bytes_per_cluster;
+        let dst_start = start_vcn * info.bytes_per_cluster;
+        let read_size = length * info.bytes_per_cluster;
+        let dst_end = dst_start + read_size;
+        unsafe {
+            SetFilePointerEx(info.handle, disk_offset as i64, None, FILE_BEGIN)
+        }.context("SetFilePointerEx失敗")?;
+        let mut bytes_read: u32 = 0;
+        unsafe {
+            ReadFile(
+                info.handle,
+                Some(&mut mft_buf[dst_start as usize..dst_end as usize]),
+                Some(&mut bytes_read),
+                None,
+            )
+        }.context("ReadFile失敗")?;
+    }
+    unsafe { windows::Win32::Foundation::CloseHandle(info.handle).ok(); }
+
+    let record_size = info.bytes_per_record as usize;
+
+    struct DiagEntry {
+        record_idx: usize,
+        name: String,
+        parent_frn: u64,
+        alloc_size: u64,
+        is_in_use: bool,
+        is_dir: bool,
+        file_attrs: u32,
+        hard_link_count: u16,
+        file_name_attr_count: u16,
+        reparse_tag: u32,        // 0 if not present or non-resident
+        has_wof_stream: bool,    // WofCompressedData named $DATA in base record
+        wof_stream_alloc: u64,
+        data_flags: u16,         // OR of unnamed $DATA attr flags in base
+    }
+    struct ExtDiag {
+        base_record: u64,
+        unnamed_alloc: u64,
+        data_flags: u16,
+        wof_stream_alloc: u64,
+        has_wof_stream: bool,
+    }
+
+    let raw_parsed: Vec<(Option<DiagEntry>, Option<ExtDiag>)> = mft_buf
+        .par_chunks_exact(record_size)
+        .enumerate()
+        .filter_map(|(i, raw)| {
+            let record = apply_fixup(raw)?;
+            if record.len() < 4 || &record[0..4] != b"FILE" { return None; }
+            if record.len() < 0x30 { return None; }
+
+            let hard_link_count = u16::from_le_bytes([record[0x12], record[0x13]]);
+            let flags = u16::from_le_bytes([record[22], record[23]]);
+            let is_in_use = flags & 0x01 != 0;
+            let is_dir = flags & 0x02 != 0;
+
+            let base_record = u64::from_le_bytes([
+                record[32], record[33], record[34], record[35],
+                record[36], record[37], record[38], record[39],
+            ]);
+            let is_extension = base_record != 0;
+
+            let attr_start = u16::from_le_bytes([record[20], record[21]]) as usize;
+            let mut pos = attr_start;
+            let mut name = String::new();
+            let mut parent_frn: u64 = 0;
+            let mut best_ns_prio: u8 = 255;
+            let mut fn_alloc: u64 = 0;
+            let mut alloc_data: Option<u64> = None;
+            let mut found_data = false;
+            let mut file_attrs: u32 = 0;
+            let mut file_name_attr_count: u16 = 0;
+            let mut reparse_tag: u32 = 0;
+            let mut has_wof_stream = false;
+            let mut wof_stream_alloc: u64 = 0;
+            let mut data_flags: u16 = 0;
+
+            let mut ext_unnamed_alloc: u64 = 0;
+            let mut ext_data_flags: u16 = 0;
+            let mut ext_wof_alloc: u64 = 0;
+            let mut ext_has_wof = false;
+            let mut ext_has_data = false;
+
+            loop {
+                if pos + 8 > record.len() { break; }
+                let attr_type = u32::from_le_bytes([record[pos], record[pos+1], record[pos+2], record[pos+3]]);
+                let attr_len  = u32::from_le_bytes([record[pos+4], record[pos+5], record[pos+6], record[pos+7]]) as usize;
+                if attr_type == 0xFFFF_FFFF { break; }
+                if attr_len == 0 || pos + attr_len > record.len() { break; }
+
+                let non_resident    = record[pos + 8];
+                let stream_name_len = record[pos + 9] as usize;
+
+                match attr_type {
+                    0x10 if non_resident == 0 => {
+                        if pos + 22 <= record.len() {
+                            let c = pos + u16::from_le_bytes([record[pos+20], record[pos+21]]) as usize;
+                            if c + 0x24 <= record.len() {
+                                file_attrs = u32::from_le_bytes([record[c+0x20], record[c+0x21], record[c+0x22], record[c+0x23]]);
+                            }
+                        }
+                    }
+                    0x30 if non_resident == 0 => {
+                        file_name_attr_count = file_name_attr_count.saturating_add(1);
+                        if pos + 22 > record.len() { pos += attr_len; continue; }
+                        let c = pos + u16::from_le_bytes([record[pos+20], record[pos+21]]) as usize;
+                        if c + 0x42 > record.len() { pos += attr_len; continue; }
+                        let ns = record[c + 0x41];
+                        let ns_prio: u8 = match ns { 1 => 0, 3 => 1, 0 => 2, 2 => 3, _ => 4 };
+                        if ns_prio < best_ns_prio {
+                            best_ns_prio = ns_prio;
+                            if c + 8 <= record.len() {
+                                let pr = u64::from_le_bytes([record[c], record[c+1], record[c+2], record[c+3],
+                                                              record[c+4], record[c+5], record[c+6], record[c+7]]);
+                                parent_frn = pr & 0x0000_FFFF_FFFF_FFFF;
+                            }
+                            if c + 0x38 <= record.len() {
+                                fn_alloc = u64::from_le_bytes([record[c+0x30], record[c+0x31], record[c+0x32], record[c+0x33],
+                                                                record[c+0x34], record[c+0x35], record[c+0x36], record[c+0x37]]);
+                            }
+                            let nc = record[c + 0x40] as usize;
+                            let ns_start = c + 0x42;
+                            let ns_end   = ns_start + nc * 2;
+                            if ns_end <= record.len() {
+                                let wide: Vec<u16> = record[ns_start..ns_end]
+                                    .chunks_exact(2)
+                                    .map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+                                name = String::from_utf16_lossy(&wide);
+                            }
+                        }
+                    }
+                    0x80 => {
+                        let alloc = if non_resident == 1 && pos + 48 <= record.len() {
+                            u64::from_le_bytes([record[pos+40], record[pos+41], record[pos+42], record[pos+43],
+                                                record[pos+44], record[pos+45], record[pos+46], record[pos+47]])
+                        } else if non_resident == 0 && pos + 20 <= record.len() {
+                            u32::from_le_bytes([record[pos+16], record[pos+17], record[pos+18], record[pos+19]]) as u64
+                        } else { 0 };
+                        let af = if pos + 14 <= record.len() {
+                            u16::from_le_bytes([record[pos+12], record[pos+13]])
+                        } else { 0 };
+
+                        if stream_name_len == 0 {
+                            if !found_data {
+                                alloc_data = Some(alloc);
+                                found_data = true;
+                            }
+                            data_flags |= af;
+                            if is_extension && is_in_use {
+                                ext_has_data = true;
+                                ext_unnamed_alloc = ext_unnamed_alloc.saturating_add(alloc);
+                                ext_data_flags |= af;
+                            }
+                        } else {
+                            // Named $DATA stream — check for WofCompressedData
+                            let name_off = u16::from_le_bytes([record[pos+10], record[pos+11]]) as usize;
+                            let sn_start = pos + name_off;
+                            let sn_end   = sn_start + stream_name_len * 2;
+                            if sn_end <= pos + attr_len && sn_end <= record.len() {
+                                let wide: Vec<u16> = record[sn_start..sn_end]
+                                    .chunks_exact(2)
+                                    .map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+                                if String::from_utf16_lossy(&wide) == "WofCompressedData" {
+                                    if is_extension && is_in_use {
+                                        ext_has_wof = true;
+                                        ext_has_data = true;
+                                        ext_wof_alloc = ext_wof_alloc.saturating_add(alloc);
+                                    } else {
+                                        has_wof_stream = true;
+                                        wof_stream_alloc = wof_stream_alloc.saturating_add(alloc);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    0xC0 => {
+                        // $REPARSE_POINT — read reparse tag if resident
+                        if non_resident == 0 && pos + 22 <= record.len() {
+                            let content_size = u32::from_le_bytes([record[pos+16], record[pos+17], record[pos+18], record[pos+19]]) as usize;
+                            let content_off = u16::from_le_bytes([record[pos+20], record[pos+21]]) as usize;
+                            let c = pos + content_off;
+                            if content_size >= 4 && c + 4 <= record.len() {
+                                reparse_tag = u32::from_le_bytes([record[c], record[c+1], record[c+2], record[c+3]]);
+                            }
+                        }
+                        // Non-resident reparse data: tag is in the data run; leave 0.
+                    }
+                    _ => {}
+                }
+                pos += attr_len;
+            }
+
+            let ext_entry = if is_extension && is_in_use && ext_has_data {
+                Some(ExtDiag {
+                    base_record: base_record & 0x0000_FFFF_FFFF_FFFF,
+                    unnamed_alloc: ext_unnamed_alloc,
+                    data_flags: ext_data_flags,
+                    wof_stream_alloc: ext_wof_alloc,
+                    has_wof_stream: ext_has_wof,
+                })
+            } else { None };
+
+            if name.is_empty() { return Some((None, ext_entry)); }
+
+            let alloc_size = alloc_data.unwrap_or(fn_alloc);
+            Some((Some(DiagEntry {
+                record_idx: i, name, parent_frn, alloc_size,
+                is_in_use, is_dir, file_attrs,
+                hard_link_count, file_name_attr_count, reparse_tag,
+                has_wof_stream, wof_stream_alloc, data_flags,
+            }), ext_entry))
+        })
+        .collect();
+
+    let mut diag_entries: Vec<DiagEntry> = Vec::new();
+    let mut ext_entries: Vec<ExtDiag> = Vec::new();
+    for (de, ee) in raw_parsed {
+        if let Some(d) = de { diag_entries.push(d); }
+        if let Some(e) = ee { ext_entries.push(e); }
+    }
+
+    // Aggregate extension records per base
+    struct BaseExt {
+        unnamed_alloc: u64,
+        data_flags: u16,
+        wof_alloc: u64,
+        has_wof: bool,
+    }
+    let mut base_groups: HashMap<u64, BaseExt> = HashMap::new();
+    for e in &ext_entries {
+        let g = base_groups.entry(e.base_record).or_insert(BaseExt {
+            unnamed_alloc: 0, data_flags: 0, wof_alloc: 0, has_wof: false,
+        });
+        g.unnamed_alloc = g.unnamed_alloc.saturating_add(e.unnamed_alloc);
+        g.data_flags   |= e.data_flags;
+        g.wof_alloc     = g.wof_alloc.saturating_add(e.wof_stream_alloc);
+        if e.has_wof_stream { g.has_wof = true; }
+    }
+
+    struct DNode {
+        frn: u64,
+        parent_frn: u64,
+        name: String,
+        is_dir: bool,
+        final_alloc: u64,
+        subtree_size: u64,
+        direct_file_size: u64,
+        children: Vec<usize>,
+        file_attrs: u32,
+        data_flags: u16,
+        hard_link_count: u16,
+        file_name_attr_count: u16,
+        reparse_tag: u32,
+        has_wof_stream: bool,
+        wof_stream_alloc: u64,
+    }
+
+    let mut arena: Vec<DNode> = Vec::with_capacity(diag_entries.len());
+    let mut frn_to_idx: HashMap<u64, usize> = HashMap::with_capacity(diag_entries.len());
+
+    for e in diag_entries.iter().filter(|e| e.is_in_use) {
+        let frn = e.record_idx as u64;
+        // Match the size policy used by build_mft_tree_model (no correction here).
+        let final_alloc = if e.alloc_size > 0 {
+            e.alloc_size
+        } else if let Some(g) = base_groups.get(&frn) {
+            if g.unnamed_alloc > 0 {
+                let fa  = e.file_attrs;
+                let df  = g.data_flags;
+                let wof = g.wof_alloc > 0;
+                let cmp = fa & 0x0800 != 0 || df & 0x0001 != 0;
+                let sps = fa & 0x0200 != 0 || df & 0x8000 != 0;
+                let rps = fa & 0x0400 != 0;
+                let sys = fa & 0x0004 != 0;
+                let hid = fa & 0x0002 != 0;
+                if !cmp && !sps && !rps && !sys && !hid && !wof { g.unnamed_alloc } else { 0 }
+            } else { 0 }
+        } else { 0 };
+
+        let (combined_wof, combined_wof_alloc) = if let Some(g) = base_groups.get(&frn) {
+            (e.has_wof_stream || g.has_wof,
+             e.wof_stream_alloc.saturating_add(g.wof_alloc))
+        } else {
+            (e.has_wof_stream, e.wof_stream_alloc)
+        };
+        let combined_data_flags = if let Some(g) = base_groups.get(&frn) {
+            e.data_flags | g.data_flags
+        } else { e.data_flags };
+
+        let idx = arena.len();
+        frn_to_idx.insert(frn, idx);
+        arena.push(DNode {
+            frn, parent_frn: e.parent_frn, name: e.name.clone(),
+            is_dir: e.is_dir, final_alloc,
+            subtree_size: final_alloc, direct_file_size: 0,
+            children: Vec::new(),
+            file_attrs: e.file_attrs,
+            data_flags: combined_data_flags,
+            hard_link_count: e.hard_link_count,
+            file_name_attr_count: e.file_name_attr_count,
+            reparse_tag: e.reparse_tag,
+            has_wof_stream: combined_wof,
+            wof_stream_alloc: combined_wof_alloc,
+        });
+    }
+
+    // Build parent-child links
+    let mut child_parent: Vec<(usize, usize)> = Vec::new();
+    let mut root_indices: Vec<usize> = Vec::new();
+    for i in 0..arena.len() {
+        let (frn, pfn) = (arena[i].frn, arena[i].parent_frn);
+        if pfn == frn {
+            root_indices.push(i);
+        } else if let Some(&pi) = frn_to_idx.get(&pfn) {
+            child_parent.push((i, pi));
+        } else {
+            root_indices.push(i);
+        }
+    }
+    for (ci, pi) in child_parent {
+        arena[pi].children.push(ci);
+    }
+
+    // Post-order aggregation of subtree_size
+    let mut order: Vec<usize> = Vec::with_capacity(arena.len());
+    {
+        let mut stack: Vec<(usize, bool)> = Vec::new();
+        for &r in &root_indices { stack.push((r, false)); }
+        while let Some((idx, expanded)) = stack.pop() {
+            if expanded {
+                order.push(idx);
+            } else {
+                stack.push((idx, true));
+                for &child in arena[idx].children.iter().rev() {
+                    stack.push((child, false));
+                }
+            }
+        }
+    }
+    for &idx in &order {
+        let (subtree, pfn, frn) = {
+            let n = &arena[idx];
+            (n.subtree_size, n.parent_frn, n.frn)
+        };
+        if pfn != frn {
+            if let Some(&pi) = frn_to_idx.get(&pfn) {
+                arena[pi].subtree_size = arena[pi].subtree_size.saturating_add(subtree);
+            }
+        }
+    }
+
+    // Direct file size for each directory
+    let direct_sizes: Vec<(usize, u64)> = (0..arena.len())
+        .filter(|&i| arena[i].is_dir)
+        .map(|i| {
+            let dfs: u64 = arena[i].children.iter()
+                .filter(|&&c| !arena[c].is_dir)
+                .map(|&c| arena[c].final_alloc)
+                .sum();
+            (i, dfs)
+        })
+        .collect();
+    for (i, dfs) in direct_sizes {
+        arena[i].direct_file_size = dfs;
+    }
+
+    // Closures over arena/frn_to_idx/drive
+    let reconstruct = |start_idx: usize| -> String {
+        let mut parts: Vec<String> = Vec::new();
+        let mut cur = start_idx;
+        for _ in 0..64 {
+            let (name_opt, pfn, frn) = {
+                let n = &arena[cur];
+                (if n.frn != 5 { Some(n.name.clone()) } else { None },
+                 n.parent_frn, n.frn)
+            };
+            if let Some(nm) = name_opt { parts.push(nm); }
+            if pfn == frn {
+                let mut path = format!("{}:", drive);
+                for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
+                return path;
+            }
+            match frn_to_idx.get(&pfn) {
+                Some(&pi) => { cur = pi; }
+                None => {
+                    let mut path = String::from("(orphan)");
+                    for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
+                    return path;
+                }
+            }
+        }
+        let mut path = String::from("(deep)");
+        for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
+        path
+    };
+
+    let find_by_segments = |segments: &[&str]| -> Option<usize> {
+        let root_idx = *frn_to_idx.get(&5)?;
+        let mut cur = root_idx;
+        for seg in segments {
+            let mut found: Option<usize> = None;
+            for &ci in &arena[cur].children {
+                if arena[ci].is_dir && arena[ci].name.eq_ignore_ascii_case(seg) {
+                    found = Some(ci);
+                    break;
+                }
+            }
+            cur = found?;
+        }
+        Some(cur)
+    };
+
+    let collect_descendants = |start_idx: usize| -> Vec<usize> {
+        let mut out: Vec<usize> = Vec::new();
+        let mut stack: Vec<usize> = vec![start_idx];
+        while let Some(idx) = stack.pop() {
+            out.push(idx);
+            for &ci in &arena[idx].children {
+                stack.push(ci);
+            }
+        }
+        out
+    };
+
+    let targets: &[(&str, &[&str])] = &[
+        ("C:\\Program Files (x86)\\Microsoft\\EdgeCore",
+         &["Program Files (x86)", "Microsoft", "EdgeCore"]),
+        ("C:\\Program Files (x86)\\Microsoft Office\\root\\Office16",
+         &["Program Files (x86)", "Microsoft Office", "root", "Office16"]),
+        ("C:\\Program Files (x86)\\Microsoft Office\\root\\VFS",
+         &["Program Files (x86)", "Microsoft Office", "root", "VFS"]),
+    ];
+
+    println!("=== Program Files (x86) diagnostics ===");
+    println!("(observation only; size policy unchanged)");
+    println!();
+
+    let mut summary_notes: Vec<(String, String, String)> = Vec::new();
+
+    for (display_path, segments) in targets {
+        println!("=== PFx86 diagnostics: {} ===", display_path);
+        match find_by_segments(segments) {
+            None => {
+                println!("found: no");
+                println!();
+                summary_notes.push((display_path.to_string(), "not_found".into(), "not_found".into()));
+                continue;
+            }
+            Some(idx) => {
+                let descendants = collect_descendants(idx);
+                let desc_dirs  = descendants.iter().filter(|&&i| arena[i].is_dir).count();
+                let desc_files = descendants.iter().filter(|&&i| !arena[i].is_dir).count();
+                let (subtree_size, dfs, child_count, frn, pfn);
+                {
+                    let n = &arena[idx];
+                    subtree_size = n.subtree_size;
+                    dfs = n.direct_file_size;
+                    child_count = n.children.len();
+                    frn = n.frn;
+                    pfn = n.parent_frn;
+                }
+                println!("found: yes");
+                println!("record_index: {}", frn);
+                println!("parent_record_index: {}", pfn);
+                println!("subtree_size: {} bytes ({} MB / {:.3} GB)",
+                    subtree_size, subtree_size / 1_048_576,
+                    subtree_size as f64 / 1_073_741_824.0);
+                println!("direct_file_size: {} bytes ({} MB)", dfs, dfs / 1_048_576);
+                println!("child_count: {}", child_count);
+                println!("descendant_dirs: {}", desc_dirs);
+                println!("descendant_files: {}", desc_files);
+                println!();
+
+                // Top files with attributes
+                let mut files_sorted: Vec<usize> = descendants.iter().copied()
+                    .filter(|&i| !arena[i].is_dir && arena[i].final_alloc > 0)
+                    .collect();
+                files_sorted.sort_unstable_by(|&a, &b|
+                    arena[b].final_alloc.cmp(&arena[a].final_alloc));
+
+                println!("--- top files with attributes (top 30) ---");
+                for (rank, &i) in files_sorted.iter().take(30).enumerate() {
+                    let n = &arena[i];
+                    let fa = n.file_attrs;
+                    let df = n.data_flags;
+                    let cmp = (fa & 0x0800 != 0 || df & 0x0001 != 0) as u8;
+                    let sps = (fa & 0x0200 != 0 || df & 0x8000 != 0) as u8;
+                    let rps = (fa & 0x0400 != 0) as u8;
+                    let sys = (fa & 0x0004 != 0) as u8;
+                    let hid = (fa & 0x0002 != 0) as u8;
+                    let wof = (n.has_wof_stream || n.reparse_tag == 0x80000017) as u8;
+                    println!("{:>3}. alloc={:>6}MB rec={:<8} link={:>2} fn={:>2} cmp={} sps={} rps={} sys={} hid={} wof={} tag=0x{:08X} wof_stream={}KB",
+                        rank + 1,
+                        n.final_alloc / 1_048_576,
+                        n.frn,
+                        n.hard_link_count,
+                        n.file_name_attr_count,
+                        cmp, sps, rps, sys, hid, wof,
+                        n.reparse_tag,
+                        n.wof_stream_alloc / 1024,
+                    );
+                    println!("     {}", reconstruct(i));
+                }
+                println!();
+
+                // WOF / reparse summary
+                let reparse_records = descendants.iter().filter(|&&i| arena[i].file_attrs & 0x0400 != 0).count();
+                let wof_reparse_records = descendants.iter().filter(|&&i| arena[i].reparse_tag == 0x80000017).count();
+                let wof_stream_records = descendants.iter().filter(|&&i| arena[i].has_wof_stream).count();
+                let wof_stream_total: u64 = descendants.iter().map(|&i| arena[i].wof_stream_alloc).sum();
+
+                println!("--- WOF / reparse summary ---");
+                println!("reparse_records:      {}  (file_attrs has reparse bit 0x400)", reparse_records);
+                println!("wof_reparse_records:  {}  (reparse tag 0x80000017)", wof_reparse_records);
+                println!("wof_stream_records:   {}  (WofCompressedData named $DATA)", wof_stream_records);
+                println!("wof_stream_total:     {} MB", wof_stream_total / 1_048_576);
+
+                let mut wof_suspects: Vec<usize> = descendants.iter().copied()
+                    .filter(|&i| !arena[i].is_dir &&
+                        (arena[i].reparse_tag == 0x80000017 || arena[i].has_wof_stream))
+                    .collect();
+                wof_suspects.sort_unstable_by(|&a, &b|
+                    arena[b].final_alloc.cmp(&arena[a].final_alloc));
+                if !wof_suspects.is_empty() {
+                    println!("top wof suspects (10):");
+                    for (rank, &i) in wof_suspects.iter().take(10).enumerate() {
+                        let n = &arena[i];
+                        println!("  {}. alloc={}MB tag=0x{:08X} wof_stream={}KB | {}",
+                            rank + 1,
+                            n.final_alloc / 1_048_576,
+                            n.reparse_tag,
+                            n.wof_stream_alloc / 1024,
+                            reconstruct(i),
+                        );
+                    }
+                }
+                println!();
+
+                // compressed / sparse summary
+                let cmp_records: usize = descendants.iter().filter(|&&i| {
+                    let fa = arena[i].file_attrs; let df = arena[i].data_flags;
+                    fa & 0x0800 != 0 || df & 0x0001 != 0
+                }).count();
+                let cmp_alloc: u64 = descendants.iter().filter(|&&i| {
+                    let fa = arena[i].file_attrs; let df = arena[i].data_flags;
+                    fa & 0x0800 != 0 || df & 0x0001 != 0
+                }).map(|&i| arena[i].final_alloc).sum();
+                let sps_records: usize = descendants.iter().filter(|&&i| {
+                    let fa = arena[i].file_attrs; let df = arena[i].data_flags;
+                    fa & 0x0200 != 0 || df & 0x8000 != 0
+                }).count();
+                let sps_alloc: u64 = descendants.iter().filter(|&&i| {
+                    let fa = arena[i].file_attrs; let df = arena[i].data_flags;
+                    fa & 0x0200 != 0 || df & 0x8000 != 0
+                }).map(|&i| arena[i].final_alloc).sum();
+                println!("--- compressed / sparse summary ---");
+                println!("compressed_records:     {}", cmp_records);
+                println!("compressed_alloc_total: {} MB", cmp_alloc / 1_048_576);
+                println!("sparse_records:         {}", sps_records);
+                println!("sparse_alloc_total:     {} MB", sps_alloc / 1_048_576);
+                println!();
+
+                // hardlink / multi-name suspects
+                let link_gt1: Vec<usize> = descendants.iter().copied()
+                    .filter(|&i| !arena[i].is_dir && arena[i].hard_link_count > 1)
+                    .collect();
+                let multi_fn: usize = descendants.iter()
+                    .filter(|&&i| !arena[i].is_dir && arena[i].file_name_attr_count > 1)
+                    .count();
+                let suspect_alloc_total: u64 = link_gt1.iter()
+                    .map(|&i| arena[i].final_alloc).sum();
+
+                println!("--- hardlink / multi-name suspects ---");
+                println!("link_count_gt_1_records:  {}", link_gt1.len());
+                println!("multi_file_name_records:  {}  (>=2 $FILE_NAME attrs; may include DOS short names)", multi_fn);
+                println!("suspect_alloc_total:      {} MB  ({:.3} GB)",
+                    suspect_alloc_total / 1_048_576,
+                    suspect_alloc_total as f64 / 1_073_741_824.0);
+
+                let mut hl_sorted = link_gt1.clone();
+                hl_sorted.sort_unstable_by(|&a, &b|
+                    arena[b].final_alloc.cmp(&arena[a].final_alloc));
+                if !hl_sorted.is_empty() {
+                    println!("top hardlink suspects (10):");
+                    for (rank, &i) in hl_sorted.iter().take(10).enumerate() {
+                        let n = &arena[i];
+                        println!("  {}. alloc={}MB link={} fn={} | {}",
+                            rank + 1,
+                            n.final_alloc / 1_048_576,
+                            n.hard_link_count,
+                            n.file_name_attr_count,
+                            reconstruct(i),
+                        );
+                    }
+                }
+                println!();
+
+                // Diagnostic notes
+                let wof_share = if subtree_size > 0 {
+                    wof_stream_total as f64 / subtree_size as f64
+                } else { 0.0 };
+                let hl_share = if subtree_size > 0 {
+                    suspect_alloc_total as f64 / subtree_size as f64
+                } else { 0.0 };
+                let likely_wof = if wof_reparse_records > 0 || wof_stream_records > 0 {
+                    if wof_share > 0.2 || wof_reparse_records > 100 { "yes" } else { "partial" }
+                } else { "no" };
+                let likely_hl = if hl_share > 0.30 || link_gt1.len() > 200 {
+                    "yes"
+                } else if !link_gt1.is_empty() {
+                    "partial"
+                } else { "no" };
+                let needs_deeper = (likely_wof == "partial") || (likely_hl == "partial");
+
+                println!("--- diagnostic notes ---");
+                println!("likely WOF/compression-heavy: {}  (wof_stream share of subtree: {:.1}%)",
+                    likely_wof, wof_share * 100.0);
+                println!("likely hardlink-heavy:        {}  (hardlink-suspect share of subtree: {:.1}%)",
+                    likely_hl, hl_share * 100.0);
+                println!("needs deeper cluster-level check: {}",
+                    if needs_deeper { "yes" } else { "no" });
+                println!();
+
+                summary_notes.push((
+                    display_path.to_string(),
+                    likely_wof.to_string(),
+                    likely_hl.to_string(),
+                ));
+            }
+        }
+    }
+
+    println!("=== PFx86 diagnostics summary ===");
+    for (path, wof_note, hl_note) in &summary_notes {
+        println!("{}:", path);
+        println!("  likely WOF/compression: {}", wof_note);
+        println!("  likely hardlink:        {}", hl_note);
+    }
+    println!();
+    println!("notes:");
+    println!("- 'cmp/sps/rps/sys/hid' = $STANDARD_INFORMATION file_attributes + unnamed $DATA flag bits.");
+    println!("- 'wof' = WOF reparse tag (0x80000017) OR WofCompressedData named $DATA stream present.");
+    println!("- 'tag' = reparse tag value from resident $REPARSE_POINT (0 if absent or non-resident).");
+    println!("- 'link' = MFT record header hard_link_count (offset 0x12).");
+    println!("- 'fn' = number of $FILE_NAME attributes (may include DOS short name pairs).");
+    println!("- 'wof_stream' = WofCompressedData stream allocation (base + extension records).");
+    println!("- Sizes use the same final_alloc policy as --json output. No size correction applied.");
+
+    Ok(())
+}

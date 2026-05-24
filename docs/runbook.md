@@ -191,7 +191,37 @@ Work through these in order after building. Run as Administrator.
 
 ---
 
-## 9. Troubleshooting
+## 9. Diagnostic CLI
+
+### `--diag-pfx86` — Program Files (x86) size discrepancy probe
+
+```powershell
+.\target\release\disk-insight.exe --diag-pfx86
+```
+
+Reports WOF / reparse / compressed / sparse / hardlink / multi-name signals for
+three known-suspect subtrees:
+
+- `C:\Program Files (x86)\Microsoft\EdgeCore`
+- `C:\Program Files (x86)\Microsoft Office\root\Office16`
+- `C:\Program Files (x86)\Microsoft Office\root\VFS`
+
+Per-subtree output:
+- record_index / parent / subtree_size / descendant counts
+- top 30 files with attribute flags (cmp/sps/rps/sys/hid/wof) + hard link count
+- WOF / reparse summary (counts and totals)
+- compressed / sparse summary
+- hardlink / multi-name suspects (top 10)
+- diagnostic notes (likely WOF / hardlink / needs deeper check)
+
+**Purpose**: observation only. No size correction is applied. WizTree alignment
+is not attempted by this command. Use this to confirm whether a given subtree's
+discrepancy is dominated by WOF compression, hard links, or both.
+
+> Redirect with `cmd /c` for UTF-8 output:
+> `cmd /c ".\target\release\disk-insight.exe --diag-pfx86 > .\work\pfx86_diag.txt"`
+
+## 10. Troubleshooting
 
 ### Drive open failed / access denied
 
