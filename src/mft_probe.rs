@@ -1953,7 +1953,7 @@ pub fn probe6(drive: char) -> Result<()> {
     Ok(())
 }
 
-pub fn probe7(drive: char) -> Result<()> {
+pub fn probe7(drive: char, top_n: usize) -> Result<()> {
     use rayon::prelude::*;
     use std::collections::HashMap;
     use windows::Win32::Storage::FileSystem::{ReadFile, SetFilePointerEx, FILE_BEGIN};
@@ -2309,15 +2309,15 @@ pub fn probe7(drive: char) -> Result<()> {
         .map(|(i, _)| i)
         .collect();
     top_dir_idx.sort_unstable_by(|&a, &b| arena[b].subtree_size.cmp(&arena[a].subtree_size));
-    top_dir_idx.truncate(30);
+    top_dir_idx.truncate(top_n);
 
-    // ── Top-30 files by final_alloc ────────────────────────────────────────
+    // ── Top-N files by final_alloc ────────────────────────────────────────
     let mut top_file_idx: Vec<usize> = arena.iter().enumerate()
         .filter(|(_, n)| !n.is_dir && n.final_alloc > 0)
         .map(|(i, _)| i)
         .collect();
     top_file_idx.sort_unstable_by(|&a, &b| arena[b].final_alloc.cmp(&arena[a].final_alloc));
-    top_file_idx.truncate(30);
+    top_file_idx.truncate(top_n);
 
     // ── Path reconstruction (depth-limited, no HashSet) ───────────────────
     let reconstruct_path = |start_idx: usize| -> String {
@@ -2379,14 +2379,14 @@ pub fn probe7(drive: char) -> Result<()> {
     println!("    aggregation: {:.2}秒", agg_elapsed.as_secs_f64());
     println!("    total:       {:.2}秒", total_elapsed.as_secs_f64());
     println!();
-    println!("--- top 30 directories by subtree_size ---");
+    println!("--- top {} directories by subtree_size ---", top_n);
     for (rank, &idx) in top_dir_idx.iter().enumerate() {
         let subtree_mb = arena[idx].subtree_size / 1_048_576;
         let path = reconstruct_path(idx);
         println!("{:>3}. {:>8}MB  {}", rank + 1, subtree_mb, path);
     }
     println!();
-    println!("--- top 30 files by final_allocated_size ---");
+    println!("--- top {} files by final_allocated_size ---", top_n);
     for (rank, &idx) in top_file_idx.iter().enumerate() {
         let alloc_mb = arena[idx].final_alloc / 1_048_576;
         let path = reconstruct_path(idx);
@@ -2885,10 +2885,16 @@ pub fn probe7_json(drive: char) -> Result<()> {
     Ok(())
 }
 
-pub fn print_probe7_human(drive: char) -> Result<()> {
-    probe7(drive)
+pub fn print_probe7_human(drive: char, top_n: usize) -> Result<()> {
+    probe7(drive, top_n)
 }
 
 pub fn print_probe7_json(drive: char) -> Result<()> {
     probe7_json(drive)
+}
+
+pub fn print_probe7_json_top(drive: char, top_n: usize) -> Result<()> {
+    let output = build_mft_tree_output(drive, top_n)?;
+    println!("{}", serde_json::to_string_pretty(&output)?);
+    Ok(())
 }
