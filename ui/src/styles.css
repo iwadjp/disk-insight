@@ -110,18 +110,19 @@ h2 {
 }
 
 .table-wrap {
-  overflow-x: auto;
+  max-height: 460px;
+  overflow: auto;
 }
 
 table {
   width: 100%;
-  min-width: 760px;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 th,
 td {
-  padding: 10px 16px;
+  padding: 9px 14px;
   border-bottom: 1px solid #edf1f5;
   text-align: left;
   vertical-align: top;
@@ -129,11 +130,15 @@ td {
 }
 
 th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   color: #465563;
   background: #f8fafc;
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
+  box-shadow: 0 1px 0 #d9e1e8;
 }
 
 tbody tr:last-child td {
@@ -141,9 +146,29 @@ tbody tr:last-child td {
 }
 
 .path {
-  max-width: 760px;
   font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.28;
   overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.numeric {
+  width: 150px;
+  font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.directories-table th:nth-child(4),
+.directories-table td:nth-child(4) {
+  width: 96px;
+}
+
+.files-table th:nth-child(2),
+.files-table td:nth-child(2) {
+  width: 170px;
 }
 
 .error,
@@ -169,6 +194,15 @@ tbody tr:last-child td {
   .summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .numeric {
+    width: 128px;
+  }
+
+  .directories-table th:nth-child(4),
+  .directories-table td:nth-child(4) {
+    width: 84px;
+  }
 }
 
 @media (max-width: 560px) {
@@ -179,5 +213,15 @@ tbody tr:last-child td {
 
   .summary {
     grid-template-columns: 1fr;
+  }
+
+  th,
+  td {
+    padding: 8px 10px;
+  }
+
+  .numeric {
+    width: 112px;
+    font-size: 12px;
   }
 }

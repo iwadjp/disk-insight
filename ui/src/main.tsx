@@ -87,22 +87,22 @@ function DirectoriesTable({ rows }: { rows: DirectoryEntry[] }) {
         <span>{rows.length} rows</span>
       </div>
       <div className="table-wrap">
-        <table>
+        <table className="directories-table">
           <thead>
             <tr>
               <th>Path</th>
-              <th>Subtree size</th>
-              <th>Direct file size</th>
-              <th>Children</th>
+              <th className="numeric">Subtree size</th>
+              <th className="numeric">Direct file size</th>
+              <th className="numeric">Children</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.record_index}>
                 <td className="path">{row.path}</td>
-                <td>{formatBytes(row.subtree_size)}</td>
-                <td>{formatBytes(row.direct_file_size)}</td>
-                <td>{formatNumber(row.child_count)}</td>
+                <td className="numeric">{formatBytes(row.subtree_size)}</td>
+                <td className="numeric">{formatBytes(row.direct_file_size)}</td>
+                <td className="numeric">{formatNumber(row.child_count)}</td>
               </tr>
             ))}
           </tbody>
@@ -120,18 +120,18 @@ function FilesTable({ rows }: { rows: FileEntry[] }) {
         <span>{rows.length} rows</span>
       </div>
       <div className="table-wrap">
-        <table>
+        <table className="files-table">
           <thead>
             <tr>
               <th>Path</th>
-              <th>Allocated size</th>
+              <th className="numeric">Allocated size</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.record_index}>
                 <td className="path">{row.path}</td>
-                <td>{formatBytes(row.final_allocated_size)}</td>
+                <td className="numeric">{formatBytes(row.final_allocated_size)}</td>
               </tr>
             ))}
           </tbody>

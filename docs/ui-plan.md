@@ -12,6 +12,14 @@ The UI loads a small committed sample from `public/sample/probe7.sample.json` an
 
 The viewer does not start a real scan yet. It does not call Rust core APIs from the UI yet.
 
+## D-2 readability improvements
+
+D-2 improves the sample viewer tables without changing the app flow:
+
+- sticky table headers inside scrollable table containers
+- improved path readability with wrapping and monospace rendering
+- monospace, right-aligned numeric table columns
+
 ## Next candidates
 
 - Add a Tauri command that calls `build_mft_tree_output`.
