@@ -29,6 +29,15 @@ D-3a changes the sample viewer data path from frontend `fetch` to Tauri `invoke`
 - real scan commands are not implemented yet
 - `build_mft_tree_output` is not called from the UI yet
 
+## D-3a follow-up browser dev fallback
+
+The sample viewer keeps Tauri `invoke` as the preferred runtime path.
+
+- Tauri runtime uses the `load_sample_json` command
+- normal browsers do not expose the Tauri invoke bridge
+- browser dev fallback uses `fetch("/sample/probe7.sample.json")`
+- real scan commands are still not implemented
+
 ## Next candidates
 
 - Add a Tauri command that calls `build_mft_tree_output`.

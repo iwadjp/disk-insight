@@ -40,6 +40,29 @@ type DiskInsightOutput = {
   top_files: FileEntry[];
 };
 
+type TauriWindow = Window & {
+  __TAURI__?: unknown;
+  __TAURI_INTERNALS__?: unknown;
+};
+
+function isTauriRuntime(): boolean {
+  const tauriWindow = window as TauriWindow;
+  return Boolean(tauriWindow.__TAURI__ || tauriWindow.__TAURI_INTERNALS__);
+}
+
+async function loadSampleData(): Promise<DiskInsightOutput> {
+  if (isTauriRuntime()) {
+    return invoke<DiskInsightOutput>("load_sample_json");
+  }
+
+  // Browser dev fallback: normal browsers do not expose the Tauri invoke bridge.
+  const response = await fetch("/sample/probe7.sample.json");
+  if (!response.ok) {
+    throw new Error(`Failed to load sample JSON: ${response.status}`);
+  }
+  return response.json() as Promise<DiskInsightOutput>;
+}
+
 function formatBytes(bytes: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
   let value = bytes;
@@ -147,7 +170,7 @@ function App() {
   useEffect(() => {
     let ignore = false;
 
-    invoke<DiskInsightOutput>("load_sample_json")
+    loadSampleData()
       .then((json) => {
         if (!ignore) {
           setData(json);
@@ -171,7 +194,7 @@ function App() {
           <h1>disk-insight</h1>
           <p>Sample JSON viewer</p>
         </div>
-        <span className="source">Tauri command: load_sample_json</span>
+        <span className="source">Tauri command: load_sample_json / browser dev fallback</span>
       </header>
 
       {error && <div className="error">{error}</div>}
