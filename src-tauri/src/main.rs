@@ -4,6 +4,14 @@ use std::path::Path;
 use std::sync::Mutex;
 use tauri::State;
 
+#[derive(serde::Serialize)]
+struct DriveInfo {
+    letter: String,
+    root: String,
+    display: String,
+    drive_type: String,
+}
+
 const SAMPLE_JSON: &str = include_str!("../../public/sample/probe7.sample.json");
 
 // Live scan cache. scan_drive populates this on success; get_children reads
@@ -96,6 +104,36 @@ fn select_in_explorer(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn list_drives() -> Vec<DriveInfo> {
+    use windows::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives};
+    use windows::core::PCWSTR;
+
+    let mut drives = Vec::new();
+    let mask = unsafe { GetLogicalDrives() };
+
+    for i in 0u32..26 {
+        if mask & (1 << i) != 0 {
+            let letter = char::from(b'A' + i as u8);
+            let root = format!("{}:\\", letter);
+            let display = format!("{}:", letter);
+            let root_wide: Vec<u16> = root.encode_utf16().chain(std::iter::once(0)).collect();
+            let dt = unsafe { GetDriveTypeW(PCWSTR::from_raw(root_wide.as_ptr())) };
+            let drive_type = match dt {
+                2 => "removable",
+                3 => "fixed",
+                4 => "remote",
+                5 => "cdrom",
+                6 => "ramdisk",
+                _ => "unknown",
+            }
+            .to_string();
+            drives.push(DriveInfo { letter: letter.to_string(), root, display, drive_type });
+        }
+    }
+    drives
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(AppState::default())
@@ -105,6 +143,7 @@ fn main() {
             open_in_explorer,
             select_in_explorer,
             get_children,
+            list_drives,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run disk-insight UI");

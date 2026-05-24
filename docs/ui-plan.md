@@ -549,6 +549,46 @@ Explorer-style TreeView. The existing folder navigation sidebar is not replaced.
 - Existing folder nav (top_directories) is unchanged.
 - Full lazy TreeView is planned for E-1b and later phases.
 
+## G-1 Drive auto detection and selector
+
+G-1 replaces the drive letter text input with a `<select>` populated by
+the logical drives detected on the system at startup.
+
+### Rust side
+
+- Added `DriveInfo` struct (`letter`, `root`, `display`, `drive_type`) with `serde::Serialize`.
+- Added `list_drives() -> Vec<DriveInfo>` Tauri command.
+  - Calls `GetLogicalDrives()` to get the 26-bit drive mask.
+  - For each set bit, computes the drive letter and calls `GetDriveTypeW` to classify:
+    `fixed` / `removable` / `remote` / `cdrom` / `ramdisk` / `unknown`.
+  - Returns all detected logical drives in alphabetical order.
+- Added `windows = { version = "0.61", features = ["Win32_Storage_FileSystem"] }`
+  and `serde = { version = "1", features = ["derive"] }` to `src-tauri/Cargo.toml`.
+
+### UI side
+
+- Added `DriveInfo` TypeScript type.
+- Added `drives: DriveInfo[]` state in `App`, initialized to `[C: fallback]`.
+- On mount (`useEffect`), calls `invoke("list_drives")` in Tauri runtime:
+  - On success: updates `drives` state; sets `driveInput` to C if present,
+    otherwise to the first detected drive.
+  - On failure (or browser): silently keeps the C fallback.
+- Replaced `<input className="drive-input">` with `<select className="top-select">`,
+  rendering one `<option>` per drive (value = letter, display = `C:`).
+- `handleScan` and the Scan button label continue to use `driveInput` unchanged.
+- `parseDriveLetter(driveInput)` still validates before scan.
+
+### Scope guard
+
+- NTFS detection is not implemented. Non-NTFS drives fail at scan time with the
+  existing MFT open error.
+- Free/used space display, drive capacity, and a "refresh drives" button
+  are not implemented.
+- Normal browser runtime shows C: fallback and works correctly.
+- No delete, right-click menu, Treemap, virtual scroll, or drive auto-refresh.
+
+---
+
 ## F-1 follow-up: Select file status message
 
 F-1 follow-up adds a short success message when "Select file" is invoked, so
@@ -807,6 +847,7 @@ click, the clicked row is highlighted and the card shows the correct full path.
 | E-5 | TreeView safety guards（duplicate guard、per-node error、large folder warning） |
 | F-1 | top files に Select file 追加（Explorer `/select,file` でファイル選択表示） |
 | F-1 FU | Select file 成功時ステータスメッセージ表示（Explorer 背面表示の無反応感を軽減） |
+| G-1 | Drive 自動検出（GetLogicalDrives / GetDriveTypeW）、Drive selector 化 |
 
 ---
 

@@ -16,7 +16,7 @@ The tool is safe to use for disk analysis. Destructive operations are not implem
 - Aggregate subtree sizes for all directories
 - Show top directories by size
 - Show top files by allocated size
-- Drive letter and top-N count are configurable
+- Drive letter auto-detected from logical drives; top-N count configurable
 - Tauri desktop UI with:
   - Live scan and sample data view
   - Folder navigation sidebar
@@ -32,7 +32,7 @@ The tool is safe to use for disk analysis. Destructive operations are not implem
 - Treemap visualization
 - Right-click context menu
 - `explorer /select` file highlighting for folders (available for top files only)
-- Automatic enumeration of available drives
+- Drive capacity / free space display
 - Full accuracy for WinSxS, WOF-compressed files, and hard links
 
 ---

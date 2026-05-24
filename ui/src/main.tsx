@@ -60,6 +60,13 @@ type DiskInsightOutput = {
   root_children?: TreeNode[];
 };
 
+type DriveInfo = {
+  letter: string;
+  root: string;
+  display: string;
+  drive_type: string;
+};
+
 type TauriWindow = Window & {
   __TAURI__?: unknown;
   __TAURI_INTERNALS__?: unknown;
@@ -588,6 +595,9 @@ function App() {
   const [isScanError, setIsScanError] = useState(false);
   const [sourceKind, setSourceKind] = useState<SourceKind | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [drives, setDrives] = useState<DriveInfo[]>([
+    { letter: "C", root: "C:\\", display: "C:", drive_type: "unknown" },
+  ]);
   const [driveInput, setDriveInput] = useState("C");
   const [topN, setTopN] = useState(100);
   const [scanTopN, setScanTopN] = useState<number | null>(null);
@@ -756,6 +766,19 @@ function App() {
 
   useEffect(() => {
     runLoad(loadSampleData, "Loading sample data...", false, "sample");
+    if (isTauriRuntime()) {
+      invoke<DriveInfo[]>("list_drives")
+        .then((detected) => {
+          if (detected.length > 0) {
+            setDrives(detected);
+            const hasC = detected.some((d) => d.letter === "C");
+            setDriveInput(hasC ? "C" : detected[0].letter);
+          }
+        })
+        .catch(() => {
+          // Keep C fallback silently
+        });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -768,13 +791,16 @@ function App() {
         <div className="toolbar">
           <label className="toolbar-label">
             Drive
-            <input
-              className="drive-input"
+            <select
+              className="top-select"
               value={driveInput}
               onChange={(e) => setDriveInput(e.target.value)}
               disabled={isLoading}
-              maxLength={2}
-            />
+            >
+              {drives.map((d) => (
+                <option key={d.letter} value={d.letter}>{d.display}</option>
+              ))}
+            </select>
           </label>
           <label className="toolbar-label">
             Top

@@ -140,7 +140,9 @@ Work through these in order after building. Run as Administrator.
 
 - [ ] Load sample — sample data appears, status shows "Sample data"
 - [ ] Scan C: — scan runs and completes, status shows "Live scan: C:"
-- [ ] Drive input accepts `C`, `C:`, `c` (normalized to uppercase)
+- [ ] Drive selector shows detected drives (C: and any others present)
+- [ ] C: is pre-selected on startup
+- [ ] Scan button label updates when a different drive is selected
 - [ ] Top selector changes top-N on next scan
 
 ### Scan UX
@@ -185,7 +187,7 @@ Work through these in order after building. Run as Administrator.
 | Virtual scroll | Not implemented |
 | Delete | Not implemented |
 | `explorer /select` | Implemented for top files (F-1). Not available for folders. |
-| Drive detection | No automatic enumeration; enter drive letter manually |
+| Drive detection | Automatic via GetLogicalDrives; C fallback in browser |
 
 ---
 
