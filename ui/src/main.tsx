@@ -49,6 +49,8 @@ type VisibleTreeRow = {
   node: TreeNode;
   depth: number;
   isEmpty?: true;
+  nodeError?: string;
+  largeWarning?: number;
 };
 
 type DiskInsightOutput = {
@@ -66,6 +68,8 @@ type TauriWindow = Window & {
 type SourceKind = "sample" | "live";
 
 const TOP_OPTIONS = [10, 30, 50, 100, 200, 500];
+const LARGE_FOLDER_THRESHOLD = 200;
+const LARGE_TREE_THRESHOLD = 1000;
 
 function parseDriveLetter(input: string): string | null {
   const s = input.trim().replace(/:$/, "");
@@ -136,19 +140,28 @@ function buildVisibleRows(
   rootChildren: TreeNode[],
   expandedIds: Set<number>,
   childrenByParent: Record<number, TreeNode[]>,
+  childrenErrors: Record<number, string>,
 ): VisibleTreeRow[] {
   const rows: VisibleTreeRow[] = [];
   function visit(nodes: TreeNode[], depth: number) {
     for (const node of nodes) {
       rows.push({ node, depth });
-      if (node.is_directory && expandedIds.has(node.record_index)) {
-        const children = childrenByParent[node.record_index];
-        if (children) {
-          if (children.length === 0) {
-            rows.push({ node, depth: depth + 1, isEmpty: true });
-          } else {
-            visit(children, depth + 1);
+      if (node.is_directory) {
+        const id = node.record_index;
+        if (expandedIds.has(id)) {
+          const children = childrenByParent[id];
+          if (children) {
+            if (children.length === 0) {
+              rows.push({ node, depth: depth + 1, isEmpty: true });
+            } else {
+              if (children.length > LARGE_FOLDER_THRESHOLD) {
+                rows.push({ node, depth: depth + 1, largeWarning: children.length });
+              }
+              visit(children, depth + 1);
+            }
           }
+        } else if (childrenErrors[id]) {
+          rows.push({ node, depth: depth + 1, nodeError: childrenErrors[id] });
         }
       }
     }
@@ -378,6 +391,23 @@ function TreeView({
               >
                 (empty)
               </div>
+            ) : row.nodeError ? (
+              <div
+                key={`error-${row.node.record_index}`}
+                className="tree-node-error"
+                style={{ paddingLeft: 8 + row.depth * 16 }}
+              >
+                Failed to load children: {row.nodeError}
+              </div>
+            ) : row.largeWarning !== undefined ? (
+              <div
+                key={`large-${row.node.record_index}`}
+                className="tree-large-warning"
+                style={{ paddingLeft: 8 + row.depth * 16 }}
+              >
+                Large folder: {formatNumber(row.largeWarning)} children loaded.
+                Virtual scrolling is not enabled yet.
+              </div>
             ) : (
               <TreeNodeRow
                 key={row.node.record_index}
@@ -396,8 +426,11 @@ function TreeView({
       {treeError && (
         <div className="folder-nav-footer folder-nav-footer--error">{treeError}</div>
       )}
-      <div className="folder-nav-footer">
-        Root children: {rootCount} · Visible rows: {visibleRows.length}
+      <div className={visibleRows.length >= LARGE_TREE_THRESHOLD
+        ? "folder-nav-footer folder-nav-footer--warn"
+        : "folder-nav-footer"}>
+        Root children: {rootCount} · Visible rows: {formatNumber(visibleRows.length)}
+        {visibleRows.length >= LARGE_TREE_THRESHOLD && " — consider collapsing folders."}
       </div>
     </aside>
   );
@@ -542,11 +575,12 @@ function App() {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
   const [childrenByParent, setChildrenByParent] = useState<Record<number, TreeNode[]>>({});
+  const [childrenErrors, setChildrenErrors] = useState<Record<number, string>>({});
   const [treeError, setTreeError] = useState<string | null>(null);
 
   const visibleRows = useMemo(
-    () => buildVisibleRows(data?.root_children ?? [], expandedIds, childrenByParent),
-    [data?.root_children, expandedIds, childrenByParent],
+    () => buildVisibleRows(data?.root_children ?? [], expandedIds, childrenByParent, childrenErrors),
+    [data?.root_children, expandedIds, childrenByParent, childrenErrors],
   );
 
   function runLoad(
@@ -563,6 +597,7 @@ function App() {
     setExpandedIds(new Set());
     setLoadingIds(new Set());
     setChildrenByParent({});
+    setChildrenErrors({});
     setTreeError(null);
     loader()
       .then((json) => {
@@ -612,12 +647,23 @@ function App() {
       return;
     }
 
+    // Duplicate request guard: do not fire if already loading
+    if (loadingIds.has(id)) return;
+
     // Need to fetch — only available on live scan
     if (sourceKind !== "live") {
       setTreeError("Live scan required to load children. Run a scan in the Tauri app.");
       return;
     }
 
+    // Clear any previous per-node error before retrying
+    if (childrenErrors[id] !== undefined) {
+      setChildrenErrors((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
     setTreeError(null);
     setLoadingIds((prev) => {
       const next = new Set(prev);
@@ -635,7 +681,10 @@ function App() {
         });
       })
       .catch((err: unknown) => {
-        setTreeError(err instanceof Error ? err.message : String(err));
+        setChildrenErrors((prev) => ({
+          ...prev,
+          [id]: err instanceof Error ? err.message : String(err),
+        }));
       })
       .finally(() => {
         setLoadingIds((prev) => {

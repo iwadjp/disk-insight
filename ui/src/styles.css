@@ -546,6 +546,28 @@ tbody tr:last-child td {
   border-top-color: #e2a9a9;
 }
 
+.folder-nav-footer--warn {
+  color: #92400e;
+  background: #fffbeb;
+  border-top-color: #fde68a;
+}
+
+.tree-node-error {
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #9b1c1c;
+  font-style: italic;
+  border-bottom: 1px solid #edf1f5;
+}
+
+.tree-large-warning {
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #92400e;
+  font-style: italic;
+  border-bottom: 1px solid #edf1f5;
+}
+
 /* ── Right pane ── */
 .content-right {
   flex: 1;

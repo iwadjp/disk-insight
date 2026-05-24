@@ -549,6 +549,60 @@ Explorer-style TreeView. The existing folder navigation sidebar is not replaced.
 - Existing folder nav (top_directories) is unchanged.
 - Full lazy TreeView is planned for E-1b and later phases.
 
+## E-5 TreeView safety guards
+
+E-5 adds minimum safety guards to the lazy TreeView without adding virtual
+scroll or changing the user-visible layout significantly.
+
+### Duplicate request guard
+
+- `handleToggleExpand` checks `loadingIds.has(id)` before firing `get_children`.
+  If the node is already loading, the handler returns immediately. This prevents
+  duplicate Tauri command calls on rapid toggle clicks.
+- The existing `disabled` prop on the toggle button provides UI-level protection;
+  this guard is the code-level backstop.
+
+### Per-node error display
+
+- Added `childrenErrors: Record<number, string>` state in `App`.
+- On `get_children` failure, the error is stored per node in `childrenErrors`
+  instead of (only) the shared `treeError` slot.
+- `buildVisibleRows` emits a `nodeError` placeholder row at `depth + 1` for
+  directories whose load failed.
+- A retry (clicking the toggle again) clears the per-node error, re-enters the
+  loading path, and fires a new `get_children` call.
+- `childrenErrors` is reset alongside other tree state on every `runLoad`.
+
+### Large folder warning
+
+- `LARGE_FOLDER_THRESHOLD = 200` children.
+- When an expanded directory has more than 200 children, `buildVisibleRows`
+  emits a `largeWarning` row before the children rows.
+- Display: `"Large folder: N children loaded. Virtual scrolling is not enabled yet."`
+- Children are still fully shown — this is a warning only. Virtual scroll is E-6.
+
+### Visible-rows count warning
+
+- `LARGE_TREE_THRESHOLD = 1000` visible rows.
+- Footer shows `Visible rows: N — consider collapsing folders.` in amber when
+  `visibleRows.length >= 1000`.
+- Below threshold: `Root children: N · Visible rows: N` (unchanged).
+
+### VisibleTreeRow additions
+
+- `nodeError?: string` — error message for a failed `get_children` load.
+- `largeWarning?: number` — child count when a parent exceeds the threshold.
+
+### What is NOT in E-5
+
+- Virtual scroll is still not implemented (E-6).
+- `expand all` is not implemented and must not be added.
+- User-driven expansion only — no programmatic or automatic expansion.
+- Rust core, Tauri commands, JSON schema unchanged.
+- No delete, `explorer /select`, right-click menu, or Treemap.
+
+---
+
 ## E-4 Flattened visible-tree list
 
 E-4 replaces the recursive `TreeNodeRow` render with a flat `visibleRows`
@@ -680,6 +734,7 @@ click, the clicked row is highlighted and the card shows the correct full path.
 | E-2 FU | TreeView 選択動作の確認・整理（stopPropagation、label click で selected folder 更新） |
 | E-3 | TreeView performance plan 作成（docs/treeview-performance-plan.md、実装なし） |
 | E-4 | visibleRows flat list 導入（非再帰 render、virtual scroll 前提構造） |
+| E-5 | TreeView safety guards（duplicate guard、per-node error、large folder warning） |
 
 ---
 

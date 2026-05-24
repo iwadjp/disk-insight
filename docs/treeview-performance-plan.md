@@ -377,3 +377,24 @@ E-4 introduced `buildVisibleRows` and `VisibleTreeRow` in `ui/src/main.tsx`.
 
 **Next step**: E-5 safety limits — child-count chips, large-node warnings,
 duplicate-request guard tightening, and optional "Collapse all" affordance.
+
+---
+
+## E-5 implementation note
+
+E-5 delivered the safety limits described above.
+
+- **Duplicate request guard**: `loadingIds.has(id)` check added to `handleToggleExpand`
+  before the `get_children` call. The toggle `disabled` prop is the UI guard; this is
+  the code-level backstop.
+- **Per-node error**: `childrenErrors: Record<number, string>` state in App. On failure,
+  `buildVisibleRows` emits a `nodeError` row at depth+1. Retry clears the error and
+  re-fires the fetch.
+- **Large folder warning**: `LARGE_FOLDER_THRESHOLD = 200`. A `largeWarning` row is
+  emitted before children rows when a parent exceeds the threshold. Children are still
+  shown in full — virtual scroll is E-6.
+- **Visible-rows footer warning**: `LARGE_TREE_THRESHOLD = 1000`. Footer turns amber
+  with "consider collapsing folders." text.
+- No new dependencies. Rust core, Tauri commands, JSON schema unchanged.
+- E-6 virtual scroll PoC can now be approached with all E-3 invariants and E-5
+  safety rails in place.
