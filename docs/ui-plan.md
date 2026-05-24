@@ -214,6 +214,29 @@ D-6 filters the right-pane tables by the selected folder using the existing
 - No additional backend call or full-tree traversal.
 - No virtual scroll, delete action, Explorer open, or right-click menu.
 
+## D-6 follow-up: Windows path font rendering fix
+
+D-6 follow-up fixes backslash characters in section headings rendering as
+the yen sign (¥) on Japanese Windows where Inter/sans-serif maps U+005C to ¥.
+
+### CSS
+
+- Added `.heading-path` class: inherits `font-weight` and `font-size` from
+  the heading but overrides `font-family` with Consolas/Cascadia Mono/monospace.
+
+### main.tsx
+
+- `DirectoriesTable` and `FilesTable` `title` prop widened from `string` to
+  `React.ReactNode`.
+- When a non-root folder is selected, the path segment in the `<h2>` title is
+  wrapped in `<span className="heading-path">` so backslashes render as `\`.
+- Drive-root titles (`"Top directories"`, `"Top files"`) remain plain strings.
+
+### Scope guard
+
+- No layout changes.
+- No changes to MFT scan logic or data model.
+
 ## Next candidates
 
 - Add Explorer open for the selected folder.

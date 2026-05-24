@@ -218,7 +218,7 @@ function SelectedFolderCard({ dir }: { dir: DirectoryEntry }) {
   );
 }
 
-function DirectoriesTable({ rows, title }: { rows: DirectoryEntry[]; title: string }) {
+function DirectoriesTable({ rows, title }: { rows: DirectoryEntry[]; title: React.ReactNode }) {
   return (
     <section className="table-section">
       <div className="section-header">
@@ -251,7 +251,7 @@ function DirectoriesTable({ rows, title }: { rows: DirectoryEntry[]; title: stri
   );
 }
 
-function FilesTable({ rows, title }: { rows: FileEntry[]; title: string }) {
+function FilesTable({ rows, title }: { rows: FileEntry[]; title: React.ReactNode }) {
   return (
     <section className="table-section">
       <div className="section-header">
@@ -445,7 +445,7 @@ function App() {
                 }
                 title={
                   selectedDir && !isDriveRoot(selectedDir.path)
-                    ? `Top directories under ${selectedDir.path}`
+                    ? <>Top directories under <span className="heading-path">{selectedDir.path}</span></>
                     : "Top directories"
                 }
               />
@@ -457,7 +457,7 @@ function App() {
                 }
                 title={
                   selectedDir && !isDriveRoot(selectedDir.path)
-                    ? `Top files under ${selectedDir.path}`
+                    ? <>Top files under <span className="heading-path">{selectedDir.path}</span></>
                     : "Top files"
                 }
               />

@@ -48,6 +48,13 @@ h2 {
   font-weight: 650;
 }
 
+/* Windows path inside a heading — forces backslash rendering on JA locale */
+.heading-path {
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-weight: inherit;
+  font-size: inherit;
+}
+
 .app-header p,
 .source,
 .section-header span,
