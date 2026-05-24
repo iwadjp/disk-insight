@@ -38,10 +38,37 @@ The sample viewer keeps Tauri `invoke` as the preferred runtime path.
 - browser dev fallback uses `fetch("/sample/probe7.sample.json")`
 - real scan commands are still not implemented
 
+## D-3b-1 Scan command wiring
+
+D-3b-1 wires the Tauri `scan_drive` command to the React UI.
+
+### Rust side
+
+- Made `disk-insight` a library crate (`[lib]` in Cargo.toml, `src/lib.rs`).
+- `src-tauri` depends on `disk-insight = { path = ".." }`.
+- Added `scan_drive(drive: String, top: Option<usize>) -> Result<JsonTreeOutput, String>` Tauri command.
+- Internally calls `build_mft_tree_output(drive_char, top_n)` from `disk_insight::mft_probe`.
+- Errors are returned as String to the frontend.
+
+### UI side
+
+- Added "Load sample" and "Scan C:" buttons in the app header toolbar.
+- "Load sample" calls the existing `load_sample_json` command (or browser fetch fallback).
+- "Scan C:" calls `scan_drive("C", 100)` in Tauri runtime. In a normal browser it shows an error.
+- Buttons are disabled while loading or scanning.
+- Loading message: "Loading sample data..." or "Scanning C: ..."
+- On error: displays the error message. For scan errors, adds hint: "Please run the app as administrator."
+
+### Scope guard
+
+- Real scan targets C drive only (no drive selection UI yet).
+- Top count is fixed at 100 (no UI control).
+- No progress bar, cancel button, TreeView, delete action, or Explorer open.
+- Admin rights are required for MFT access; errors surface via the error display.
+
 ## Next candidates
 
-- Add a Tauri command that calls `build_mft_tree_output`.
-- Add a scan button.
+- Add drive selection UI.
 - Add a TreeView for directory navigation.
 - Add Explorer open support.
 - Keep delete actions for a later phase.

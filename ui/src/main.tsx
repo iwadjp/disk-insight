@@ -54,7 +54,6 @@ async function loadSampleData(): Promise<DiskInsightOutput> {
   if (isTauriRuntime()) {
     return invoke<DiskInsightOutput>("load_sample_json");
   }
-
   // Browser dev fallback: normal browsers do not expose the Tauri invoke bridge.
   const response = await fetch("/sample/probe7.sample.json");
   if (!response.ok) {
@@ -63,17 +62,24 @@ async function loadSampleData(): Promise<DiskInsightOutput> {
   return response.json() as Promise<DiskInsightOutput>;
 }
 
+async function scanDrive(drive: string, top: number): Promise<DiskInsightOutput> {
+  if (!isTauriRuntime()) {
+    throw new Error("Real scan is available only in the Tauri app.");
+  }
+  return invoke<DiskInsightOutput>("scan_drive", { drive, top });
+}
+
 function formatBytes(bytes: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
   let value = bytes;
   let unitIndex = 0;
-
   while (value >= 1024 && unitIndex < units.length - 1) {
     value /= 1024;
     unitIndex += 1;
   }
-
-  return unitIndex === 0 ? `${value} ${units[unitIndex]}` : `${value.toFixed(1)} ${units[unitIndex]}`;
+  return unitIndex === 0
+    ? `${value} ${units[unitIndex]}`
+    : `${value.toFixed(1)} ${units[unitIndex]}`;
 }
 
 function formatNumber(value: number): string {
@@ -86,9 +92,8 @@ function SummaryCard({ summary }: { summary: Summary }) {
     ["Allocated", formatBytes(summary.total_final_allocated)],
     ["Files", formatNumber(summary.files)],
     ["Directories", formatNumber(summary.directories)],
-    ["Total time", `${formatNumber(summary.total_time_ms)} ms`]
+    ["Total time", `${formatNumber(summary.total_time_ms)} ms`],
   ];
-
   return (
     <section className="summary" aria-label="Scan summary">
       {items.map(([label, value]) => (
@@ -165,42 +170,69 @@ function FilesTable({ rows }: { rows: FileEntry[] }) {
 
 function App() {
   const [data, setData] = useState<DiskInsightOutput | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadingMsg, setLoadingMsg] = useState("Loading sample data...");
   const [error, setError] = useState<string | null>(null);
+  const [isScanError, setIsScanError] = useState(false);
 
-  useEffect(() => {
-    let ignore = false;
-
-    loadSampleData()
+  function runLoad(loader: () => Promise<DiskInsightOutput>, msg: string, isScan: boolean) {
+    setIsLoading(true);
+    setLoadingMsg(msg);
+    setError(null);
+    setIsScanError(false);
+    loader()
       .then((json) => {
-        if (!ignore) {
-          setData(json);
-        }
+        setData(json);
+        setIsLoading(false);
       })
       .catch((err: unknown) => {
-        if (!ignore) {
-          setError(`Failed to load sample data: ${err instanceof Error ? err.message : String(err)}`);
-        }
+        setError(err instanceof Error ? err.message : String(err));
+        setIsScanError(isScan);
+        setIsLoading(false);
       });
+  }
 
-    return () => {
-      ignore = true;
-    };
+  useEffect(() => {
+    runLoad(loadSampleData, "Loading sample data...", false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
     <main className="app">
       <header className="app-header">
-        <div>
-          <h1>disk-insight</h1>
-          <p>Sample JSON viewer</p>
+        <h1>disk-insight</h1>
+        <div className="toolbar">
+          <button
+            className="btn"
+            onClick={() => runLoad(loadSampleData, "Loading sample data...", false)}
+            disabled={isLoading}
+          >
+            Load sample
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => runLoad(() => scanDrive("C", 100), "Scanning C: ...", true)}
+            disabled={isLoading}
+          >
+            Scan C:
+          </button>
         </div>
-        <span className="source">Tauri command: load_sample_json / browser dev fallback</span>
       </header>
 
-      {error && <div className="error">{error}</div>}
-      {!data && !error && <div className="loading">Loading sample JSON...</div>}
+      {isLoading && <div className="loading">{loadingMsg}</div>}
 
-      {data && (
+      {error && (
+        <div className="error">
+          <div>{error}</div>
+          {isScanError && (
+            <div className="error-hint">
+              Please run the app as administrator (required for MFT access).
+            </div>
+          )}
+        </div>
+      )}
+
+      {data && !isLoading && (
         <>
           <SummaryCard summary={data.summary} />
           <DirectoriesTable rows={data.top_directories} />

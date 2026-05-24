@@ -1,11 +1,8 @@
 //! disk-insight - WizTree風高速ディスク分析ツール
 //! 実行には管理者権限が必要です。
 
-mod mft;
-mod mft_probe;
-mod mft_raw;
-
 use anyhow::Result;
+use disk_insight::mft_probe;
 
 fn print_help() {
     eprintln!("disk-insight - WizTree風高速ディスク分析ツール");

@@ -3,6 +3,10 @@ name = "disk-insight"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "disk_insight"
+path = "src/lib.rs"
+
 [[bin]]
 name = "disk-insight"
 path = "src/main.rs"

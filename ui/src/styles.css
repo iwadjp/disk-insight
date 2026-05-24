@@ -171,6 +171,47 @@ tbody tr:last-child td {
   width: 170px;
 }
 
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.btn {
+  padding: 7px 16px;
+  border: 1px solid #c5d0db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #17202a;
+  font-size: 14px;
+  font-weight: 550;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.btn:hover:not(:disabled) {
+  background: #f0f4f8;
+  border-color: #a8b7c6;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: #1a56db;
+  border-color: #1a56db;
+  color: #ffffff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #1649c0;
+  border-color: #1649c0;
+}
+
 .error,
 .loading {
   padding: 16px;
@@ -179,6 +220,12 @@ tbody tr:last-child td {
 .error {
   border-color: #e2a9a9;
   color: #9b1c1c;
+}
+
+.error-hint {
+  margin-top: 8px;
+  font-size: 13px;
+  opacity: 0.85;
 }
 
 @media (max-width: 900px) {
