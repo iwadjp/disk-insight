@@ -492,6 +492,20 @@ tbody tr:last-child td {
   color: #17202a;
 }
 
+.selected-folder-note {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #8a97a4;
+  font-style: italic;
+}
+
+.empty-note {
+  padding: 18px 16px;
+  margin: 0;
+  font-size: 13px;
+  color: #5e6b78;
+}
+
 @media (max-width: 900px) {
   .app-header {
     align-items: flex-start;

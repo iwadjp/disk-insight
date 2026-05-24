@@ -181,9 +181,41 @@ from the existing `top_directories` list.
 - Files table is not filtered by selected folder.
 - No virtual scroll, delete action, Explorer open, or right-click menu.
 
+## D-6 Selected folder filtering
+
+D-6 filters the right-pane tables by the selected folder using the existing
+`top_directories` and `top_files` arrays in the current JSON result.
+
+### Filter logic
+
+- `isDriveRoot(path)` — returns true for paths like `C:\` or `C:` (whole drive).
+- `filterByDir(items, selectedPath)` — keeps items whose `path` equals `selectedPath`
+  or starts with `selectedPath + "\\"`. Drive roots return all items.
+- Applied to `top_directories` and `top_files` in the render; no data is re-fetched.
+
+### Section titles
+
+- Drive root selected: "Top directories" / "Top files" (unchanged).
+- Subfolder selected: "Top directories under C:\\Users" / "Top files under C:\\Users".
+
+### Empty state
+
+- When filtered `top_files` is empty, a note is shown instead of an empty table:
+  "No top files in this filtered result. Current JSON only contains global top entries."
+
+### SelectedFolderCard note
+
+- Added "Filtered within current top results" in small italic below the stats,
+  making it clear this is not a full tree query.
+
+### Scope guard
+
+- Filter operates only on entries already present in the JSON result.
+- No additional backend call or full-tree traversal.
+- No virtual scroll, delete action, Explorer open, or right-click menu.
+
 ## Next candidates
 
-- Filter files table by selected folder.
 - Add Explorer open for the selected folder.
-- Evolve toward a hierarchy-aware TreeView.
+- Evolve toward a hierarchy-aware TreeView with JSON extension.
 - Keep delete actions for a later phase.

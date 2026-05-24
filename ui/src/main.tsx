@@ -55,6 +55,17 @@ function parseDriveLetter(input: string): string | null {
   return null;
 }
 
+function isDriveRoot(path: string): boolean {
+  return /^[A-Za-z]:\\?$/.test(path);
+}
+
+function filterByDir<T extends { path: string }>(items: T[], selectedPath: string): T[] {
+  if (isDriveRoot(selectedPath)) return items;
+  return items.filter(
+    (item) => item.path === selectedPath || item.path.startsWith(selectedPath + "\\"),
+  );
+}
+
 function isTauriRuntime(): boolean {
   const tauriWindow = window as TauriWindow;
   return Boolean(tauriWindow.__TAURI__ || tauriWindow.__TAURI_INTERNALS__);
@@ -202,15 +213,16 @@ function SelectedFolderCard({ dir }: { dir: DirectoryEntry }) {
         <span>Direct files: <strong>{formatBytes(dir.direct_file_size)}</strong></span>
         <span>Children: <strong>{formatNumber(dir.child_count)}</strong></span>
       </div>
+      <div className="selected-folder-note">Filtered within current top results</div>
     </div>
   );
 }
 
-function DirectoriesTable({ rows }: { rows: DirectoryEntry[] }) {
+function DirectoriesTable({ rows, title }: { rows: DirectoryEntry[]; title: string }) {
   return (
     <section className="table-section">
       <div className="section-header">
-        <h2>Top directories</h2>
+        <h2>{title}</h2>
         <span>{rows.length} rows</span>
       </div>
       <div className="table-wrap">
@@ -239,30 +251,37 @@ function DirectoriesTable({ rows }: { rows: DirectoryEntry[] }) {
   );
 }
 
-function FilesTable({ rows }: { rows: FileEntry[] }) {
+function FilesTable({ rows, title }: { rows: FileEntry[]; title: string }) {
   return (
     <section className="table-section">
       <div className="section-header">
-        <h2>Top files</h2>
+        <h2>{title}</h2>
         <span>{rows.length} rows</span>
       </div>
       <div className="table-wrap">
-        <table className="files-table">
-          <thead>
-            <tr>
-              <th>Path</th>
-              <th className="numeric">Allocated size</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.record_index}>
-                <td className="path">{row.path}</td>
-                <td className="numeric">{formatBytes(row.final_allocated_size)}</td>
+        {rows.length === 0 ? (
+          <p className="empty-note">
+            No top files in this filtered result.{" "}
+            Current JSON only contains global top entries.
+          </p>
+        ) : (
+          <table className="files-table">
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th className="numeric">Allocated size</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.record_index}>
+                  <td className="path">{row.path}</td>
+                  <td className="numeric">{formatBytes(row.final_allocated_size)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </section>
   );
@@ -418,8 +437,30 @@ function App() {
             />
             <div className="content-right">
               {selectedDir && <SelectedFolderCard dir={selectedDir} />}
-              <DirectoriesTable rows={data.top_directories} />
-              <FilesTable rows={data.top_files} />
+              <DirectoriesTable
+                rows={
+                  selectedDir
+                    ? filterByDir(data.top_directories, selectedDir.path)
+                    : data.top_directories
+                }
+                title={
+                  selectedDir && !isDriveRoot(selectedDir.path)
+                    ? `Top directories under ${selectedDir.path}`
+                    : "Top directories"
+                }
+              />
+              <FilesTable
+                rows={
+                  selectedDir
+                    ? filterByDir(data.top_files, selectedDir.path)
+                    : data.top_files
+                }
+                title={
+                  selectedDir && !isDriveRoot(selectedDir.path)
+                    ? `Top files under ${selectedDir.path}`
+                    : "Top files"
+                }
+              />
             </div>
           </div>
         </>
