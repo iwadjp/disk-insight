@@ -2,53 +2,53 @@
   "summary": {
     "drive": "C:",
     "total_records": 1985536,
-    "in_use_entries": 1673775,
-    "files": 1326465,
-    "directories": 347310,
+    "in_use_entries": 1753757,
+    "files": 1395395,
+    "directories": 358362,
     "orphans": 0,
     "root_nodes": 1,
-    "total_final_allocated": 195131804071,
-    "read_time_ms": 4853,
-    "parse_time_ms": 505,
-    "tree_build_time_ms": 477,
-    "aggregation_time_ms": 183,
-    "total_time_ms": 6020
+    "total_final_allocated": 200051481255,
+    "read_time_ms": 4925,
+    "parse_time_ms": 440,
+    "tree_build_time_ms": 478,
+    "aggregation_time_ms": 171,
+    "total_time_ms": 6017
   },
   "top_directories": [
     {
       "path": "C:",
       "record_index": 5,
-      "subtree_size": 195131804071,
+      "subtree_size": 200051481255,
       "direct_file_size": 6671745167,
       "child_count": 53
     },
     {
       "path": "C:\\Users",
       "record_index": 992644,
-      "subtree_size": 87067044659,
+      "subtree_size": 91108131962,
       "direct_file_size": 174,
       "child_count": 6
     },
     {
       "path": "C:\\Users\\iwadj",
       "record_index": 6588,
-      "subtree_size": 87064268105,
+      "subtree_size": 91105355408,
       "direct_file_size": 14791523,
-      "child_count": 71
+      "child_count": 73
     },
     {
       "path": "C:\\Users\\iwadj\\AppData",
       "record_index": 6599,
-      "subtree_size": 67726921544,
+      "subtree_size": 70496387136,
       "direct_file_size": 0,
       "child_count": 3
     },
     {
       "path": "C:\\Users\\iwadj\\AppData\\Local",
       "record_index": 6618,
-      "subtree_size": 48279256424,
+      "subtree_size": 50939270374,
       "direct_file_size": 163968,
-      "child_count": 62
+      "child_count": 66
     },
     {
       "path": "C:\\Program Files",
@@ -60,21 +60,21 @@
     {
       "path": "C:\\Windows",
       "record_index": 992705,
-      "subtree_size": 29171285927,
+      "subtree_size": 29105594279,
       "direct_file_size": 11451979,
       "child_count": 101
     },
     {
       "path": "C:\\Users\\iwadj\\AppData\\Roaming",
       "record_index": 6600,
-      "subtree_size": 19438080308,
+      "subtree_size": 19547154219,
       "direct_file_size": 0,
-      "child_count": 29
+      "child_count": 30
     },
     {
       "path": "C:\\Users\\iwadj\\AppData\\Roaming\\Claude",
       "record_index": 181069,
-      "subtree_size": 13450899034,
+      "subtree_size": 13451570778,
       "direct_file_size": 3941535,
       "child_count": 36
     },
@@ -112,6 +112,12 @@
       "final_allocated_size": 3101687808
     },
     {
+      "path": "C:\\System Volume Information\\{e5cc1b66-5620-11f1-aa36-d0509981f08c}{3808876b-c176-4e48-b7ae-04046e6cc752}",
+      "record_index": 189470,
+      "parent_frn": 46029,
+      "final_allocated_size": 3087007744
+    },
+    {
       "path": "C:\\Users\\iwadj\\AppData\\Local\\Microsoft\\vscode-cpptools\\b6bed9c59bc7d333a01d2f9e9a52dc9e\\.BROWSE.VC.DB",
       "record_index": 298868,
       "parent_frn": 298866,
@@ -130,12 +136,6 @@
       "final_allocated_size": 2342440655
     },
     {
-      "path": "C:\\System Volume Information\\{e5cc1b66-5620-11f1-aa36-d0509981f08c}{3808876b-c176-4e48-b7ae-04046e6cc752}",
-      "record_index": 189470,
-      "parent_frn": 46029,
-      "final_allocated_size": 2147483648
-    },
-    {
       "path": "C:\\$MFT",
       "record_index": 0,
       "parent_frn": 5,
@@ -146,6 +146,538 @@
       "record_index": 74754,
       "parent_frn": 5,
       "final_allocated_size": 1073741824
+    }
+  ],
+  "root_children": [
+    {
+      "name": "Users",
+      "path": "C:\\Users",
+      "record_index": 992644,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 91108131962,
+      "direct_file_size": 174,
+      "child_count": 6
+    },
+    {
+      "name": "Program Files",
+      "path": "C:\\Program Files",
+      "record_index": 984393,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 31882771110,
+      "direct_file_size": 174,
+      "child_count": 50
+    },
+    {
+      "name": "Windows",
+      "path": "C:\\Windows",
+      "record_index": 992705,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 29105594279,
+      "direct_file_size": 11451979,
+      "child_count": 101
+    },
+    {
+      "name": "Program Files (x86)",
+      "path": "C:\\Program Files (x86)",
+      "record_index": 992312,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 10886334761,
+      "direct_file_size": 174,
+      "child_count": 30
+    },
+    {
+      "name": "Qt",
+      "path": "C:\\Qt",
+      "record_index": 76840,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 7276650089,
+      "direct_file_size": 0,
+      "child_count": 1
+    },
+    {
+      "name": "System Volume Information",
+      "path": "C:\\System Volume Information",
+      "record_index": 46029,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 7197356717,
+      "direct_file_size": 4144353372,
+      "child_count": 16
+    },
+    {
+      "name": "ProgramData",
+      "path": "C:\\ProgramData",
+      "record_index": 992468,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 6401272833,
+      "direct_file_size": 384,
+      "child_count": 31
+    },
+    {
+      "name": "ESD",
+      "path": "C:\\ESD",
+      "record_index": 1076467,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 4892127401,
+      "direct_file_size": 0,
+      "child_count": 1
+    },
+    {
+      "name": "Ap",
+      "path": "C:\\Ap",
+      "record_index": 187,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 3384071486,
+      "direct_file_size": 4096,
+      "child_count": 34
+    },
+    {
+      "name": "$MFT",
+      "path": "C:\\$MFT",
+      "record_index": 0,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 2033188864,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "rtr7913.tmp",
+      "path": "C:\\rtr7913.tmp",
+      "record_index": 287653,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 1073741824,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "rtrD41D.tmp",
+      "path": "C:\\rtrD41D.tmp",
+      "record_index": 67443,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 1073741824,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "rtrDAC9.tmp",
+      "path": "C:\\rtrDAC9.tmp",
+      "record_index": 74754,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 1073741824,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "rtrFF81.tmp",
+      "path": "C:\\rtrFF81.tmp",
+      "record_index": 79178,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 1073741824,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "$GetCurrent",
+      "path": "C:\\$GetCurrent",
+      "record_index": 12540,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 701350357,
+      "direct_file_size": 0,
+      "child_count": 3
+    },
+    {
+      "name": "Amazon",
+      "path": "C:\\Amazon",
+      "record_index": 66237,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 357900317,
+      "direct_file_size": 0,
+      "child_count": 1
+    },
+    {
+      "name": "swapfile.sys",
+      "path": "C:\\swapfile.sys",
+      "record_index": 8709,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 268435456,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "$Recycle.Bin",
+      "path": "C:\\$Recycle.Bin",
+      "record_index": 227698,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 94571834,
+      "direct_file_size": 0,
+      "child_count": 3
+    },
+    {
+      "name": "$LogFile",
+      "path": "C:\\$LogFile",
+      "record_index": 2,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 67108864,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "Config.Msi",
+      "path": "C:\\Config.Msi",
+      "record_index": 807229,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 41130534,
+      "direct_file_size": 41130534,
+      "child_count": 141
+    },
+    {
+      "name": "Windows10Upgrade",
+      "path": "C:\\Windows10Upgrade",
+      "record_index": 806760,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 22165931,
+      "direct_file_size": 7504662,
+      "child_count": 29
+    },
+    {
+      "name": "$Extend",
+      "path": "C:\\$Extend",
+      "record_index": 11,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 21037156,
+      "direct_file_size": 0,
+      "child_count": 6
+    },
+    {
+      "name": "$Bitmap",
+      "path": "C:\\$Bitmap",
+      "record_index": 6,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 7294976,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "winflexbison",
+      "path": "C:\\winflexbison",
+      "record_index": 68779,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 3735639,
+      "direct_file_size": 2527232,
+      "child_count": 9
+    },
+    {
+      "name": "Temp",
+      "path": "C:\\Temp",
+      "record_index": 69471,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 1467934,
+      "direct_file_size": 1467934,
+      "child_count": 35
+    },
+    {
+      "name": "$Windows.~WS",
+      "path": "C:\\$Windows.~WS",
+      "record_index": 14013,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 590439,
+      "direct_file_size": 0,
+      "child_count": 1
+    },
+    {
+      "name": "$SysReset",
+      "path": "C:\\$SysReset",
+      "record_index": 10445,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 585875,
+      "direct_file_size": 0,
+      "child_count": 4
+    },
+    {
+      "name": "Intel",
+      "path": "C:\\Intel",
+      "record_index": 96973,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 544768,
+      "direct_file_size": 0,
+      "child_count": 4
+    },
+    {
+      "name": "bootmgr",
+      "path": "C:\\bootmgr",
+      "record_index": 22468,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 397312,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "xampp",
+      "path": "C:\\xampp",
+      "record_index": 31532,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 307200,
+      "direct_file_size": 0,
+      "child_count": 1
+    },
+    {
+      "name": "$UpCase",
+      "path": "C:\\$UpCase",
+      "record_index": 10,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 131072,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "appverifUI.dll",
+      "path": "C:\\appverifUI.dll",
+      "record_index": 302046,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 114688,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "vfcompat.dll",
+      "path": "C:\\vfcompat.dll",
+      "record_index": 302050,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 69632,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "tmp",
+      "path": "C:\\tmp",
+      "record_index": 958115,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 20480,
+      "direct_file_size": 0,
+      "child_count": 1
+    },
+    {
+      "name": "DumpStack.log",
+      "path": "C:\\DumpStack.log",
+      "record_index": 26812,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 12288,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "$WinREAgent",
+      "path": "C:\\$WinREAgent",
+      "record_index": 622,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 8590,
+      "direct_file_size": 8590,
+      "child_count": 4
+    },
+    {
+      "name": "Recovery",
+      "path": "C:\\Recovery",
+      "record_index": 95589,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 8396,
+      "direct_file_size": 4096,
+      "child_count": 3
+    },
+    {
+      "name": "$Boot",
+      "path": "C:\\$Boot",
+      "record_index": 7,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 8192,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "DumpStack.log.tmp",
+      "path": "C:\\DumpStack.log.tmp",
+      "record_index": 8364,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 8192,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "$AttrDef",
+      "path": "C:\\$AttrDef",
+      "record_index": 4,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 4096,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "$MFTMirr",
+      "path": "C:\\$MFTMirr",
+      "record_index": 1,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 4096,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "bootTel.dat",
+      "path": "C:\\bootTel.dat",
+      "record_index": 21,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 112,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "AVScanner.ini",
+      "path": "C:\\AVScanner.ini",
+      "record_index": 145459,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 30,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "BOOTNXT",
+      "path": "C:\\BOOTNXT",
+      "record_index": 360693,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 1,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "$BadClus",
+      "path": "C:\\$BadClus",
+      "record_index": 8,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 0,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "$Secure",
+      "path": "C:\\$Secure",
+      "record_index": 9,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 0,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "$Volume",
+      "path": "C:\\$Volume",
+      "record_index": 3,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 0,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "Documents and Settings",
+      "path": "C:\\Documents and Settings",
+      "record_index": 22471,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 0,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "OneDriveTemp",
+      "path": "C:\\OneDriveTemp",
+      "record_index": 27202,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 0,
+      "direct_file_size": 0,
+      "child_count": 2
+    },
+    {
+      "name": "PerfLogs",
+      "path": "C:\\PerfLogs",
+      "record_index": 984392,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 0,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "TuruKameData",
+      "path": "C:\\TuruKameData",
+      "record_index": 25975,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 0,
+      "direct_file_size": 0,
+      "child_count": 1
+    },
+    {
+      "name": "hiberfil.sys",
+      "path": "C:\\hiberfil.sys",
+      "record_index": 8186,
+      "parent_record_index": 5,
+      "is_directory": false,
+      "subtree_size": 0,
+      "direct_file_size": 0,
+      "child_count": 0
+    },
+    {
+      "name": "inetpub",
+      "path": "C:\\inetpub",
+      "record_index": 17979,
+      "parent_record_index": 5,
+      "is_directory": true,
+      "subtree_size": 0,
+      "direct_file_size": 0,
+      "child_count": 0
     }
   ]
 }

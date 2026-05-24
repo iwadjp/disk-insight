@@ -116,11 +116,15 @@ async function getChildren(parentRecordIndex: number): Promise<TreeNode[]> {
   return invoke<TreeNode[]>("get_children", { parentRecordIndex });
 }
 
-type ChildrenPreview = {
-  parentIndex: number;
-  parentPath: string;
-  items: TreeNode[];
-};
+function treeNodeToDirEntry(node: TreeNode): DirectoryEntry {
+  return {
+    path: node.path,
+    record_index: node.record_index,
+    subtree_size: node.subtree_size,
+    direct_file_size: node.direct_file_size,
+    child_count: node.child_count,
+  };
+}
 
 function CopyButton({
   text,
@@ -241,35 +245,147 @@ function SummaryCard({ summary }: { summary: Summary }) {
   );
 }
 
-function FolderNav({
-  dirs,
-  selectedDir,
+type TreeRowProps = {
+  node: TreeNode;
+  depth: number;
+  expandedIds: Set<number>;
+  loadingIds: Set<number>;
+  childrenByParent: Record<number, TreeNode[]>;
+  selectedRecordIndex: number | undefined;
+  onToggleExpand: (node: TreeNode) => void;
+  onSelect: (node: TreeNode) => void;
+};
+
+function TreeNodeRow({
+  node,
+  depth,
+  expandedIds,
+  loadingIds,
+  childrenByParent,
+  selectedRecordIndex,
+  onToggleExpand,
   onSelect,
-  rootChildrenCount,
+}: TreeRowProps) {
+  const isDir       = node.is_directory;
+  const isExpanded  = expandedIds.has(node.record_index);
+  const isLoading   = loadingIds.has(node.record_index);
+  const isSelected  = selectedRecordIndex === node.record_index;
+  const cached      = childrenByParent[node.record_index];
+  const indent      = 8 + depth * 16;
+  const displayName = node.name || node.path;
+
+  const rowClass =
+    "tree-row"
+    + (isSelected ? " tree-row--active" : "")
+    + (isDir ? "" : " tree-row--file");
+
+  return (
+    <>
+      <div className={rowClass} style={{ paddingLeft: indent }}>
+        {isDir ? (
+          <button
+            className="tree-toggle"
+            onClick={() => onToggleExpand(node)}
+            disabled={isLoading}
+            aria-label={isExpanded ? "Collapse" : "Expand"}
+            title={isExpanded ? "Collapse" : "Expand"}
+          >
+            {isLoading ? "…" : isExpanded ? "▼" : "▶"}
+          </button>
+        ) : (
+          <span className="tree-toggle tree-toggle--leaf" aria-hidden="true">·</span>
+        )}
+        {isDir ? (
+          <button
+            className="tree-label"
+            onClick={() => onSelect(node)}
+            title={node.path}
+          >
+            <span className="tree-name">{displayName}</span>
+            <span className="tree-size">{formatBytes(node.subtree_size)}</span>
+          </button>
+        ) : (
+          <div className="tree-label tree-label--file" title={node.path}>
+            <span className="tree-name">{displayName}</span>
+            <span className="tree-size">{formatBytes(node.subtree_size)}</span>
+          </div>
+        )}
+      </div>
+      {isDir && isExpanded && cached && (
+        cached.length === 0 ? (
+          <div
+            className="tree-empty"
+            style={{ paddingLeft: indent + 26 }}
+          >
+            (empty)
+          </div>
+        ) : (
+          cached.map((child) => (
+            <TreeNodeRow
+              key={child.record_index}
+              node={child}
+              depth={depth + 1}
+              expandedIds={expandedIds}
+              loadingIds={loadingIds}
+              childrenByParent={childrenByParent}
+              selectedRecordIndex={selectedRecordIndex}
+              onToggleExpand={onToggleExpand}
+              onSelect={onSelect}
+            />
+          ))
+        )
+      )}
+    </>
+  );
+}
+
+function TreeView({
+  rootNodes,
+  expandedIds,
+  loadingIds,
+  childrenByParent,
+  selectedRecordIndex,
+  treeError,
+  onToggleExpand,
+  onSelect,
 }: {
-  dirs: DirectoryEntry[];
-  selectedDir: DirectoryEntry | undefined;
-  onSelect: (dir: DirectoryEntry) => void;
-  rootChildrenCount: number;
+  rootNodes: TreeNode[];
+  expandedIds: Set<number>;
+  loadingIds: Set<number>;
+  childrenByParent: Record<number, TreeNode[]>;
+  selectedRecordIndex: number | undefined;
+  treeError: string | null;
+  onToggleExpand: (node: TreeNode) => void;
+  onSelect: (node: TreeNode) => void;
 }) {
   return (
     <aside className="folder-nav">
       <div className="folder-nav-header">Folders</div>
       <div className="folder-nav-list">
-        {dirs.map((dir) => (
-          <button
-            key={dir.record_index}
-            className={`folder-row${
-              selectedDir?.record_index === dir.record_index ? " folder-row--active" : ""
-            }`}
-            onClick={() => onSelect(dir)}
-          >
-            <span className="folder-row-path">{dir.path}</span>
-            <span className="folder-row-size">{formatBytes(dir.subtree_size)}</span>
-          </button>
-        ))}
+        {rootNodes.length === 0 ? (
+          <p className="empty-note">
+            No root entries available. Run a live scan to load the folder tree.
+          </p>
+        ) : (
+          rootNodes.map((node) => (
+            <TreeNodeRow
+              key={node.record_index}
+              node={node}
+              depth={0}
+              expandedIds={expandedIds}
+              loadingIds={loadingIds}
+              childrenByParent={childrenByParent}
+              selectedRecordIndex={selectedRecordIndex}
+              onToggleExpand={onToggleExpand}
+              onSelect={onSelect}
+            />
+          ))
+        )}
       </div>
-      <div className="folder-nav-footer">Root children: {rootChildrenCount}</div>
+      {treeError && (
+        <div className="folder-nav-footer folder-nav-footer--error">{treeError}</div>
+      )}
+      <div className="folder-nav-footer">Root children: {rootNodes.length}</div>
     </aside>
   );
 }
@@ -278,19 +394,11 @@ function SelectedFolderCard({
   dir,
   onOpenExplorer,
   onCopyError,
-  onLoadChildren,
-  childrenPreview,
-  childrenError,
 }: {
   dir: DirectoryEntry;
   onOpenExplorer: (path: string) => void;
   onCopyError: (msg: string) => void;
-  onLoadChildren: () => void;
-  childrenPreview: ChildrenPreview | null;
-  childrenError: string | null;
 }) {
-  const matchesSelection =
-    childrenPreview !== null && childrenPreview.parentIndex === dir.record_index;
   return (
     <div className="selected-folder-card">
       <div className="selected-folder-header">
@@ -303,9 +411,6 @@ function SelectedFolderCard({
             Open folder
           </button>
           <CopyButton text={dir.path} onError={onCopyError} />
-          <button className="btn" onClick={onLoadChildren}>
-            Load children
-          </button>
         </div>
       </div>
       <div className="selected-folder-stats">
@@ -314,42 +419,6 @@ function SelectedFolderCard({
         <span>Children: <strong>{formatNumber(dir.child_count)}</strong></span>
       </div>
       <div className="selected-folder-note">Filtered within current top results</div>
-      {childrenError && (
-        <div className="children-preview children-preview--error">{childrenError}</div>
-      )}
-      {matchesSelection && (
-        <div className="children-preview">
-          <div className="children-preview-header">
-            Children loaded: {formatNumber(childrenPreview!.items.length)}
-          </div>
-          {childrenPreview!.items.length === 0 ? (
-            <div className="children-preview-empty">No children returned for this folder.</div>
-          ) : (
-            <>
-              {childrenPreview!.items.slice(0, 5).map((c) => (
-                <div key={c.record_index} className="children-preview-item">
-                  <span
-                    className={
-                      c.is_directory
-                        ? "children-preview-kind children-preview-kind--dir"
-                        : "children-preview-kind children-preview-kind--file"
-                    }
-                  >
-                    {c.is_directory ? "DIR" : "FILE"}
-                  </span>
-                  <span className="children-preview-path">{c.path}</span>
-                  <span className="children-preview-size">{formatBytes(c.subtree_size)}</span>
-                </div>
-              ))}
-              {childrenPreview!.items.length > 5 && (
-                <div className="children-preview-more">
-                  + {formatNumber(childrenPreview!.items.length - 5)} more
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -457,8 +526,10 @@ function App() {
   const [topN, setTopN] = useState(100);
   const [scanTopN, setScanTopN] = useState<number | null>(null);
   const [selectedDir, setSelectedDir] = useState<DirectoryEntry | undefined>(undefined);
-  const [childrenPreview, setChildrenPreview] = useState<ChildrenPreview | null>(null);
-  const [childrenError, setChildrenError] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
+  const [childrenByParent, setChildrenByParent] = useState<Record<number, TreeNode[]>>({});
+  const [treeError, setTreeError] = useState<string | null>(null);
 
   function runLoad(
     loader: () => Promise<DiskInsightOutput>,
@@ -471,8 +542,10 @@ function App() {
     setLoadingMsg(msg);
     setError(null);
     setIsScanError(false);
-    setChildrenPreview(null);
-    setChildrenError(null);
+    setExpandedIds(new Set());
+    setLoadingIds(new Set());
+    setChildrenByParent({});
+    setTreeError(null);
     loader()
       .then((json) => {
         setData(json);
@@ -489,29 +562,69 @@ function App() {
       });
   }
 
-  function handleSelectDir(dir: DirectoryEntry) {
-    setSelectedDir(dir);
-    setChildrenPreview(null);
-    setChildrenError(null);
+  function handleSelectTreeNode(node: TreeNode) {
+    if (!node.is_directory) return;
+    setSelectedDir(treeNodeToDirEntry(node));
+    setTreeError(null);
   }
 
-  function handleLoadChildren() {
-    if (!selectedDir) return;
-    setChildrenError(null);
-    if (sourceKind !== "live") {
-      setChildrenPreview(null);
-      setChildrenError("Children API is available after a live scan in the Tauri app.");
+  function handleToggleExpand(node: TreeNode) {
+    if (!node.is_directory) return;
+    const id = node.record_index;
+
+    // Collapse if already expanded
+    if (expandedIds.has(id)) {
+      setExpandedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      setTreeError(null);
       return;
     }
-    const targetIndex = selectedDir.record_index;
-    const targetPath  = selectedDir.path;
-    getChildren(targetIndex)
-      .then((items) => {
-        setChildrenPreview({ parentIndex: targetIndex, parentPath: targetPath, items });
+
+    // Expand from cache
+    if (childrenByParent[id]) {
+      setExpandedIds((prev) => {
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+      setTreeError(null);
+      return;
+    }
+
+    // Need to fetch — only available on live scan
+    if (sourceKind !== "live") {
+      setTreeError("Live scan required to load children. Run a scan in the Tauri app.");
+      return;
+    }
+
+    setTreeError(null);
+    setLoadingIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+
+    getChildren(id)
+      .then((children) => {
+        setChildrenByParent((prev) => ({ ...prev, [id]: children }));
+        setExpandedIds((prev) => {
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
       })
       .catch((err: unknown) => {
-        setChildrenPreview(null);
-        setChildrenError(err instanceof Error ? err.message : String(err));
+        setTreeError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        setLoadingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
       });
   }
 
@@ -630,11 +743,15 @@ function App() {
           />
           <SummaryCard summary={data.summary} />
           <div className="content-pane">
-            <FolderNav
-              dirs={data.top_directories}
-              selectedDir={selectedDir}
-              onSelect={handleSelectDir}
-              rootChildrenCount={data.root_children?.length ?? 0}
+            <TreeView
+              rootNodes={data.root_children ?? []}
+              expandedIds={expandedIds}
+              loadingIds={loadingIds}
+              childrenByParent={childrenByParent}
+              selectedRecordIndex={selectedDir?.record_index}
+              treeError={treeError}
+              onToggleExpand={handleToggleExpand}
+              onSelect={handleSelectTreeNode}
             />
             <div className="content-right">
               {selectedDir && (
@@ -642,9 +759,6 @@ function App() {
                   dir={selectedDir}
                   onOpenExplorer={handleOpenExplorer}
                   onCopyError={handleCopyError}
-                  onLoadChildren={handleLoadChildren}
-                  childrenPreview={childrenPreview}
-                  childrenError={childrenError}
                 />
               )}
               <DirectoriesTable

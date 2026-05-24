@@ -390,6 +390,84 @@ the D-13 milestone sign-off.
 
 ---
 
+## E-2 Folder TreeView (lazy expansion)
+
+E-2 replaces the flat folder list with an Explorer-style TreeView backed by
+`root_children` and the `get_children` Tauri command. Lazy expansion only
+loads children when the user clicks the expand marker; no recursion happens
+on initial render.
+
+### Data flow
+
+- Initial tree: `data.root_children` (from `scan_drive` or the embedded sample).
+- Expansion: on first expand of a directory, the UI calls `get_children` and
+  caches the result in `childrenByParent` keyed by `record_index`.
+- Subsequent expand/collapse of the same node uses the cache (no extra calls).
+- `scan_drive` and "Load sample" both reset the entire tree state
+  (`expandedIds`, `loadingIds`, `childrenByParent`, `treeError`).
+
+### UI components
+
+- `TreeView` — left pane. Renders `root_children` as the top level rows and
+  shows a `Root children: N` footer (or an error footer when something failed).
+- `TreeNodeRow` — recursive row. Renders:
+  - depth-based left padding (`8 + depth * 16` px),
+  - an expand toggle (`▶` / `▼`, `…` while loading, hidden for files),
+  - a label button with the entry name and `subtree_size`,
+  - on click of the toggle: `onToggleExpand(node)`,
+  - on click of the label (directories only): `onSelect(node)`.
+- Files are shown but not interactive (no expand, no select). They use a
+  muted color so the user can still see file siblings at a glance.
+
+### State
+
+In `App`:
+
+- `expandedIds: Set<number>` — record indexes that are expanded.
+- `loadingIds: Set<number>` — record indexes currently fetching children.
+- `childrenByParent: Record<number, TreeNode[]>` — cached results.
+- `treeError: string | null` — single shared error slot (last failure).
+
+All `Set` updates use the functional form (`setX((prev) => new Set(prev))`)
+to avoid stale-closure races when multiple expansions overlap.
+
+### Right pane integration
+
+Selecting a directory in the tree calls `setSelectedDir(treeNodeToDirEntry(node))`
+so the existing `SelectedFolderCard`, `DirectoriesTable`, and `FilesTable`
+prefix filtering continue to work unchanged. File selection is a no-op.
+
+### Sample data
+
+Sample data now ships with `root_children` (see "Sample data" below). On
+sample, the tree shows the root level, but expansion fails with
+`"Live scan required to load children. Run a scan in the Tauri app."`
+because `get_children` is only populated after a live scan.
+
+### Removed in E-2
+
+The "Load children" button and inline preview added to `SelectedFolderCard`
+in E-1b are removed. Their functionality is now integrated into the
+TreeView's expand affordance, which is the natural place for it. The
+`get_children` Tauri command itself is unchanged; only the UI surface moved.
+
+### Sample data refresh
+
+`public/sample/probe7.sample.json` was regenerated with the post-E-1a build
+so it includes `root_children`. Without that field the TreeView would show
+"No root entries available" on sample load, which would be a regression from
+the E-1a folder nav. `top_directories` / `top_files` counts stay at 10.
+
+### Scope guard
+
+- No virtual scroll. Deep expansion is in-DOM and constrained by user clicks.
+- No automatic expansion. The tree starts collapsed.
+- No drag-and-drop, right-click menu, delete, or `explorer /select` for files.
+- File rows are display-only — no selection-driven right-pane update.
+- Tree state is per-session; not persisted across reloads.
+
+---
+
 ## E-1b Lazy children command
 
 E-1b adds the `get_children(parent_record_index)` Tauri command, backed by an
@@ -504,6 +582,7 @@ Explorer-style TreeView. The existing folder navigation sidebar is not replaced.
 | D-13 | Minimal usable milestone 判定: **PASS** (2026-05-24) |
 | E-1a | root_children を JSON に追加、Explorer風TreeView の第一歩 |
 | E-1b | Tauri state に children map を保持、get_children command 追加 |
+| E-2  | 左ペインを Explorer風TreeView に置き換え、lazy expansion + children cache |
 
 ---
 
