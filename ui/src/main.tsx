@@ -97,6 +97,35 @@ async function openInExplorer(path: string): Promise<void> {
   return invoke<void>("open_in_explorer", { path });
 }
 
+function CopyButton({
+  text,
+  onError,
+}: {
+  text: string;
+  onError: (msg: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  function handleClick() {
+    if (!navigator.clipboard) {
+      onError("Clipboard is not available.");
+      return;
+    }
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch((err: unknown) => {
+      onError(err instanceof Error ? err.message : "Failed to copy path.");
+    });
+  }
+
+  return (
+    <button className="btn btn-sm" onClick={handleClick}>
+      {copied ? "Copied!" : "Copy path"}
+    </button>
+  );
+}
+
 function getParentDir(filePath: string): string {
   const i = filePath.lastIndexOf("\\");
   if (i < 0) return filePath;
@@ -220,9 +249,11 @@ function FolderNav({
 function SelectedFolderCard({
   dir,
   onOpenExplorer,
+  onCopyError,
 }: {
   dir: DirectoryEntry;
   onOpenExplorer: (path: string) => void;
+  onCopyError: (msg: string) => void;
 }) {
   return (
     <div className="selected-folder-card">
@@ -231,9 +262,12 @@ function SelectedFolderCard({
           <div className="selected-folder-label">Selected folder</div>
           <div className="selected-folder-path">{dir.path}</div>
         </div>
-        <button className="btn" onClick={() => onOpenExplorer(dir.path)}>
-          Open in Explorer
-        </button>
+        <div className="selected-folder-actions">
+          <button className="btn" onClick={() => onOpenExplorer(dir.path)}>
+            Open in Explorer
+          </button>
+          <CopyButton text={dir.path} onError={onCopyError} />
+        </div>
       </div>
       <div className="selected-folder-stats">
         <span>Subtree: <strong>{formatBytes(dir.subtree_size)}</strong></span>
@@ -282,10 +316,12 @@ function FilesTable({
   rows,
   title,
   onOpenLocation,
+  onCopyError,
 }: {
   rows: FileEntry[];
   title: React.ReactNode;
   onOpenLocation: (path: string) => void;
+  onCopyError: (msg: string) => void;
 }) {
   return (
     <section className="table-section">
@@ -314,12 +350,15 @@ function FilesTable({
                   <td className="path">{row.path}</td>
                   <td className="numeric">{formatBytes(row.final_allocated_size)}</td>
                   <td className="actions-col">
-                    <button
-                      className="btn btn-sm"
-                      onClick={() => onOpenLocation(getParentDir(row.path))}
-                    >
-                      Open location
-                    </button>
+                    <div className="actions-cell">
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => onOpenLocation(getParentDir(row.path))}
+                      >
+                        Open location
+                      </button>
+                      <CopyButton text={row.path} onError={onCopyError} />
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -376,6 +415,11 @@ function App() {
       setError(err instanceof Error ? err.message : String(err));
       setIsScanError(false);
     });
+  }
+
+  function handleCopyError(msg: string) {
+    setError(msg);
+    setIsScanError(false);
   }
 
   function handleScan() {
@@ -488,7 +532,11 @@ function App() {
             />
             <div className="content-right">
               {selectedDir && (
-                <SelectedFolderCard dir={selectedDir} onOpenExplorer={handleOpenExplorer} />
+                <SelectedFolderCard
+                  dir={selectedDir}
+                  onOpenExplorer={handleOpenExplorer}
+                  onCopyError={handleCopyError}
+                />
               )}
               <DirectoriesTable
                 rows={
@@ -514,6 +562,7 @@ function App() {
                     : "Top files"
                 }
                 onOpenLocation={handleOpenExplorer}
+                onCopyError={handleCopyError}
               />
             </div>
           </div>

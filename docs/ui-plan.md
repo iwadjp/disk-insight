@@ -287,6 +287,27 @@ D-8 adds an "Open location" action to each row of the top files table.
 - No file deletion, direct open, right-click menu, or path copy.
 - No new Tauri command — reuses `open_in_explorer` from D-7.
 
+## D-9 Copy path actions
+
+D-9 adds clipboard copy buttons for the selected folder and each top-files row.
+
+### UI side
+
+- Added `CopyButton` component with local `copied` state.
+  - Calls `navigator.clipboard.writeText(text)` (works in Tauri and modern browsers).
+  - On success: shows "Copied!" for 2 seconds, then reverts to "Copy path".
+  - On failure: calls `onError` with a message; rendered in the existing error display.
+- `SelectedFolderCard` gains an `onCopyError` prop and a "Copy path" button next to
+  "Open in Explorer". Both buttons sit in a `.selected-folder-actions` flex group.
+- `FilesTable` gains an `onCopyError` prop. Each Actions cell wraps "Open location"
+  and "Copy path" (via `CopyButton`) in an `.actions-cell` flex row.
+- `.actions-col` widened from 120 px to 210 px to fit two buttons.
+
+### Scope guard
+
+- Copies the file path — no `explorer /select`, no file deletion, no cmd open.
+- No new Tauri commands; clipboard uses the standard Web API.
+
 ---
 
 ## Completed phases summary
@@ -313,6 +334,7 @@ D-8 adds an "Open location" action to each row of the top files table.
 | D-6 FU | backslash / yen sign 表示対策（`.heading-path`） |
 | D-7 | 選択フォルダを Explorer で開く |
 | D-8 | top files 各行の Open location（親フォルダを Explorer で開く） |
+| D-9 | selected folder / top files の Copy path（クリップボード） |
 
 ---
 
@@ -339,7 +361,7 @@ D-8 adds an "Open location" action to each row of the top files table.
 - 親フォルダを `open_in_explorer` で開く（`explorer /select` は後回し）
 - Tauri 環境のみ有効
 
-### D-9 パスコピー機能
+### D-9 パスコピー機能 ✓
 
 - selected folder の path copy
 - top files の path copy
