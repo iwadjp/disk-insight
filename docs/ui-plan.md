@@ -793,6 +793,10 @@ Tauri behavior are unchanged.
 PFx86-DIAG-4 adds `--diag-wof-global` for global WOF-adjusted simulation. It is
 still size-accuracy diagnostics only; normal UI sizes are unchanged.
 
+PFx86-DIAG-5 adds `--diag-winsxs` for WinSxS / component-store residual
+diagnostics. This remains separate from UI work and does not change displayed
+sizes.
+
 ---
 
 ## E-2 follow-up: Tree selection behavior

@@ -247,3 +247,49 @@ enabled in normal output immediately. The safer next step is a feature-flagged
 or diagnostic-flagged normal aggregation experiment with conservative fallback
 conditions, plus targeted review of Windows / WindowsApps / WinSxS behavior.
 Hardlink and cluster-overlap correction should remain separate work.
+
+## 11. PFx86-DIAG-5 WinSxS / component store result
+
+PFx86-DIAG-5 added `--diag-winsxs` to separate WOF-correctable size differences
+from WinSxS and Windows component-store accounting effects. It is still
+diagnostic only; normal output and `final_alloc` behavior are unchanged.
+
+Major results from 2026-05-25:
+
+| Target | Current | WOF-adjusted | WOF delta | link>1 records | multi-name records | hardlink suspect adjusted |
+|--------|--------:|-------------:|----------:|---------------:|-------------------:|--------------------------:|
+| Windows | 27.134 GB | 18.401 GB | -8.733 GB | 310551 | 309788 | 11.429 GB |
+| WinSxS | 11.467 GB | 8.729 GB | -2.738 GB | 70912 | 72959 | 5.810 GB |
+| System32 | 4.402 GB | 3.779 GB | -0.622 GB | 6576 | 4465 | 1.291 GB |
+| servicing | 5.309 GB | 2.237 GB | -3.072 GB | 223337 | 224137 | 1.619 GB |
+| Installer | 0.105 GB | 0.105 GB | +0.000 GB | 232 | 232 | 0.020 GB |
+| assembly | 3.423 GB | 1.689 GB | -1.734 GB | 2355 | 2290 | 1.680 GB |
+| Microsoft.NET | 0.445 GB | 0.221 GB | -0.224 GB | 1824 | 1400 | 0.186 GB |
+| SysWOW64 | 0.712 GB | 0.505 GB | -0.207 GB | 1695 | 1167 | 0.335 GB |
+
+WinSxS-specific observations:
+
+- WinSxS WOF-adjusted size is 8.729 GB versus the WizTree reference of 4.1 GB,
+  leaving about 4.629 GB after WOF.
+- WinSxS has 70,912 `link_count > 1` records and 72,959 records with multiple
+  `$FILE_NAME` attributes.
+- The WOF-adjusted total for WinSxS hardlink or multi-name suspects is 5.810 GB,
+  which is large enough to plausibly explain the remaining delta.
+- WinSxS WOF + hardlink overlap is also significant: 17,501 records, 4.973 GB
+  current, and 2.689 GB WOF-adjusted.
+- `$FILE_NAME` parent hints found 19,574 WinSxS suspect records with a parent
+  outside the WinSxS subtree, including 10,676 System32 hints and 3,546 SysWOW64
+  hints. This supports the component-sharing hypothesis, but it is not cluster
+  deduplication.
+
+Interpretation:
+
+- WOF alone is not sufficient for WinSxS. It reduces WinSxS by 2.738 GB, but
+  the residual against WizTree remains about 4.629 GB.
+- WinSxS and Windows servicing are dominated by hardlink / multi-name /
+  component-store signals. They should be treated as a separate accounting
+  problem from the Program Files / WindowsApps WOF behavior.
+- WOF production policy should be conservative around Windows component-store
+  paths until hardlink or cluster-sharing diagnostics are better understood.
+- The next investigation should be a cluster/data-run or component-sharing
+  diagnostic mode, not a production hardlink correction.

@@ -2977,13 +2977,24 @@ pub fn print_probe7_json_top(drive: char, top_n: usize) -> Result<()> {
 // investigation. Targets three known-suspect subtrees and reports WOF/reparse,
 // compressed/sparse, hardlink/multi-name signals plus per-file attributes.
 // Size policy is unchanged — this is observation only, no correction is applied.
-fn print_diag_with_wof_tree(drive: char, global_only: bool) -> Result<()> {
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DiagTreeMode {
+    Pfx86,
+    WofGlobal,
+    WinSxS,
+}
+
+fn print_diag_with_wof_tree(drive: char, mode: DiagTreeMode) -> Result<()> {
     use rayon::prelude::*;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
     use windows::Win32::Storage::FileSystem::{ReadFile, SetFilePointerEx, FILE_BEGIN};
 
     let info = get_mft_info(drive)?;
-    let diag_name = if global_only { "diag-wof-global" } else { "diag-pfx86" };
+    let diag_name = match mode {
+        DiagTreeMode::Pfx86 => "diag-pfx86",
+        DiagTreeMode::WofGlobal => "diag-wof-global",
+        DiagTreeMode::WinSxS => "diag-winsxs",
+    };
     eprintln!("{}: drive={}  $MFT {} MB  {} extents",
         diag_name,
         drive, info.mft_size / 1_048_576, info.extents.len());
@@ -3021,6 +3032,7 @@ fn print_diag_with_wof_tree(drive: char, global_only: bool) -> Result<()> {
         file_attrs: u32,
         hard_link_count: u16,
         file_name_attr_count: u16,
+        file_name_parent_frns: Vec<u64>,
         reparse_tag: u32,        // 0 if not present or non-resident
         has_wof_stream: bool,    // WofCompressedData named $DATA in base record
         wof_stream_alloc: u64,
@@ -3063,6 +3075,7 @@ fn print_diag_with_wof_tree(drive: char, global_only: bool) -> Result<()> {
             let mut found_data = false;
             let mut file_attrs: u32 = 0;
             let mut file_name_attr_count: u16 = 0;
+            let mut file_name_parent_frns: Vec<u64> = Vec::new();
             let mut reparse_tag: u32 = 0;
             let mut has_wof_stream = false;
             let mut wof_stream_alloc: u64 = 0;
@@ -3120,6 +3133,11 @@ fn print_diag_with_wof_tree(drive: char, global_only: bool) -> Result<()> {
                                     .map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
                                 name = String::from_utf16_lossy(&wide);
                             }
+                        }
+                        if c + 8 <= record.len() {
+                            let pr = u64::from_le_bytes([record[c], record[c+1], record[c+2], record[c+3],
+                                                          record[c+4], record[c+5], record[c+6], record[c+7]]);
+                            file_name_parent_frns.push(pr & 0x0000_FFFF_FFFF_FFFF);
                         }
                     }
                     0x80 => {
@@ -3199,7 +3217,7 @@ fn print_diag_with_wof_tree(drive: char, global_only: bool) -> Result<()> {
             Some((Some(DiagEntry {
                 record_idx: i, name, parent_frn, alloc_size,
                 is_in_use, is_dir, file_attrs,
-                hard_link_count, file_name_attr_count, reparse_tag,
+                hard_link_count, file_name_attr_count, file_name_parent_frns, reparse_tag,
                 has_wof_stream, wof_stream_alloc, data_flags,
             }), ext_entry))
         })
@@ -3247,6 +3265,7 @@ fn print_diag_with_wof_tree(drive: char, global_only: bool) -> Result<()> {
         data_flags: u16,
         hard_link_count: u16,
         file_name_attr_count: u16,
+        file_name_parent_frns: Vec<u64>,
         reparse_tag: u32,
         has_wof_stream: bool,
         wof_stream_alloc: u64,
@@ -3309,6 +3328,7 @@ fn print_diag_with_wof_tree(drive: char, global_only: bool) -> Result<()> {
             data_flags: combined_data_flags,
             hard_link_count: e.hard_link_count,
             file_name_attr_count: e.file_name_attr_count,
+            file_name_parent_frns: e.file_name_parent_frns.clone(),
             reparse_tag: e.reparse_tag,
             has_wof_stream: combined_wof,
             wof_stream_alloc: combined_wof_alloc,
@@ -3509,7 +3529,7 @@ fn print_diag_with_wof_tree(drive: char, global_only: bool) -> Result<()> {
         },
     ];
 
-    if !global_only {
+    if mode == DiagTreeMode::Pfx86 {
     println!("=== Program Files (x86) diagnostics ===");
     println!("(observation only; size policy unchanged)");
     println!();
@@ -3830,7 +3850,7 @@ fn print_diag_with_wof_tree(drive: char, global_only: bool) -> Result<()> {
     println!("- Sizes use the same final_alloc policy as --json output. No size correction applied.");
     }
 
-    if global_only {
+    if mode == DiagTreeMode::WofGlobal {
         let fmt_short = |bytes: u64| -> String {
             format!("{:.3} GB", bytes as f64 / 1_073_741_824.0)
         };
@@ -4011,13 +4031,355 @@ fn print_diag_with_wof_tree(drive: char, global_only: bool) -> Result<()> {
         }
     }
 
+    if mode == DiagTreeMode::WinSxS {
+        let fmt_short = |bytes: u64| -> String {
+            format!("{:.3} GB", bytes as f64 / 1_073_741_824.0)
+        };
+        let fmt_signed_short = |bytes: i128| -> String {
+            let sign = if bytes < 0 { "-" } else { "+" };
+            let abs = bytes.unsigned_abs() as u64;
+            format!("{}{}", sign, fmt_short(abs))
+        };
+        let file_adjusted_alloc = |idx: usize| -> u64 {
+            let n = &arena[idx];
+            if !n.is_dir && n.has_wof_stream && n.wof_stream_alloc > 0 {
+                n.wof_stream_alloc
+            } else {
+                n.final_alloc
+            }
+        };
+        let flags_text = |idx: usize| -> String {
+            let n = &arena[idx];
+            let fa = n.file_attrs;
+            let df = n.data_flags;
+            format!(
+                "wof={} rps={} cmp={} sps={}",
+                (n.has_wof_stream || n.reparse_tag == 0x80000017) as u8,
+                (fa & 0x0400 != 0) as u8,
+                (fa & 0x0800 != 0 || df & 0x0001 != 0) as u8,
+                (fa & 0x0200 != 0 || df & 0x8000 != 0) as u8,
+            )
+        };
+
+        struct WinTarget {
+            display_path: &'static str,
+            segments: &'static [&'static str],
+        }
+        struct WinSummary {
+            label: &'static str,
+            current: Option<u64>,
+            adjusted: Option<u64>,
+            hardlink_adjusted_total: Option<u64>,
+        }
+
+        let targets: &[WinTarget] = &[
+            WinTarget { display_path: "C:\\Windows\\WinSxS", segments: &["Windows", "WinSxS"] },
+            WinTarget { display_path: "C:\\Windows\\System32", segments: &["Windows", "System32"] },
+            WinTarget { display_path: "C:\\Windows\\servicing", segments: &["Windows", "servicing"] },
+            WinTarget { display_path: "C:\\Windows\\Installer", segments: &["Windows", "Installer"] },
+            WinTarget { display_path: "C:\\Windows", segments: &["Windows"] },
+            WinTarget { display_path: "C:\\Windows\\assembly", segments: &["Windows", "assembly"] },
+            WinTarget { display_path: "C:\\Windows\\Microsoft.NET", segments: &["Windows", "Microsoft.NET"] },
+            WinTarget { display_path: "C:\\Windows\\SysWOW64", segments: &["Windows", "SysWOW64"] },
+        ];
+
+        println!("=== WinSxS / Windows component store diagnostics ===");
+        println!("diagnostic only; final_alloc policy, normal output, and hardlink accounting are unchanged");
+        println!();
+
+        let mut summaries: Vec<WinSummary> = Vec::new();
+
+        for target in targets {
+            println!("=== WinSxS diagnostics: {} ===", target.display_path);
+            match find_by_segments(target.segments) {
+                None => {
+                    println!("found: no");
+                    println!();
+                    summaries.push(WinSummary {
+                        label: target.display_path,
+                        current: None,
+                        adjusted: None,
+                        hardlink_adjusted_total: None,
+                    });
+                }
+                Some(idx) => {
+                    let descendants = collect_descendants(idx);
+                    let descendant_frns: HashSet<u64> =
+                        descendants.iter().map(|&i| arena[i].frn).collect();
+                    let files: Vec<usize> = descendants.iter().copied()
+                        .filter(|&i| !arena[i].is_dir)
+                        .collect();
+                    let desc_dirs = descendants.len().saturating_sub(files.len());
+                    let n = &arena[idx];
+                    let wof_delta =
+                        n.wof_adjusted_subtree_size as i128 - n.subtree_size as i128;
+
+                    println!("found: yes");
+                    println!("record_index: {}", n.frn);
+                    println!("subtree_current_alloc:      {}", fmt_bytes(n.subtree_size));
+                    println!("subtree_wof_adjusted_alloc: {}", fmt_bytes(n.wof_adjusted_subtree_size));
+                    println!("wof_delta:                  {}", fmt_signed_bytes(wof_delta));
+                    println!("child_count:                {}", n.children.len());
+                    println!("descendant_dirs:            {}", desc_dirs);
+                    println!("descendant_files:           {}", files.len());
+                    println!();
+
+                    let link_gt1: Vec<usize> = files.iter().copied()
+                        .filter(|&i| arena[i].hard_link_count > 1)
+                        .collect();
+                    let multi_fn: Vec<usize> = files.iter().copied()
+                        .filter(|&i| arena[i].file_name_attr_count > 1)
+                        .collect();
+                    let suspects: Vec<usize> = files.iter().copied()
+                        .filter(|&i| arena[i].hard_link_count > 1 || arena[i].file_name_attr_count > 1)
+                        .collect();
+                    let suspect_current_total: u64 = suspects.iter()
+                        .map(|&i| arena[i].final_alloc)
+                        .sum();
+                    let suspect_adjusted_total: u64 = suspects.iter()
+                        .map(|&i| file_adjusted_alloc(i))
+                        .sum();
+                    let max_link_count = files.iter()
+                        .map(|&i| arena[i].hard_link_count)
+                        .max()
+                        .unwrap_or(0);
+                    let link_eq_1 = files.iter().filter(|&&i| arena[i].hard_link_count <= 1).count();
+                    let link_eq_2 = files.iter().filter(|&&i| arena[i].hard_link_count == 2).count();
+                    let link_ge_3 = files.iter().filter(|&&i| arena[i].hard_link_count >= 3).count();
+                    let link_ge_10 = files.iter().filter(|&&i| arena[i].hard_link_count >= 10).count();
+                    let fn_eq_1 = files.iter().filter(|&&i| arena[i].file_name_attr_count <= 1).count();
+                    let fn_eq_2 = files.iter().filter(|&&i| arena[i].file_name_attr_count == 2).count();
+                    let fn_ge_3 = files.iter().filter(|&&i| arena[i].file_name_attr_count >= 3).count();
+
+                    println!("--- hardlink / multi-name summary ---");
+                    println!("link_count_gt_1_records:              {}", link_gt1.len());
+                    println!("multi_file_name_records:              {}", multi_fn.len());
+                    println!("hardlink_suspect_current_alloc_total: {}", fmt_bytes(suspect_current_total));
+                    println!("hardlink_suspect_wof_adjusted_alloc_total: {}", fmt_bytes(suspect_adjusted_total));
+                    println!("max_link_count:                       {}", max_link_count);
+                    println!("link_count distribution: link=1 {}  link=2 {}  link>=3 {}  link>=10 {}",
+                        link_eq_1, link_eq_2, link_ge_3, link_ge_10);
+                    println!("FILE_NAME attr distribution: fn=1 {}  fn=2 {}  fn>=3 {}",
+                        fn_eq_1, fn_eq_2, fn_ge_3);
+                    println!();
+
+                    let mut hardlink_sorted = suspects.clone();
+                    hardlink_sorted.sort_unstable_by(|&a, &b| {
+                        let ba = file_adjusted_alloc(b).max(arena[b].final_alloc);
+                        let aa = file_adjusted_alloc(a).max(arena[a].final_alloc);
+                        ba.cmp(&aa)
+                    });
+                    println!("--- top hardlink suspects ---");
+                    for (rank, &i) in hardlink_sorted.iter().take(50).enumerate() {
+                        let f = &arena[i];
+                        println!(
+                            "{}. current={} adjusted={} link={} fn_attrs={} rec={} {}",
+                            rank + 1,
+                            fmt_short(f.final_alloc),
+                            fmt_short(file_adjusted_alloc(i)),
+                            f.hard_link_count,
+                            f.file_name_attr_count,
+                            f.frn,
+                            flags_text(i),
+                        );
+                        println!("   {}", reconstruct(i));
+                    }
+                    println!();
+
+                    let overlap: Vec<usize> = suspects.iter().copied()
+                        .filter(|&i| arena[i].has_wof_stream && arena[i].wof_stream_alloc > 0)
+                        .collect();
+                    let overlap_current: u64 = overlap.iter().map(|&i| arena[i].final_alloc).sum();
+                    let overlap_adjusted: u64 = overlap.iter().map(|&i| file_adjusted_alloc(i)).sum();
+                    let mut overlap_sorted = overlap.clone();
+                    overlap_sorted.sort_unstable_by(|&a, &b| file_adjusted_alloc(b).cmp(&file_adjusted_alloc(a)));
+                    println!("--- WOF + hardlink overlap ---");
+                    println!("records:                  {}", overlap.len());
+                    println!("current_alloc_total:      {}", fmt_bytes(overlap_current));
+                    println!("wof_adjusted_alloc_total: {}", fmt_bytes(overlap_adjusted));
+                    println!("top overlap files:");
+                    for (rank, &i) in overlap_sorted.iter().take(20).enumerate() {
+                        let f = &arena[i];
+                        println!(
+                            "{}. current={} adjusted={} link={} fn_attrs={} rec={} {}",
+                            rank + 1,
+                            fmt_short(f.final_alloc),
+                            fmt_short(file_adjusted_alloc(i)),
+                            f.hard_link_count,
+                            f.file_name_attr_count,
+                            f.frn,
+                            flags_text(i),
+                        );
+                        println!("   {}", reconstruct(i));
+                    }
+                    println!();
+
+                    let mut top_files = files.clone();
+                    top_files.sort_unstable_by(|&a, &b| arena[b].final_alloc.cmp(&arena[a].final_alloc));
+                    println!("--- top files in subtree ---");
+                    for (rank, &i) in top_files.iter().take(30).enumerate() {
+                        let f = &arena[i];
+                        println!(
+                            "{}. current={} adjusted={} link={} fn_attrs={} rec={} {}",
+                            rank + 1,
+                            fmt_short(f.final_alloc),
+                            fmt_short(file_adjusted_alloc(i)),
+                            f.hard_link_count,
+                            f.file_name_attr_count,
+                            f.frn,
+                            flags_text(i),
+                        );
+                        println!("   {}", reconstruct(i));
+                    }
+                    println!();
+
+                    let mut child_dirs: Vec<usize> = arena[idx].children.iter().copied()
+                        .filter(|&i| arena[i].is_dir)
+                        .collect();
+                    child_dirs.sort_unstable_by(|&a, &b| arena[b].subtree_size.cmp(&arena[a].subtree_size));
+                    println!("--- top child directories ---");
+                    println!("{:>12} {:>12} {:>12}  path", "current", "adjusted", "delta");
+                    for &i in child_dirs.iter().take(30) {
+                        let c = &arena[i];
+                        let delta = c.wof_adjusted_subtree_size as i128 - c.subtree_size as i128;
+                        println!(
+                            "{:>12} {:>12} {:>12}  {}",
+                            fmt_short(c.subtree_size),
+                            fmt_short(c.wof_adjusted_subtree_size),
+                            fmt_signed_short(delta),
+                            reconstruct(i),
+                        );
+                    }
+                    println!();
+
+                    let mut multi_parent_records = 0usize;
+                    let mut external_parent_records = 0usize;
+                    let mut external_system32 = 0usize;
+                    let mut external_syswow64 = 0usize;
+                    let mut external_servicing = 0usize;
+                    let mut external_winsxs = 0usize;
+                    let mut external_other = 0usize;
+                    let mut external_examples: Vec<usize> = Vec::new();
+
+                    for &i in &suspects {
+                        let mut parents: Vec<u64> = arena[i].file_name_parent_frns.clone();
+                        parents.sort_unstable();
+                        parents.dedup();
+                        if parents.len() > 1 {
+                            multi_parent_records += 1;
+                        }
+                        let mut has_external = false;
+                        for pfrn in parents {
+                            if descendant_frns.contains(&pfrn) {
+                                continue;
+                            }
+                            has_external = true;
+                            if let Some(&pi) = frn_to_idx.get(&pfrn) {
+                                let p = reconstruct(pi).to_ascii_lowercase();
+                                if p.starts_with("c:\\windows\\system32") {
+                                    external_system32 += 1;
+                                } else if p.starts_with("c:\\windows\\syswow64") {
+                                    external_syswow64 += 1;
+                                } else if p.starts_with("c:\\windows\\servicing") {
+                                    external_servicing += 1;
+                                } else if p.starts_with("c:\\windows\\winsxs") {
+                                    external_winsxs += 1;
+                                } else {
+                                    external_other += 1;
+                                }
+                            } else {
+                                external_other += 1;
+                            }
+                        }
+                        if has_external {
+                            external_parent_records += 1;
+                            if external_examples.len() < 20 {
+                                external_examples.push(i);
+                            }
+                        }
+                    }
+
+                    println!("--- cross-tree hint ---");
+                    println!("multi_parent_file_name_records:        {}", multi_parent_records);
+                    println!("records_with_parent_outside_subtree:   {}", external_parent_records);
+                    println!("outside parent hints: System32={} SysWOW64={} servicing={} WinSxS={} other={}",
+                        external_system32, external_syswow64, external_servicing, external_winsxs, external_other);
+                    println!("note: parent hints use $FILE_NAME parent FRNs only; cluster sharing is not deduplicated.");
+                    if !external_examples.is_empty() {
+                        println!("example records with a FILE_NAME parent outside this subtree:");
+                        for &i in &external_examples {
+                            let f = &arena[i];
+                            println!(
+                                "  current={} adjusted={} link={} fn_attrs={} rec={} | {}",
+                                fmt_short(f.final_alloc),
+                                fmt_short(file_adjusted_alloc(i)),
+                                f.hard_link_count,
+                                f.file_name_attr_count,
+                                f.frn,
+                                reconstruct(i),
+                            );
+                        }
+                    }
+                    println!();
+
+                    summaries.push(WinSummary {
+                        label: target.display_path,
+                        current: Some(n.subtree_size),
+                        adjusted: Some(n.wof_adjusted_subtree_size),
+                        hardlink_adjusted_total: Some(suspect_adjusted_total),
+                    });
+                }
+            }
+        }
+
+        let winsxs = summaries.iter()
+            .find(|s| s.label.eq_ignore_ascii_case("C:\\Windows\\WinSxS"));
+        println!("=== WinSxS diagnostics summary ===");
+        match winsxs {
+            Some(s) => {
+                let wiztree_ref = (4.1_f64 * 1_073_741_824.0).round() as u64;
+                match (s.current, s.adjusted, s.hardlink_adjusted_total) {
+                    (Some(current), Some(adjusted), Some(hl_adjusted)) => {
+                        println!("WinSxS current:                 {}", fmt_bytes(current));
+                        println!("WinSxS WOF-adjusted:            {}", fmt_bytes(adjusted));
+                        println!("WizTree allocated reference:    4.1 GB");
+                        println!("remaining delta after WOF:      {}", fmt_signed_bytes(adjusted as i128 - wiztree_ref as i128));
+                        println!("hardlink suspect adjusted total: {}", fmt_bytes(hl_adjusted));
+                        println!("likely cause:");
+                        println!("  - hardlink/component store accounting: likely");
+                        println!("  - WOF: partial, but not sufficient for WinSxS");
+                        println!("  - other: cluster overlap and component-store sharing need deeper checks");
+                    }
+                    _ => {
+                        println!("WinSxS found, but summary values are incomplete");
+                    }
+                }
+            }
+            None => {
+                println!("WinSxS current: unavailable");
+                println!("WinSxS WOF-adjusted: unavailable");
+                println!("WizTree allocated reference: 4.1 GB");
+                println!("remaining delta after WOF: unavailable");
+                println!("hardlink suspect adjusted total: unavailable");
+            }
+        }
+        println!("next:");
+        println!("  - keep WOF and hardlink production corrections disabled");
+        println!("  - inspect WinSxS hardlink/component-store residuals before any normal output policy change");
+        println!("  - if needed, add cluster/data-run diagnostics as a separate mode");
+    }
+
     Ok(())
 }
 
 pub fn print_diag_pfx86(drive: char) -> Result<()> {
-    print_diag_with_wof_tree(drive, false)
+    print_diag_with_wof_tree(drive, DiagTreeMode::Pfx86)
 }
 
 pub fn print_diag_wof_global(drive: char) -> Result<()> {
-    print_diag_with_wof_tree(drive, true)
+    print_diag_with_wof_tree(drive, DiagTreeMode::WofGlobal)
+}
+
+pub fn print_diag_winsxs(drive: char) -> Result<()> {
+    print_diag_with_wof_tree(drive, DiagTreeMode::WinSxS)
 }

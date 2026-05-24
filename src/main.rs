@@ -16,6 +16,7 @@ fn print_help() {
     eprintln!("  --json             JSON形式で stdout に出力");
     eprintln!("  --diag-pfx86       Program Files (x86) 差分診断 (EdgeCore / Office16 / VFS)");
     eprintln!("  --diag-wof-global  WOF adjusted global simulation (diagnostic only)");
+    eprintln!("  --diag-winsxs      WinSxS / Windows component store diagnostics");
     eprintln!("  --help             このヘルプを表示");
     eprintln!();
     eprintln!("使用例:");
@@ -26,6 +27,7 @@ fn print_help() {
     eprintln!("  disk-insight.exe --drive C --json --top 100");
     eprintln!("  disk-insight.exe --diag-pfx86");
     eprintln!("  disk-insight.exe --diag-wof-global");
+    eprintln!("  disk-insight.exe --diag-winsxs");
     eprintln!();
     eprintln!("注意:");
     eprintln!("  管理者権限で実行してください (MFTアクセスに必要)。");
@@ -53,6 +55,7 @@ fn main() -> Result<()> {
     let mut json_mode = false;
     let mut diag_pfx86 = false;
     let mut diag_wof_global = false;
+    let mut diag_winsxs = false;
     let mut drive = 'C';
     let mut top_n: Option<usize> = None;
 
@@ -69,6 +72,10 @@ fn main() -> Result<()> {
             }
             "--diag-wof-global" => {
                 diag_wof_global = true;
+                i += 1;
+            }
+            "--diag-winsxs" => {
+                diag_winsxs = true;
                 i += 1;
             }
             "--help" | "-h" => {
@@ -138,6 +145,14 @@ fn main() -> Result<()> {
 
     if diag_wof_global {
         if let Err(e) = mft_probe::print_diag_wof_global(drive) {
+            eprintln!("エラー: {}", e);
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+
+    if diag_winsxs {
+        if let Err(e) = mft_probe::print_diag_winsxs(drive) {
             eprintln!("エラー: {}", e);
             std::process::exit(1);
         }

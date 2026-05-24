@@ -236,6 +236,17 @@ not applied.
 .\target\release\disk-insight.exe --diag-wof-global
 ```
 
+PFx86-DIAG-5 adds `--diag-winsxs` for WinSxS / Windows component store residual
+diagnostics. It reports current and WOF-adjusted totals, hardlink and
+multi-name summaries, top hardlink suspects, WOF + hardlink overlap, top files,
+top child directories, and `$FILE_NAME` parent cross-tree hints for Windows
+component-store paths. Normal output is unchanged, and hardlink correction is
+not applied.
+
+```powershell
+.\target\release\disk-insight.exe --diag-winsxs
+```
+
 > Redirect with `cmd /c` for UTF-8 output:
 > `cmd /c ".\target\release\disk-insight.exe --diag-pfx86 > .\work\pfx86_diag.txt"`
 
