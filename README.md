@@ -153,3 +153,16 @@ not to produce byte-exact matches with the OS disk usage report.
 - [x] D-11 README
 - [x] D-12 Build and run procedure notes
 - [x] D-13 Milestone sign-off
+
+---
+
+## Next-phase candidates
+
+| Feature | Notes |
+|---------|-------|
+| `explorer /select` | Highlight the file in Explorer instead of opening parent folder |
+| Drive auto-detection | Enumerate available drives without manual entry |
+| TreeView expand/collapse | Full folder tree with virtual scroll |
+| Treemap visualization | Proportional rectangle view of disk usage |
+| WinSxS / hard link dedup | Avoid double-counting hard-linked files |
+| Delete action | Requires safety design (confirmation, recycle bin, undo) — intentionally deferred |
