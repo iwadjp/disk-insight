@@ -78,3 +78,20 @@ All size values are integer byte counts.
 All time values are integer millisecond counts.
 
 All `path` values are Windows path strings.
+
+## API boundary notes
+
+`build_mft_tree_output(drive, top_n)` is the core API for generating the structured MFT tree output.
+
+The CLI should only call this function through thin CLI-layer wrappers. `print_probe7_human` and `print_probe7_json` are CLI-layer functions and are allowed to write formatted output to stdout.
+
+Future Tauri commands are expected to call `build_mft_tree_output` directly and return the structured data without going through CLI stdout formatting.
+
+The JSON schema in this document is treated as the UI contract.
+
+Stdout/stderr separation policy:
+
+| Stream | Content |
+| --- | --- |
+| stdout | JSON output only in `--json` mode. |
+| stderr | Progress, diagnostics, and errors. |

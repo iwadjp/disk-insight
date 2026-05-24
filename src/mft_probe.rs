@@ -2398,6 +2398,9 @@ pub fn probe7(drive: char, top_n: usize) -> Result<()> {
 
 // ─── C-1: JSON output types ───────────────────────────────────────────────
 
+// Public JSON contract used by the CLI today and by UI/Tauri callers later.
+// Keep these serialized field names stable unless docs/json-output-schema.md is
+// intentionally updated with the UI contract change.
 #[derive(serde::Serialize)]
 pub struct JsonDirEntry {
     pub path:             String,
@@ -2439,9 +2442,12 @@ pub struct JsonTreeOutput {
     pub top_files:       Vec<JsonFileEntry>,
 }
 
-// ─── C-1: Core tree computation (JSON path) ───────────────────────────────
-// Progress goes to stderr; returns structured data for JSON serialization.
-
+// Core API boundary:
+// - builds structured MFT tree data and returns it to the caller
+// - never writes JSON or human output to stdout
+// - may write progress/diagnostics to stderr
+// - returns anyhow::Result so CLI, Tauri, or future library layers can decide
+//   how to present errors
 pub fn build_mft_tree_output(drive: char, top_n: usize) -> Result<JsonTreeOutput> {
     use rayon::prelude::*;
     use std::collections::HashMap;
@@ -2825,7 +2831,7 @@ pub fn build_mft_tree_output(drive: char, top_n: usize) -> Result<JsonTreeOutput
         path
     };
 
-    // Top-100 dirs
+    // Top-N dirs
     let mut top_dir_idx: Vec<usize> = arena.iter().enumerate()
         .filter(|(_, n)| n.is_dir && n.subtree_size > 0)
         .map(|(i, _)| i)
@@ -2885,6 +2891,8 @@ pub fn probe7_json(drive: char) -> Result<()> {
     Ok(())
 }
 
+// CLI layer wrappers. These functions are allowed to print to stdout; callers
+// that need structured data should call build_mft_tree_output directly.
 pub fn print_probe7_human(drive: char, top_n: usize) -> Result<()> {
     probe7(drive, top_n)
 }
