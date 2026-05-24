@@ -162,6 +162,7 @@ Work through these in order after building. Run as Administrator.
 - [ ] Selected folder card: "Open folder" opens the folder in Explorer
 - [ ] Selected folder card: "Copy path" copies the path to clipboard, button shows "Copied!" briefly
 - [ ] Top files table: "Open folder" opens the file's parent folder in Explorer
+- [ ] Top files table: "Select file" opens Explorer with the file highlighted (F-1)
 - [ ] Top files table: "Copy path" copies the file path to clipboard
 
 ### Safety
@@ -183,7 +184,7 @@ Work through these in order after building. Run as Administrator.
 | TreeView | No expand/collapse; sidebar shows flat top-N list |
 | Virtual scroll | Not implemented |
 | Delete | Not implemented |
-| `explorer /select` | Not implemented (Open folder opens parent, not file selection) |
+| `explorer /select` | Implemented for top files (F-1). Not available for folders. |
 | Drive detection | No automatic enumeration; enter drive letter manually |
 
 ---

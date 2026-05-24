@@ -81,6 +81,21 @@ fn open_in_explorer(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn select_in_explorer(path: String) -> Result<(), String> {
+    if path.is_empty() {
+        return Err("path must not be empty".to_string());
+    }
+    if !Path::new(&path).exists() {
+        return Err(format!("path does not exist: {path}"));
+    }
+    std::process::Command::new("explorer.exe")
+        .arg(format!("/select,{}", path))
+        .spawn()
+        .map_err(|e| format!("failed to select file in Explorer: {e}"))?;
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(AppState::default())
@@ -88,6 +103,7 @@ fn main() {
             load_sample_json,
             scan_drive,
             open_in_explorer,
+            select_in_explorer,
             get_children,
         ])
         .run(tauri::generate_context!())

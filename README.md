@@ -22,6 +22,7 @@ The tool is safe to use for disk analysis. Destructive operations are not implem
   - Folder navigation sidebar
   - Selected-folder filtering of top results
   - Open folder in Explorer (selected folder and file parent folder)
+  - Select file in Explorer (top-files rows — highlights file in parent folder)
   - Copy path to clipboard
 
 ## What it cannot do yet
@@ -30,7 +31,7 @@ The tool is safe to use for disk analysis. Destructive operations are not implem
 - Full TreeView with expand/collapse
 - Treemap visualization
 - Right-click context menu
-- `explorer /select` file highlighting
+- `explorer /select` file highlighting for folders (available for top files only)
 - Automatic enumeration of available drives
 - Full accuracy for WinSxS, WOF-compressed files, and hard links
 

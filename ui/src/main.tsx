@@ -119,6 +119,13 @@ async function openInExplorer(path: string): Promise<void> {
   return invoke<void>("open_in_explorer", { path });
 }
 
+async function selectInExplorer(path: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    throw new Error("File selection is available only in the Tauri desktop app.");
+  }
+  return invoke<void>("select_in_explorer", { path });
+}
+
 async function getChildren(parentRecordIndex: number): Promise<TreeNode[]> {
   if (!isTauriRuntime()) {
     throw new Error("Children API is available only in the Tauri desktop app.");
@@ -506,11 +513,13 @@ function FilesTable({
   rows,
   title,
   onOpenLocation,
+  onSelectFile,
   onCopyError,
 }: {
   rows: FileEntry[];
   title: React.ReactNode;
   onOpenLocation: (path: string) => void;
+  onSelectFile: (path: string) => void;
   onCopyError: (msg: string) => void;
 }) {
   return (
@@ -546,6 +555,12 @@ function FilesTable({
                         onClick={() => onOpenLocation(getParentDir(row.path))}
                       >
                         Open folder
+                      </button>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => onSelectFile(row.path)}
+                      >
+                        Select file
                       </button>
                       <CopyButton text={row.path} onError={onCopyError} />
                     </div>
@@ -702,6 +717,13 @@ function App() {
     });
   }
 
+  function handleSelectFile(path: string) {
+    selectInExplorer(path).catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : String(err));
+      setIsScanError(false);
+    });
+  }
+
   function handleCopyError(msg: string) {
     setError(msg);
     setIsScanError(false);
@@ -852,6 +874,7 @@ function App() {
                     : "Top files"
                 }
                 onOpenLocation={handleOpenExplorer}
+                onSelectFile={handleSelectFile}
                 onCopyError={handleCopyError}
               />
             </div>

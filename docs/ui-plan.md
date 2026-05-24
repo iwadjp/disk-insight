@@ -549,6 +549,42 @@ Explorer-style TreeView. The existing folder navigation sidebar is not replaced.
 - Existing folder nav (top_directories) is unchanged.
 - Full lazy TreeView is planned for E-1b and later phases.
 
+## F-1 Explorer file selection for top files
+
+F-1 adds a "Select file" action to each top-files row, opening the file highlighted
+in Windows Explorer using `explorer.exe /select,<path>`.
+
+### Rust side
+
+- Added `select_in_explorer(path: String) -> Result<(), String>` Tauri command.
+- Validates `path` is non-empty and exists on disk (`Path::new(&path).exists()`).
+- Launches Explorer via `Command::new("explorer.exe").arg(format!("/select,{}", path))`.
+- The `/select,<path>` argument is passed as a single `.arg()` value — no shell involved,
+  no shell injection risk.
+- Distinct from `open_in_explorer`: that command opens the parent folder; this command
+  opens Explorer and selects the specific file in the parent folder.
+
+### UI side
+
+- Added `selectInExplorer(path)` async helper invoking the Tauri command.
+  In a normal browser it throws "File selection is available only in the Tauri desktop app."
+- `FilesTable` gains an `onSelectFile` prop (required).
+- Actions column button order: **Open folder → Select file → Copy path**.
+- On error, the existing `setError` display is reused; `isScanError` stays false.
+- `handleSelectFile` in App calls `selectInExplorer` and routes errors to `setError`.
+
+### CSS
+
+- `.actions-col` widened from 190 px to 260 px to accommodate three buttons.
+
+### Scope guard
+
+- Files only — `select_in_explorer` is not exposed on folders or the selected-folder card.
+- No file deletion, file open, right-click menu, cmd open, Treemap, or virtual scroll.
+- Rust core, JSON schema, and TreeView code unchanged.
+
+---
+
 ## E-5 TreeView safety guards
 
 E-5 adds minimum safety guards to the lazy TreeView without adding virtual
@@ -735,6 +771,7 @@ click, the clicked row is highlighted and the card shows the correct full path.
 | E-3 | TreeView performance plan 作成（docs/treeview-performance-plan.md、実装なし） |
 | E-4 | visibleRows flat list 導入（非再帰 render、virtual scroll 前提構造） |
 | E-5 | TreeView safety guards（duplicate guard、per-node error、large folder warning） |
+| F-1 | top files に Select file 追加（Explorer `/select,file` でファイル選択表示） |
 
 ---
 
