@@ -83,16 +83,29 @@ disk-insight.exe --help
 - 進捗記録は必ず `D:\iwa\AI\Claude\private_notes\PROGRESS.md` に追記する
 - 作業区切りごとに PROGRESS.md を更新してコミットする
 
+## 短期ゴール: 削除なし最小実用品
+
+現在の目標は **D-13 Minimal usable milestone** の達成。
+
+- C ドライブを高速スキャンできる
+- フォルダ容量・大きいファイルが見える
+- フォルダ選択・Explorer open・パスコピーができる
+- **削除機能は D-13 まで入れない**
+- 危険操作なしで容量調査に使える状態を優先する
+
+次の残タスク: **D-8 → D-9 → D-10 → D-11 → D-12 → D-13**
+
+詳細は `docs/ui-plan.md` の "Remaining tasks before minimal usable milestone" を参照。
+
 ## 残課題 / 次候補
 
-- Scan 結果の UI 改善（完了時刻・Sample vs Live 表示）
-- drive selector UI
-- progress 表示 / cancel
-- TreeView 本格化（折りたたみ・仮想スクロール）
-- Explorer open
-- delete action
-- WinSxS / WOF / hardlink 差分診断
-- Treemap
+- D-8: top files の場所を Explorer で開く
+- D-9: パスコピー機能
+- D-10: UI 小整理
+- D-11: README 最小版作成
+- D-12: 実行手順整理
+- D-13: minimal usable milestone 判定
+- （後回し）TreeView 本格化・Treemap・ファイル削除・複数ドライブ自動列挙
 
 ## 設計上の制約
 

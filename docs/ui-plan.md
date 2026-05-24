@@ -262,7 +262,114 @@ D-7 adds a minimal "Open in Explorer" action for the selected folder.
 - No right-click menu, delete action, cmd open, or path copy.
 - No admin privilege escalation.
 
-## Next candidates
+---
 
-- Evolve toward a hierarchy-aware TreeView with JSON extension.
-- Keep delete actions for a later phase.
+## Completed phases summary
+
+| Phase | Description |
+|-------|-------------|
+| B-4 | サイズ取得・補正方針（final allocated size policy） |
+| B-5 | ツリー集計（parent_frn subtree aggregation） |
+| C-1 | JSON 出力（`--json` / `JsonTreeOutput`） |
+| C-2 | API/CLI 境界整理（`build_mft_tree_output` 公開） |
+| C-3 | CLI 引数整備（`--drive` / `--top` / `--help`） |
+| C-4 | JSON schema docs |
+| C-5 | API 境界メモ整理 |
+| D-1 | Tauri v2 + React/Vite scaffold / sample JSON viewer |
+| D-2 | UI readability（sticky header・path wrapping・数値右寄せ） |
+| D-3a | Tauri invoke で sample JSON ロード |
+| D-3a FU | 通常ブラウザ向け fetch fallback 追加 |
+| D-3b-1 | UI から `scan_drive` で実スキャン |
+| D-3b-2 | Scan 状態表示改善（status bar・scanning banner） |
+| D-3b-3 | `spawn_blocking` による UI 応答性改善 |
+| D-4 | Drive / Top 件数 UI 指定 |
+| D-5 | 簡易フォルダナビ（左ペイン） |
+| D-6 | 選択フォルダ配下の簡易フィルタ |
+| D-6 FU | backslash / yen sign 表示対策（`.heading-path`） |
+| D-7 | 選択フォルダを Explorer で開く |
+
+---
+
+## Minimal usable milestone: 削除なし最小実用品
+
+短期ゴール。以下がすべて揃った状態を一区切りとする。
+
+- C ドライブを高速スキャンできる
+- フォルダ容量が見える
+- 大きいファイルが見える
+- フォルダを選択できる
+- 選択フォルダ配下の候補が見える
+- Explorer で場所を開ける
+- 削除機能はまだ入れない
+- 危険操作なしで容量調査に使える状態
+
+---
+
+## Remaining tasks before minimal usable milestone
+
+### D-8 Top files の場所を Explorer で開く
+
+- top files の各行に "Open location" ボタンを追加
+- 親フォルダを `open_in_explorer` で開く（`explorer /select` は後回し）
+- Tauri 環境のみ有効
+
+### D-9 パスコピー機能
+
+- selected folder の path copy
+- top files の path copy
+- クリップボードコピーのみ
+- 削除はしない
+
+### D-10 UI 小整理
+
+- ボタン配置の見直し
+- 表示名の整理
+- selected folder card の整理
+- top 件数の説明
+- empty message の文言整理
+
+### D-11 README 最小版作成
+
+- 目的
+- 管理者権限が必要な旨
+- 起動方法（CLI / Tauri UI）
+- CLI 使用例
+- 現時点で削除機能なし
+- 既知差分（WinSxS / WOF / hardlink など）
+
+### D-12 実行手順整理
+
+- `cargo build --release`
+- `npm run tauri dev`
+- `npm run tauri build`
+- JSON 出力確認手順
+- PowerShell `>` の UTF-16LE 問題（`cmd /c` リダイレクト推奨）
+
+### D-13 Minimal usable milestone 判定
+
+チェックリスト:
+
+- [ ] Scan C: が動作する
+- [ ] Top folders / top files が表示される
+- [ ] Folder selection が動作する
+- [ ] Explorer open が動作する
+- [ ] Path copy が動作する
+- [ ] README がある
+- [ ] Clean build（TypeScript エラーなし・Rust 警告なし）
+- [ ] disk-insight / private_notes 両リポジトリ clean
+- [ ] 削除機能なし最小実用品として一区切り
+
+---
+
+## Deferred tasks
+
+以下は minimal usable milestone 以降に検討する。
+
+- ファイル削除
+- 右クリックメニュー
+- 本格 TreeView（折りたたみ・仮想スクロール）
+- Treemap
+- 複数ドライブ自動列挙
+- WinSxS / hardlink / WOF 精度追求
+- `explorer /select` によるファイル選択表示
+- コマンドプロンプトで開く
