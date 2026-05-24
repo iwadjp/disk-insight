@@ -34,10 +34,22 @@ type FileEntry = {
   final_allocated_size: number;
 };
 
+type TreeNode = {
+  name: string;
+  path: string;
+  record_index: number;
+  parent_record_index: number;
+  is_directory: boolean;
+  subtree_size: number;
+  direct_file_size: number;
+  child_count: number;
+};
+
 type DiskInsightOutput = {
   summary: Summary;
   top_directories: DirectoryEntry[];
   top_files: FileEntry[];
+  root_children?: TreeNode[];
 };
 
 type TauriWindow = Window & {
@@ -220,10 +232,12 @@ function FolderNav({
   dirs,
   selectedDir,
   onSelect,
+  rootChildrenCount,
 }: {
   dirs: DirectoryEntry[];
   selectedDir: DirectoryEntry | undefined;
   onSelect: (dir: DirectoryEntry) => void;
+  rootChildrenCount: number;
 }) {
   return (
     <aside className="folder-nav">
@@ -242,6 +256,7 @@ function FolderNav({
           </button>
         ))}
       </div>
+      <div className="folder-nav-footer">Root children: {rootChildrenCount}</div>
     </aside>
   );
 }
@@ -529,6 +544,7 @@ function App() {
               dirs={data.top_directories}
               selectedDir={selectedDir}
               onSelect={setSelectedDir}
+              rootChildrenCount={data.root_children?.length ?? 0}
             />
             <div className="content-right">
               {selectedDir && (

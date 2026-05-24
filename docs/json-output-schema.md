@@ -27,8 +27,11 @@ The JSON output is an object with these top-level fields:
 | `summary` | object | Scan summary and timing information. |
 | `top_directories` | array | Largest directories ordered by `subtree_size` descending. |
 | `top_files` | array | Largest files ordered by `final_allocated_size` descending. |
+| `root_children` | array | Direct children of the NTFS root directory (FRN 5). Initial data for Explorer-style TreeView. |
 
 The number of entries in `top_directories` and `top_files` can be changed with `--top`.
+
+`root_children` always returns all direct children of the drive root (up to 200). It is not affected by `--top`.
 
 ## `summary`
 
@@ -70,6 +73,23 @@ Each entry has these fields:
 | `record_index` | integer | MFT record index for the file. |
 | `parent_frn` | integer | Parent file reference number, masked to the record number portion. |
 | `final_allocated_size` | integer | Final allocated size used by disk-insight. |
+
+## `root_children`
+
+Initial data for an Explorer-style TreeView. Contains direct children of the NTFS root directory (FRN 5), sorted by `subtree_size` descending. This is phase E-1a data; full lazy tree expansion is implemented in later phases.
+
+Each entry has these fields:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | string | File or directory name only (no path). |
+| `path` | string | Full Windows path string. |
+| `record_index` | integer | MFT record index for this entry. |
+| `parent_record_index` | integer | MFT record index of the parent directory (5 for drive root). |
+| `is_directory` | boolean | `true` for directories, `false` for files. |
+| `subtree_size` | integer | Total final allocated size of files under the subtree (directories only; 0 for files). |
+| `direct_file_size` | integer | Total final allocated size of direct child files (directories only; 0 for files). |
+| `child_count` | integer | Number of direct child nodes. |
 
 ## Value units
 

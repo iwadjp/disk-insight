@@ -390,6 +390,36 @@ the D-13 milestone sign-off.
 
 ---
 
+## E-1a Root children data model
+
+E-1a adds `root_children` to the JSON/API output as the first step toward an
+Explorer-style TreeView. The existing folder navigation sidebar is not replaced.
+
+### Rust side
+
+- Added `JsonTreeNode` struct (`name`, `path`, `record_index`, `parent_record_index`,
+  `is_directory`, `subtree_size`, `direct_file_size`, `child_count`).
+- Added `root_children: Vec<JsonTreeNode>` to `JsonTreeOutput`.
+- In `build_mft_tree_output`: after tree aggregation, extracts direct children of
+  FRN 5 (NTFS root), sorts by `subtree_size` desc, limits to 200 entries.
+- Human CLI output is unchanged.
+
+### UI side
+
+- Added `TreeNode` TypeScript type.
+- Added `root_children?: TreeNode[]` to `DiskInsightOutput` (optional for
+  compatibility with existing sample JSON).
+- `FolderNav` footer shows `Root children: N` as a confirmation display.
+
+### Scope guard
+
+- `root_children` contains FRN-5 direct children only — no recursive expansion.
+- No `get_children` Tauri command, no expand/collapse, no full TreeView, no virtual scroll.
+- Existing folder nav (top_directories) is unchanged.
+- Full lazy TreeView is planned for E-1b and later phases.
+
+---
+
 ## Completed phases summary
 
 | Phase | Description |
@@ -419,6 +449,7 @@ the D-13 milestone sign-off.
 | D-11 | README.md 作成（概要・CLI/UI使用例・既知制限） |
 | D-12 | docs/runbook.md 作成（開発者向け実行確認手順・UI チェックリスト） |
 | D-13 | Minimal usable milestone 判定: **PASS** (2026-05-24) |
+| E-1a | root_children を JSON に追加、Explorer風TreeView の第一歩 |
 
 ---
 

@@ -471,6 +471,15 @@ tbody tr:last-child td {
   padding-top: 1px;
 }
 
+.folder-nav-footer {
+  padding: 6px 14px;
+  font-size: 11px;
+  color: #5e6b78;
+  background: #f8fafc;
+  border-top: 1px solid #d9e1e8;
+  flex-shrink: 0;
+}
+
 /* ── Right pane ── */
 .content-right {
   flex: 1;

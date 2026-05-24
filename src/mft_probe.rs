@@ -2419,6 +2419,18 @@ pub struct JsonFileEntry {
 }
 
 #[derive(serde::Serialize)]
+pub struct JsonTreeNode {
+    pub name:                String,
+    pub path:                String,
+    pub record_index:        usize,
+    pub parent_record_index: usize,
+    pub is_directory:        bool,
+    pub subtree_size:        u64,
+    pub direct_file_size:    u64,
+    pub child_count:         usize,
+}
+
+#[derive(serde::Serialize)]
 pub struct JsonSummary {
     pub drive:                 String,
     pub total_records:         usize,
@@ -2440,6 +2452,7 @@ pub struct JsonTreeOutput {
     pub summary:         JsonSummary,
     pub top_directories: Vec<JsonDirEntry>,
     pub top_files:       Vec<JsonFileEntry>,
+    pub root_children:   Vec<JsonTreeNode>,
 }
 
 // Core API boundary:
@@ -2882,7 +2895,32 @@ pub fn build_mft_tree_output(drive: char, top_n: usize) -> Result<JsonTreeOutput
         total_time_ms:         total_elapsed.as_millis() as u64,
     };
 
-    Ok(JsonTreeOutput { summary, top_directories, top_files })
+    // Root children: direct children of the NTFS root directory (FRN 5).
+    // Sorted by subtree_size desc so the largest folders appear first.
+    let root_children: Vec<JsonTreeNode> = match frn_to_idx.get(&5) {
+        Some(&root_idx) => {
+            let mut children: Vec<JsonTreeNode> = arena[root_idx].children.iter().map(|&ci| {
+                JsonTreeNode {
+                    name:                arena[ci].name.clone(),
+                    path:                reconstruct_path(ci),
+                    record_index:        arena[ci].frn as usize,
+                    parent_record_index: arena[ci].parent_frn as usize,
+                    is_directory:        arena[ci].is_dir,
+                    subtree_size:        arena[ci].subtree_size,
+                    direct_file_size:    arena[ci].direct_file_size,
+                    child_count:         arena[ci].children.len(),
+                }
+            }).collect();
+            children.sort_unstable_by(|a, b| {
+                b.subtree_size.cmp(&a.subtree_size).then_with(|| a.name.cmp(&b.name))
+            });
+            children.truncate(200);
+            children
+        }
+        None => Vec::new(),
+    };
+
+    Ok(JsonTreeOutput { summary, top_directories, top_files, root_children })
 }
 
 pub fn probe7_json(drive: char) -> Result<()> {
