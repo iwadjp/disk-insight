@@ -66,6 +66,30 @@ D-3b-1 wires the Tauri `scan_drive` command to the React UI.
 - No progress bar, cancel button, TreeView, delete action, or Explorer open.
 - Admin rights are required for MFT access; errors surface via the error display.
 
+## D-3b-2 Scan status display
+
+D-3b-2 improves the visual feedback around scan state without changing the MFT scan logic.
+
+### Status bar
+
+- Shown below the toolbar whenever data is present.
+- Source badge: "Sample data" (blue pill) or "Live scan: C:" (green pill).
+- Last updated timestamp: `YYYY-MM-DD HH:MM:SS` using local time.
+- Scan duration: "Scan completed in X ms" — only for live scans.
+- While a reload is in progress, appends "(updating…)" in italic.
+
+### Scanning in progress
+
+- Previous data remains visible during a new scan (no blank-page flicker).
+- An amber banner with a CSS spinner appears above the data area while scanning.
+- The full-page `.loading` placeholder is shown only before the first load.
+
+### Error hints
+
+- `isScanError` flag distinguishes scan errors from sample-load errors.
+- In Tauri runtime: "Please run the app as administrator (required for MFT access)."
+- In browser: "Run `npm run tauri dev` or use the built app."
+
 ## Next candidates
 
 - Add drive selection UI.

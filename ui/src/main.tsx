@@ -45,6 +45,8 @@ type TauriWindow = Window & {
   __TAURI_INTERNALS__?: unknown;
 };
 
+type SourceKind = "sample" | "live";
+
 function isTauriRuntime(): boolean {
   const tauriWindow = window as TauriWindow;
   return Boolean(tauriWindow.__TAURI__ || tauriWindow.__TAURI_INTERNALS__);
@@ -64,7 +66,7 @@ async function loadSampleData(): Promise<DiskInsightOutput> {
 
 async function scanDrive(drive: string, top: number): Promise<DiskInsightOutput> {
   if (!isTauriRuntime()) {
-    throw new Error("Real scan is available only in the Tauri app.");
+    throw new Error("Real scan is available only in the Tauri desktop app.");
   }
   return invoke<DiskInsightOutput>("scan_drive", { drive, top });
 }
@@ -84,6 +86,47 @@ function formatBytes(bytes: number): string {
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
+}
+
+function formatDateTime(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  );
+}
+
+function StatusBar({
+  sourceKind,
+  lastUpdated,
+  data,
+  isLoading,
+}: {
+  sourceKind: SourceKind | null;
+  lastUpdated: Date | null;
+  data: DiskInsightOutput | null;
+  isLoading: boolean;
+}) {
+  if (!sourceKind || !lastUpdated || !data) return null;
+
+  const sourceLabel =
+    sourceKind === "live" ? `Live scan: ${data.summary.drive}` : "Sample data";
+
+  const updatedLabel = `Last updated: ${formatDateTime(lastUpdated)}`;
+
+  const durationLabel =
+    sourceKind === "live"
+      ? `Scan completed in ${formatNumber(data.summary.total_time_ms)} ms`
+      : null;
+
+  return (
+    <div className="status-bar">
+      <span className={`source-badge source-badge--${sourceKind}`}>{sourceLabel}</span>
+      <span className="status-meta">{updatedLabel}</span>
+      {durationLabel && <span className="status-meta">{durationLabel}</span>}
+      {isLoading && <span className="status-meta status-updating">(updating…)</span>}
+    </div>
+  );
 }
 
 function SummaryCard({ summary }: { summary: Summary }) {
@@ -168,14 +211,24 @@ function FilesTable({ rows }: { rows: FileEntry[] }) {
   );
 }
 
+const SCAN_MSG =
+  "Scanning C: — reading NTFS metadata. This may take several seconds.";
+
 function App() {
   const [data, setData] = useState<DiskInsightOutput | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingMsg, setLoadingMsg] = useState("Loading sample data...");
   const [error, setError] = useState<string | null>(null);
   const [isScanError, setIsScanError] = useState(false);
+  const [sourceKind, setSourceKind] = useState<SourceKind | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  function runLoad(loader: () => Promise<DiskInsightOutput>, msg: string, isScan: boolean) {
+  function runLoad(
+    loader: () => Promise<DiskInsightOutput>,
+    msg: string,
+    isScan: boolean,
+    kind: SourceKind,
+  ) {
     setIsLoading(true);
     setLoadingMsg(msg);
     setError(null);
@@ -183,6 +236,8 @@ function App() {
     loader()
       .then((json) => {
         setData(json);
+        setSourceKind(kind);
+        setLastUpdated(new Date());
         setIsLoading(false);
       })
       .catch((err: unknown) => {
@@ -193,7 +248,7 @@ function App() {
   }
 
   useEffect(() => {
-    runLoad(loadSampleData, "Loading sample data...", false);
+    runLoad(loadSampleData, "Loading sample data...", false, "sample");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -204,14 +259,16 @@ function App() {
         <div className="toolbar">
           <button
             className="btn"
-            onClick={() => runLoad(loadSampleData, "Loading sample data...", false)}
+            onClick={() =>
+              runLoad(loadSampleData, "Loading sample data...", false, "sample")
+            }
             disabled={isLoading}
           >
             Load sample
           </button>
           <button
             className="btn btn-primary"
-            onClick={() => runLoad(() => scanDrive("C", 100), "Scanning C: ...", true)}
+            onClick={() => runLoad(() => scanDrive("C", 100), SCAN_MSG, true, "live")}
             disabled={isLoading}
           >
             Scan C:
@@ -219,21 +276,40 @@ function App() {
         </div>
       </header>
 
-      {isLoading && <div className="loading">{loadingMsg}</div>}
+      {/* Scanning banner: shown on top of existing data while a new scan is running */}
+      {isLoading && data !== null && (
+        <div className="scanning-banner">
+          <span className="scanning-spinner" aria-hidden="true" />
+          <span>{loadingMsg}</span>
+        </div>
+      )}
+
+      {/* Full-page placeholder only when there is no data yet */}
+      {isLoading && data === null && (
+        <div className="loading">{loadingMsg}</div>
+      )}
 
       {error && (
         <div className="error">
           <div>{error}</div>
           {isScanError && (
             <div className="error-hint">
-              Please run the app as administrator (required for MFT access).
+              {isTauriRuntime()
+                ? "Please run the app as administrator (required for MFT access)."
+                : "Run `npm run tauri dev` or use the built app."}
             </div>
           )}
         </div>
       )}
 
-      {data && !isLoading && (
+      {data && (
         <>
+          <StatusBar
+            sourceKind={sourceKind}
+            lastUpdated={lastUpdated}
+            data={data}
+            isLoading={isLoading}
+          />
           <SummaryCard summary={data.summary} />
           <DirectoriesTable rows={data.top_directories} />
           <FilesTable rows={data.top_files} />
