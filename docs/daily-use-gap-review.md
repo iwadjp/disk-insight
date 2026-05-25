@@ -1070,3 +1070,25 @@ but Windows remains difficult to explain simply.
 **v0.3.0-daily-use: HOLD continues.** The next natural step is M-2 UI label /
 size metric wording review; WinSxS-specific accounting can remain a later
 investigation.
+
+---
+
+## 24. M-2: UI label / size metric wording review — PLANNED (2026-05-26)
+
+Details: `docs/size-label-wording-plan.md`
+
+M-1 improved the explanation of size discrepancies, but daily-use trust still
+depends on the UI making the metric obvious. A user should not have to remember
+from docs whether a disk-insight number should be compared with Explorer
+"Size", Explorer "Size on disk", WizTree "Size", or WizTree "Allocated".
+
+The size-confidence issue is therefore partly label ambiguity:
+
+- "ALLOCATED" can sound exact.
+- "Subtree" does not say what kind of total it is.
+- "Size policy" is implementation wording.
+- `current` / `wof_adjusted` need short comparison guidance.
+
+Daily-use PASS should require that the user can tell what size is being shown.
+M-2b should make minimal UI label / tooltip changes before further correction
+implementation. v0.3.0-daily-use remains **HOLD**.

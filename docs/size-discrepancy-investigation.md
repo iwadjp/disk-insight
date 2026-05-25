@@ -611,3 +611,23 @@ divergence pattern where WizTree and disk-insight align more closely with each
 other than with Explorer Properties. Users provides a positive alignment case
 for ordinary user-profile data. Windows completes the primary M-1 set as a
 special accounting caveat rather than a clean pass/fail case.
+
+---
+
+## M-2: UI label / size metric wording review
+
+M-1 split the size discrepancy into four path-specific patterns instead of one
+global "disk-insight is wrong" explanation:
+
+- PFx86: Size vs allocated-style metric comparison mix-up, with residual deltas.
+- Program Files: Explorer divergence case.
+- Users: alignment case.
+- Windows: Windows special accounting case.
+
+The next step is not a correction implementation. It is UI wording: make it
+clear that disk-insight shows allocation-oriented / policy-adjusted estimates
+and should usually be compared with Explorer "Size on disk" or WizTree
+"Allocated", not Explorer "Size".
+
+See `docs/size-label-wording-plan.md` for the proposed label, tooltip, and
+help-text plan.

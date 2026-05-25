@@ -465,3 +465,18 @@ protected folders, and tool-specific accounting surfaces all interact.
 disk-insight is in the expected range for both current and WOF-adjusted views,
 but Windows / WinSxS remains a caveat area. Do not claim exact accuracy for
 Windows special folders without a dedicated accounting model.
+
+### M-2: UI label / size metric wording
+
+M-1 showed that size trust is not only a numeric problem. The UI also needs to
+make the metric clear:
+
+- `current` is an allocation-oriented estimate, not Explorer "Size".
+- `wof_adjusted` is an experimental WOF-aware estimate, not a full
+  hardlink/WinSxS correction.
+- Comparisons should usually use Explorer "Size on disk" or WizTree
+  "Allocated", not Explorer "Size".
+- Exact-match claims should be avoided.
+
+See `docs/size-label-wording-plan.md`. The recommended next step is M-2b:
+minimal UI label and tooltip changes before any further correction work.

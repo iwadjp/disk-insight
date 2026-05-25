@@ -1255,6 +1255,28 @@ Size trust work now distinguishes four patterns:
 UI wording should avoid presenting one universal "correct" size for Windows
 special folders. No implementation is included here.
 
+### M-2: UI label / size metric wording review — DESIGN (2026-05-26)
+
+Details: `docs/size-label-wording-plan.md`
+
+M-2 defines wording for the size metric UI before implementation. The goal is
+to reduce confusion between Explorer "Size", Explorer "Size on disk", WizTree
+"Size", WizTree "Allocated", disk-insight `current`, and disk-insight
+`wof_adjusted`.
+
+Recommended M-2b minimal UI changes:
+
+- `ALLOCATED` -> `ALLOCATED ESTIMATE`
+- `Subtree:` -> `Subtree estimate:`
+- `Direct files:` -> `Direct files estimate:`
+- `Size policy` -> `Size metric`
+- `Current (default)` -> `Current allocation estimate`
+- `WOF adjusted (experimental)` -> `WOF-adjusted estimate (experimental)`
+- table size headers -> short "EST." labels where space is tight
+
+No correction implementation is part of M-2. WOF default promotion, hardlink
+dedup, WinSxS correction, and delete remain out of scope.
+
 ---
 
 ## v0.3.0-daily-use milestone (candidate)

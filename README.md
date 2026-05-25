@@ -141,8 +141,12 @@ disk-insight offers two storage policies:
 
 | Policy | Description |
 |--------|-------------|
-| `current` (default) | NTFS allocation-based. Conservative and predictable. Matches Explorer for normal files. WOF-compressed areas (Edge, Office, Windows components) show higher than WizTree. |
-| `wof_adjusted` (experimental) | WOF-compressed files use the compressed backing stream size. Closer to WizTree for Program Files. Does not affect user data or non-WOF files. |
+| `current` (default) | NTFS allocation-oriented estimate. Usually close to Explorer "Size on disk" for normal files. WOF-compressed areas (Edge, Office, Windows components) can show higher than WizTree. |
+| `wof_adjusted` (experimental) | WOF-compressed files use the compressed backing stream size. Often closer to WizTree "Allocated" for Program Files. Does not apply hardlink or WinSxS dedup. |
+
+These values are estimates. `current` is allocation-oriented, and
+`wof_adjusted` is experimental. Compare against Explorer "Size on disk" or
+WizTree "Allocated" where appropriate, not Explorer "Size".
 
 Neither policy produces byte-exact matches with Explorer or WizTree — differences are expected and explainable.
 See `docs/size-accuracy-review.md` for a full breakdown.
