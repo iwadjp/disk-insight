@@ -888,12 +888,13 @@ Explorer / WizTree / disk-insight の値を明示的に取り直し、比較す�
 |------|-------------:|-----------:|-----------:|------------:|
 | C:\Program Files (x86) | 7.8 GB | 10.1 GB | 8.251 GB | 11.0 GB |
 | C:\Program Files | 24.6 GB | 29.7 GB | 24.8 GB | 19.5 GB |
-| C:\Windows | 16.1 GB | 27.1 GB | 18.4 GB | TBD |
+| C:\Windows | 15.5 GB | 26.7 GB | 18.4 GB (prior diag) | 17.7 GB |
 | C:\Users | 85.6 GB | 85.4 GB | TBD | 86.6 GB |
 
 **PFx86 Explorer SoD = 11.0 GB**。PFx86 は Case 3 + residual deltas。
 **Program Files Explorer SoD = 19.5 GB**。Program Files は Explorer divergence case。
 **Users Explorer SoD = 86.6 GB**。Users は Alignment case。
+**Windows Explorer SoD = 17.7 GB**。Windows は Windows special accounting case。
 
 ### 判定後の含意
 
@@ -911,7 +912,7 @@ Explorer / WizTree / disk-insight の値を明示的に取り直し、比較す�
 
 詳細手順: `docs/size-discrepancy-investigation.md` §M-1c
 
-**v0.3.0-daily-use: HOLD** — PFx86 / Program Files / Users は Section 20-22 に結果を追記済み。
+**v0.3.0-daily-use: HOLD** — 主要4パスは Section 20-23 に結果を追記済み。
 
 ---
 
@@ -1028,4 +1029,44 @@ path-specific behavior in PFx86, Program Files, Windows, and component-store
 areas.
 
 **v0.3.0-daily-use: HOLD continues.** Users is a positive alignment case, but
-the UI still needs clearer size wording and Windows remains unmeasured in M-1.
+the UI still needs clearer size wording and Windows special accounting remains
+a caveat area.
+
+---
+
+## 23. M-1 Windows measurement result — RECORDED (2026-05-26)
+
+Details: `docs/size-discrepancy-investigation.md` §M-1
+
+### Measurement
+
+`C:\Windows`:
+
+| Metric | Value |
+|--------|------:|
+| Explorer Size | 27.2 GB / 29,288,242,753 bytes |
+| Explorer Size on disk | 17.7 GB / 19,076,632,576 bytes |
+| Explorer files / folders | 377,473 / 174,670 |
+| WizTree Size | 28.9 GB |
+| WizTree Allocated | 15.5 GB |
+| WizTree items / files / folders | 556,667 / 380,399 / 176,268 |
+| disk-insight current | 26.7 GB |
+| disk-insight wof_adjusted | ~18.4 GB (prior global WOF diagnostic) |
+
+### Interpretation
+
+Windows is a **Windows special accounting case**.
+
+- Explorer Size, WizTree Size, and disk-insight `current` are broadly comparable.
+- Explorer Size on disk, WizTree Allocated, and disk-insight `wof_adjusted` are
+  also broadly comparable, but still divergent.
+- WinSxS, hardlinks, component-store accounting, WOF, protected folders, and
+  tool-specific accounting boundaries all matter here.
+
+This does not show a simple disk-insight-only failure. It also does not provide
+a clean alignment proof. Size trust improves because the case is now classified,
+but Windows remains difficult to explain simply.
+
+**v0.3.0-daily-use: HOLD continues.** The next natural step is M-2 UI label /
+size metric wording review; WinSxS-specific accounting can remain a later
+investigation.

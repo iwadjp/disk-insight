@@ -1234,6 +1234,27 @@ Size trust work now distinguishes at least three patterns:
 UI wording should preserve this distinction instead of implying one universal
 reason for every size difference. No implementation is included here.
 
+### M-1 Windows measurement recorded — special accounting case (2026-05-26)
+
+`C:\Windows` measurement completes the primary M-1 path set:
+
+- Explorer Size 27.2 GB, WizTree Size 28.9 GB, and disk-insight `current`
+  26.7 GB are broadly comparable.
+- Explorer Size on disk 17.7 GB, WizTree Allocated 15.5 GB, and disk-insight
+  `wof_adjusted` ~18.4 GB (prior global WOF diagnostic) are broadly comparable
+  but still divergent.
+- WinSxS, hardlinks, component-store accounting, WOF, protected folders, and
+  tool accounting boundaries all affect this path.
+
+Size trust work now distinguishes four patterns:
+- PFx86 metric mix-up.
+- Program Files Explorer divergence.
+- Users alignment case.
+- Windows special accounting case.
+
+UI wording should avoid presenting one universal "correct" size for Windows
+special folders. No implementation is included here.
+
 ---
 
 ## v0.3.0-daily-use milestone (candidate)

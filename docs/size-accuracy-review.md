@@ -323,15 +323,16 @@ deltas still unresolved.
 Program Files is a separate Explorer divergence case: WizTree aligns closely
 with disk-insight, while Explorer Properties is much smaller.
 
-**M-1 measurement still needed**: explicitly record Explorer "Size on disk" for
-Windows.
+**M-1 primary measurements are now recorded** for PFx86, Program Files, Users,
+and Windows.
 
 ### K-3b verdict
 
 **B + D**:
 - Cause A (metric mismatch) and Cause C (WOF) are highly confident explanations
 - Cause D (hardlink/WinSxS) is confirmed and quantified
-- Explorer "Size on disk" for Windows is still unmeasured
+- Primary M-1 paths are measured; Windows remains a caveat area rather than a
+  clean alignment case
 
 **v0.3.0-daily-use: HOLD** — size accuracy remains a trust issue pending M-1.
 
@@ -364,6 +365,7 @@ The "Explorer 11.0 GB" value from prior notes may be logical "Size" — this is 
 | Explorer Size ≈ 11 GB (not Size on disk) | Cause A (metric mismatch) confirmed — prior comparison was invalid |
 | WizTree Alloc ≈ wof_adjusted and WizTree Size ≈ current, but Explorer is much smaller | Explorer divergence / special folder accounting case |
 | Explorer Size ≈ WizTree Size ≈ current, and Explorer SoD ≈ WizTree Alloc | Alignment case — ordinary subtree agrees across tools |
+| Windows Size values are broadly comparable, allocated values are broadly comparable, but residuals remain | Windows special accounting case — WinSxS / hardlink / component-store / WOF caveat |
 
 ### Status
 
@@ -438,3 +440,28 @@ This is a positive control for size trust:
 Not all paths exhibit a major discrepancy. Remaining size trust concerns are
 path-specific, especially PFx86, Program Files, Windows, and WinSxS/component
 store behavior.
+
+### Windows measurement result
+
+`C:\Windows` Explorer Properties reported:
+- Size: 27.2 GB / 29,288,242,753 bytes
+- Size on disk: 17.7 GB / 19,076,632,576 bytes
+- Files: 377,473
+- Folders: 174,670
+
+WizTree reported Size 28.9 GB, Allocated 15.5 GB, 556,667 items, 380,399 files,
+and 176,268 folders. disk-insight `current` reported 26.7 GB. The
+`wof_adjusted` value is ~18.4 GB from the prior global WOF diagnostic, not a
+new UI measurement.
+
+Current classification: **Windows special accounting case**.
+
+Explorer Size, WizTree Size, and disk-insight `current` are broadly comparable.
+Explorer Size on disk, WizTree Allocated, and disk-insight `wof_adjusted` are
+also broadly comparable, but residual differences remain. This is expected for
+Windows because WinSxS, hardlinks, component-store accounting, WOF, system
+protected folders, and tool-specific accounting surfaces all interact.
+
+disk-insight is in the expected range for both current and WOF-adjusted views,
+but Windows / WinSxS remains a caveat area. Do not claim exact accuracy for
+Windows special folders without a dedicated accounting model.
