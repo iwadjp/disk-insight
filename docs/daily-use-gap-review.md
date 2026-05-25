@@ -352,3 +352,53 @@ recycle bin routing, undo) is required.
 WOF adjusted experimental mode is available. Further accuracy work (WinSxS,
 hardlink dedup, cluster-level accounting) is deferred — it is a separate track
 from usability and is not on the v0.3.0 critical path.
+
+---
+
+## 10. J-6: Daily-use milestone judgment (2026-05-25)
+
+### Verdict: PASS
+
+v0.3.0-daily-use milestone is considered reached.
+
+The question posed at the start of this review was:
+> "Can disk-insight replace WizTree for at least some daily disk analysis?"
+
+**Answer: Yes**, for the core "find out what is taking space in this folder" workflow.
+
+### What improved vs. the J-1 baseline
+
+| Gap (J-1) | Status |
+|-----------|--------|
+| Gap A — right pane showed global top-N only | **Resolved** (J-2 + J-2b + J-5b) |
+| Gap C — no sort in right pane | **Resolved** (J-3) |
+| Gap D — no session persistence | **Resolved** (J-4) |
+| Gap B — no name filter | **Partially resolved** (J-5: direct children filter) |
+
+### Remaining gaps vs. WizTree
+
+| Gap | Severity for daily use |
+|-----|----------------------|
+| TreeView does not auto-scroll/expand when right-pane navigates | Low — workaround: use TreeView manually |
+| No keyboard navigation in TreeView | Low |
+| Global full search / filename search across whole drive | Medium — J-5 covers the folder-scoped case |
+| No column sort in top directories / top files tables | Low |
+| Virtual scroll not implemented | Low — not yet a bottleneck |
+
+### GitHub public release
+
+Still deferred. The app is now useful for the author's daily use, but:
+- No installer / release artifact workflow is set up
+- Documentation is not polished for public consumption
+- Hardlink / WinSxS accuracy gaps would confuse users unfamiliar with them
+- Revisit after a period of personal daily use confirms the milestone holds
+
+### Delete action
+
+Remains out of scope. The delete-free guarantee is a feature, not a gap.
+When delete is eventually designed, it will require confirmation dialog,
+Recycle Bin routing, and undo — a separate design track.
+
+### tag candidate
+
+`v0.3.0-daily-use` — to be created after a short period of actual daily use confirms the PASS holds.

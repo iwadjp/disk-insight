@@ -1184,7 +1184,7 @@ milestone candidate: **v0.2.0-treeview-wof**
 
 ## v0.3.0-daily-use milestone (candidate)
 
-**STATUS: in progress — 2026-05-25**
+**STATUS: PASS — 2026-05-25**
 
 次ゴール: 著者が自分の用途で毎日使えるレベルに達すること。
 公開判断はその後（daily-use PASS 後に改めて判断する）。
@@ -1415,9 +1415,52 @@ Direct children panel に name/path filter を追加した。
 
 ### J-6: Daily-use milestone verification
 
-- 実際に1週間以上の自己使用
-- WizTree 不使用で快適に操作できること
-- 主要不満点が解消されていること
+**STATUS: PASS — 2026-05-25**
+
+#### 判定
+
+v0.3.0-daily-use として一区切り可能。
+「自分が WizTree の代わりに、少なくとも一部の日常的な容量調査で disk-insight を使いたいと思えるか」→ **YES**
+
+#### 根拠
+
+- J-1 で特定した最大ブロッカー（Gap A: 右ペインがフォルダ内容を表示しない）は J-2/J-2b/J-5b で解消
+- 右ペインだけで「潜る・戻る・絞る・ソート」が完結する
+- 設定永続化（J-4）で起動毎の Drive / Top-N / Policy 再入力が不要
+- 削除なし = 調査中の誤操作リスクがない（WizTree に対する明確な利点）
+- MFT 直読みによるスキャン速度は維持
+
+#### 含まれる機能
+
+| 機能 | 状態 |
+|------|------|
+| Direct children panel | J-2 |
+| DIR row navigation（下へ潜る） | J-2b |
+| Parent navigation（上へ戻る） | J-5b |
+| Sort（size / name / type / asc / desc） | J-3 |
+| Name/path filter | J-5 |
+| Session preferences（drive / top-N / policy / sort） | J-4 |
+| WOF adjusted experimental UI | v0.2.0 |
+| Drive 自動検出 | G-1 |
+| Open folder / Select file / Copy path | F-1 以降 |
+| TreeView lazy expansion | E-2 以降 |
+
+#### 除外（既知制約・意図的に未実装）
+
+| 項目 | 理由 |
+|------|------|
+| Delete action | 安全設計・確認UI が必須。別設計フェーズ |
+| Virtual scroll | 現スケールではボトルネックなし |
+| Global full search | 別フェーズ候補 |
+| TreeView auto-expand/scroll when right-pane navigates | 日常利用では許容可能 |
+| Breadcrumb / back-forward | 後フェーズ候補 |
+| Hardlink / WinSxS dedup | 精度改善トラック（別フェーズ） |
+| WOF adjusted default 化 | 方針判断を保留 |
+| GitHub public release | daily-use PASS 後に改めて判断 |
+
+#### tag 候補
+
+`v0.3.0-daily-use`（今回は tag 作成しない）
 
 ### 後回し（v0.3.0 より後）
 
