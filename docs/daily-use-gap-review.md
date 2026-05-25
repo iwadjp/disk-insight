@@ -1092,3 +1092,23 @@ The size-confidence issue is therefore partly label ambiguity:
 Daily-use PASS should require that the user can tell what size is being shown.
 M-2b should make minimal UI label / tooltip changes before further correction
 implementation. v0.3.0-daily-use remains **HOLD**.
+
+---
+
+## 25. M-2b: UI label minimal implementation — COMPLETE (2026-05-26)
+
+M-2b updated UI labels so disk-insight values are less likely to be confused
+with Explorer "Size":
+
+- `ALLOCATED` became `ALLOCATED ESTIMATE`.
+- `Size policy` became `Size metric`.
+- Selected folder totals now use estimate wording.
+- Table size headers now use estimate-oriented labels.
+- WOF-adjusted mode remains marked experimental and still warns that hard links
+  and WinSxS are not fully corrected.
+
+This improves the "what size is this?" part of daily-use trust. It does not
+resolve residual deltas, does not implement correction logic, and does not make
+exact Explorer / WizTree parity claims.
+
+**v0.3.0-daily-use: HOLD continues.**

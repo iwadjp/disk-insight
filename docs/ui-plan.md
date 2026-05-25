@@ -1277,6 +1277,27 @@ Recommended M-2b minimal UI changes:
 No correction implementation is part of M-2. WOF default promotion, hardlink
 dedup, WinSxS correction, and delete remain out of scope.
 
+### M-2b: UI label minimal implementation — COMPLETE (2026-05-26)
+
+M-2b applies the smallest UI wording changes from
+`docs/size-label-wording-plan.md`.
+
+Implemented labels:
+
+- `ALLOCATED ESTIMATE` in the summary card.
+- `Size metric` in the toolbar.
+- `Current allocation estimate` and `WOF-adjusted estimate (experimental)` in
+  the metric selector.
+- `Subtree estimate:` and `Direct files estimate:` in the selected folder card.
+- Estimate-oriented table headers such as `Est. allocated` and
+  `Direct file est.`.
+- Updated WOF warning text that keeps the experimental / no hardlink-WinSxS
+  correction caveat.
+
+This is part of improving daily-use size trust by making the metric visible.
+No size correction, WOF default promotion, hardlink dedup, WinSxS correction,
+JSON/CLI schema change, or delete feature is included.
+
 ---
 
 ## v0.3.0-daily-use milestone (candidate)

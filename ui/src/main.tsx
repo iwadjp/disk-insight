@@ -366,6 +366,12 @@ function formatDateTime(date: Date): string {
   );
 }
 
+function storagePolicyDisplayName(policy: string | undefined): string | null {
+  if (policy === "wof_adjusted") return "WOF-adjusted estimate (experimental)";
+  if (policy === "current") return "Current allocation estimate";
+  return policy || null;
+}
+
 function StatusBar({
   sourceKind,
   lastUpdated,
@@ -392,7 +398,7 @@ function StatusBar({
       : null;
 
   const policyLabel = data.summary.storage_policy && data.summary.storage_policy !== "current"
-    ? data.summary.storage_policy
+    ? storagePolicyDisplayName(data.summary.storage_policy)
     : null;
 
   return (
@@ -414,15 +420,19 @@ function StatusBar({
 function SummaryCard({ summary }: { summary: Summary }) {
   const items = [
     ["Drive", summary.drive],
-    ["Allocated", formatBytes(summary.total_final_allocated)],
+    [
+      "Allocated estimate",
+      formatBytes(summary.total_final_allocated),
+      "Estimated allocated-style size. Compare with Explorer \"Size on disk\" or WizTree \"Allocated\", not Explorer \"Size\".",
+    ],
     ["Files", formatNumber(summary.files)],
     ["Directories", formatNumber(summary.directories)],
     ["Total time", `${formatNumber(summary.total_time_ms)} ms`],
   ];
   return (
     <section className="summary" aria-label="Scan summary">
-      {items.map(([label, value]) => (
-        <div className="metric" key={label}>
+      {items.map(([label, value, title]) => (
+        <div className="metric" key={label} title={title}>
           <span className="metric-label">{label}</span>
           <strong>{value}</strong>
         </div>
@@ -603,8 +613,12 @@ function SelectedFolderCard({
         </div>
       </div>
       <div className="selected-folder-stats">
-        <span>Subtree: <strong>{formatBytes(dir.subtree_size)}</strong></span>
-        <span>Direct files: <strong>{formatBytes(dir.direct_file_size)}</strong></span>
+        <span title="Estimated allocated-style total for this folder subtree.">
+          Subtree estimate: <strong>{formatBytes(dir.subtree_size)}</strong>
+        </span>
+        <span title="Estimated allocated-style total for files directly in this folder.">
+          Direct files estimate: <strong>{formatBytes(dir.direct_file_size)}</strong>
+        </span>
         <span>Children: <strong>{formatNumber(dir.child_count)}</strong></span>
       </div>
     </div>
@@ -623,8 +637,12 @@ function DirectoriesTable({ rows, title }: { rows: DirectoryEntry[]; title: Reac
           <thead>
             <tr>
               <th>Path</th>
-              <th className="numeric">Subtree size</th>
-              <th className="numeric">Direct file size</th>
+              <th className="numeric" title="Estimated allocated-style size for the subtree.">
+                Est. allocated
+              </th>
+              <th className="numeric" title="Estimated allocated-style size for direct files.">
+                Direct file est.
+              </th>
               <th className="numeric">Children</th>
             </tr>
           </thead>
@@ -674,7 +692,9 @@ function FilesTable({
             <thead>
               <tr>
                 <th>Path</th>
-                <th className="numeric">Allocated size</th>
+                <th className="numeric" title="Estimated allocated-style file size.">
+                  Est. allocated
+                </th>
                 <th className="actions-col">Actions</th>
               </tr>
             </thead>
@@ -806,7 +826,12 @@ function DirectChildrenPanel({
             <span className="direct-child-name">
               {node.name || node.path}
             </span>
-            <span className="direct-child-size">{formatBytes(node.subtree_size)}</span>
+            <span
+              className="direct-child-size"
+              title="Estimated allocated-style size."
+            >
+              {formatBytes(node.subtree_size)}
+            </span>
             {/* stopPropagation prevents action clicks from firing row navigation */}
             <div className="direct-child-actions" onClick={(e) => e.stopPropagation()}>
               <button
@@ -852,7 +877,7 @@ function DirectChildrenPanel({
               value={sortKey}
               onChange={(e) => onSortKeyChange(e.target.value as DirectChildrenSortKey)}
             >
-              <option value="size">Size</option>
+              <option value="size">Est. size</option>
               <option value="name">Name</option>
               <option value="type">Type</option>
             </select>
@@ -1189,7 +1214,7 @@ function App() {
       setIsScanError(false);
       return;
     }
-    const policyNote = storagePolicy === "wof_adjusted" ? " [WOF adjusted]" : "";
+    const policyNote = storagePolicy === "wof_adjusted" ? " [WOF-adjusted estimate]" : "";
     const msg = `Scanning ${drive}: — reading NTFS metadata. Top ${topN} entries.${policyNote}`;
     runLoad(() => scanDrive(drive, topN, storagePolicy), msg, true, "live", topN);
   }
@@ -1323,20 +1348,25 @@ function App() {
             </select>
           </label>
           <label className="toolbar-label">
-            Size policy
+            Size metric
             <select
               className="top-select"
               value={storagePolicy}
               onChange={(e) => setStoragePolicy(e.target.value)}
               disabled={isLoading}
-              title="WOF adjusted is experimental. No hardlink or WinSxS deduplication."
+              title="Compare estimates with Explorer &quot;Size on disk&quot; or WizTree &quot;Allocated&quot;, not Explorer &quot;Size&quot;."
             >
-              <option value="current">Current (default)</option>
-              <option value="wof_adjusted">WOF adjusted (experimental)</option>
+              <option value="current">Current allocation estimate</option>
+              <option value="wof_adjusted">WOF-adjusted estimate (experimental)</option>
             </select>
           </label>
           {storagePolicy === "wof_adjusted" && (
-            <span className="policy-warning">Experimental — no hardlink/WinSxS dedup</span>
+            <span
+              className="policy-warning"
+              title="Experimental WOF-aware estimate. It may be closer to WizTree &quot;Allocated&quot; for WOF-compressed files."
+            >
+              Experimental WOF-aware estimate. Hard links and WinSxS are not fully corrected.
+            </span>
           )}
           <div className="toolbar-separator" />
           <button

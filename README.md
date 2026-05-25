@@ -147,6 +147,8 @@ disk-insight offers two storage policies:
 These values are estimates. `current` is allocation-oriented, and
 `wof_adjusted` is experimental. Compare against Explorer "Size on disk" or
 WizTree "Allocated" where appropriate, not Explorer "Size".
+The UI labels these values as estimates; the size metric selector does not
+change JSON field names or CLI output labels.
 
 Neither policy produces byte-exact matches with Explorer or WizTree — differences are expected and explainable.
 See `docs/size-accuracy-review.md` for a full breakdown.

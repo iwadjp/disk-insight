@@ -140,3 +140,22 @@ Proceed with M-2b as a minimal UI label implementation:
 
 Daily-use size trust depends first on making the user understand what size is
 being shown. Correction work should remain in K-3c / M-3 or later.
+
+## 10. M-2b implementation result
+
+M-2b applied the minimal UI label changes from this plan:
+
+- Summary card now uses `ALLOCATED ESTIMATE`.
+- Toolbar label now uses `Size metric`.
+- Storage policy option display text now uses `Current allocation estimate` and
+  `WOF-adjusted estimate (experimental)`.
+- Selected folder stats now use `Subtree estimate:` and `Direct files estimate:`.
+- Table size headers now use estimate-oriented labels such as `Est. allocated`
+  and `Direct file est.`.
+- WOF-adjusted warning text now keeps the experimental caveat and explicitly
+  notes that hard links and WinSxS are not fully corrected.
+- Short title tooltips were added where they clarify comparison targets.
+
+M-2b did not change internal data structures, storage-policy values, JSON
+fields, CLI output, scan calculation, WOF logic, hardlink handling, or WinSxS
+accounting. It also does not claim exact Explorer or WizTree parity.
