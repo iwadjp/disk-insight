@@ -743,6 +743,45 @@ tbody tr:last-child td {
   white-space: nowrap;
 }
 
+.direct-children-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.sort-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #5e6b78;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.sort-select {
+  padding: 2px 6px;
+  border: 1px solid #c5d0db;
+  border-radius: 5px;
+  background: #ffffff;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.1s;
+}
+
+.sort-select:focus {
+  outline: none;
+  border-color: #1a56db;
+}
+
+.sort-dir-btn {
+  min-width: 28px;
+  padding: 2px 7px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .direct-children-list {
   max-height: 360px;
   overflow-y: auto;

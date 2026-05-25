@@ -75,6 +75,8 @@ type TauriWindow = Window & {
 };
 
 type SourceKind = "sample" | "live";
+type DirectChildrenSortKey = "size" | "name" | "type";
+type SortDirection = "asc" | "desc";
 
 const TOP_OPTIONS = [10, 30, 50, 100, 200, 500];
 const LARGE_FOLDER_THRESHOLD = 200;
@@ -186,11 +188,39 @@ function buildVisibleRows(
   return rows;
 }
 
-function sortDirectChildren(children: TreeNode[]): TreeNode[] {
+function sortDirectChildren(
+  children: TreeNode[],
+  sortKey: DirectChildrenSortKey,
+  sortDir: SortDirection,
+): TreeNode[] {
   return [...children].sort((a, b) => {
-    if (a.is_directory !== b.is_directory) return a.is_directory ? -1 : 1;
-    if (b.subtree_size !== a.subtree_size) return b.subtree_size - a.subtree_size;
-    return a.name.localeCompare(b.name);
+    switch (sortKey) {
+      case "size": {
+        // Always DIR before FILE
+        if (a.is_directory !== b.is_directory) return a.is_directory ? -1 : 1;
+        // desc = big first, asc = small first
+        const sizeCmp = b.subtree_size - a.subtree_size;
+        const sizeResult = sortDir === "desc" ? sizeCmp : -sizeCmp;
+        if (sizeResult !== 0) return sizeResult;
+        return a.name.localeCompare(b.name);
+      }
+      case "name": {
+        // Always DIR before FILE
+        if (a.is_directory !== b.is_directory) return a.is_directory ? -1 : 1;
+        const nameCmp = a.name.localeCompare(b.name);
+        const nameResult = sortDir === "asc" ? nameCmp : -nameCmp;
+        if (nameResult !== 0) return nameResult;
+        return b.subtree_size - a.subtree_size; // tie-breaker: size desc
+      }
+      case "type": {
+        // asc = DIR first, desc = FILE first
+        if (a.is_directory !== b.is_directory) {
+          const typeResult = a.is_directory ? -1 : 1;
+          return sortDir === "asc" ? typeResult : -typeResult;
+        }
+        return b.subtree_size - a.subtree_size; // within group: size desc
+      }
+    }
   });
 }
 
@@ -625,9 +655,12 @@ function DirectChildrenPanel({
   onSelectFile: (path: string) => void;
   onCopyError: (msg: string) => void;
 }) {
+  const [sortKey, setSortKey] = useState<DirectChildrenSortKey>("size");
+  const [sortDir, setSortDir] = useState<SortDirection>("desc");
+
   const sorted = useMemo(
-    () => (children ? sortDirectChildren(children) : []),
-    [children],
+    () => (children ? sortDirectChildren(children, sortKey, sortDir) : []),
+    [children, sortKey, sortDir],
   );
 
   let body: React.ReactNode;
@@ -694,11 +727,32 @@ function DirectChildrenPanel({
           Direct children of{" "}
           <span className="heading-path">{dir.path}</span>
         </span>
-        {children !== undefined && (
-          <span className="direct-children-count">
-            {formatNumber(children.length)} entries
-          </span>
-        )}
+        <div className="direct-children-controls">
+          {children !== undefined && (
+            <span className="direct-children-count">
+              {formatNumber(children.length)}
+            </span>
+          )}
+          <label className="sort-label">
+            Sort
+            <select
+              className="sort-select"
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as DirectChildrenSortKey)}
+            >
+              <option value="size">Size</option>
+              <option value="name">Name</option>
+              <option value="type">Type</option>
+            </select>
+          </label>
+          <button
+            className="btn btn-sm sort-dir-btn"
+            onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
+            title={sortDir === "desc" ? "Descending — click for ascending" : "Ascending — click for descending"}
+          >
+            {sortDir === "desc" ? "↓" : "↑"}
+          </button>
+        </div>
       </div>
       {body}
     </div>

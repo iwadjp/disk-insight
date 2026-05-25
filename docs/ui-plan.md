@@ -958,6 +958,7 @@ is unchanged; all existing behavior is preserved.
 | J-1 | Daily-use gap review（docs/daily-use-gap-review.md 作成、最重要ブロッカーを特定） |
 | J-2 | Selected folder direct children panel（get_children 再利用、dir-first / size-desc、actions 付き） |
 | J-2b | Direct children row navigation（DIR 行クリックで selected folder 移動、stopPropagation でアクション保護） |
+| J-3  | Direct children sort control（size/name/type × asc/desc、パネル内ローカル state） |
 
 ---
 
@@ -1277,7 +1278,36 @@ Direct children panel の DIR 行クリックで selected folder に移動でき
 - virtual scroll 未実装
 - delete 未追加
 
-### J-3: TreeView quick navigation（中）
+### J-3: Direct children panel sort control
+
+**STATUS: COMPLETE — 2026-05-25**
+
+Direct children panel に sort control を追加した。
+
+#### 変更内容
+
+- `DirectChildrenSortKey = "size" | "name" | "type"` 型を追加
+- `SortDirection = "asc" | "desc"` 型を追加
+- `sortDirectChildren(children, sortKey, sortDir)` にパラメータを追加し、3つのソートキーに対応
+  - `size`: DIR first → size desc/asc → name asc tie-breaker
+  - `name`: DIR first → name asc/desc → size desc tie-breaker
+  - `type`: asc=DIR first / desc=FILE first → group内 size desc
+- `DirectChildrenPanel` にローカル state `sortKey` / `sortDir` を追加（初期値: size / desc）
+- `useMemo` の依存配列に `sortKey` / `sortDir` を追加
+- header に sort control を追加
+  - `<select>` で sort key 選択（Size / Name / Type）
+  - `↓` / `↑` ボタンで direction 切替
+  - `.direct-children-controls` / `.sort-label` / `.sort-select` / `.sort-dir-btn` CSS 追加
+- sort state はパネル内ローカル state のため、folder 移動時も sort preference が維持される
+
+#### 制約確認
+
+- Top directories / Top files の本格ソートは未実装
+- Rust core / Tauri command 変更なし
+- virtual scroll 未実装
+- delete 未追加
+
+### J-3 (original): TreeView quick navigation（後回し）
 
 - キーボード操作（矢印キーで展開 / 選択）
 - Expand all / Collapse all（指定深さまで）

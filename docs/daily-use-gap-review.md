@@ -286,6 +286,12 @@ The existing top directories / top files tables are retained with their titles
 updated to "Top directories (scan results) under …" and "Top files (scan results)
 under …" to clarify the distinction.
 
+J-3 (2026-05-25) adds sort controls to the direct children panel. Children can
+now be sorted by Size, Name, or Type with ascending/descending toggle. Initial
+state is Size ↓ (directory-first, size descending), preserving the existing
+default view. The sort preference is kept locally in the panel so it persists
+as the user navigates between folders.
+
 J-2b (2026-05-25) adds DIR row click navigation to the direct children panel.
 Clicking a directory row in the panel now sets it as the selected folder and
 refreshes the panel with that folder's children. Combined with J-2, the user
