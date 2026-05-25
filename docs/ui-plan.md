@@ -1739,6 +1739,47 @@ PASS なら `v0.3.0-daily-use` tag 候補。GitHub 公開は別判断。
 - global full search
 - hardlink / component-store 補正本実装
 
+### K-3b: Size discrepancy investigation — DONE (2026-05-26)
+
+詳細: `docs/size-discrepancy-investigation.md`
+
+#### 目的
+
+K-3 の「違う理由が説明できる」に続き、
+「**Explorer と WizTree が同じ、disk-insight だけ違う**」という具体的なケースを調査した。
+この差分が説明できないことが v0.3.0-daily-use HOLD の主因。
+
+#### 判明した主因: Case A WOF
+
+`current` policy では、WOF 圧縮ファイルの `e.alloc_size > 0` の場合、
+NTFS $DATA の projected allocation（非圧縮サイズ）を返す。
+
+Explorer / WizTree は WOF-aware API を経由するため、圧縮後サイズを返す。
+→ disk-insight current > Explorer "Size on disk" ≈ WizTree Allocated
+
+| ツール | WOF ファイルのサイズ取得 |
+|--------|----------------------|
+| Explorer "Size on disk" | WOF-aware: 圧縮後サイズ |
+| WizTree "Allocated" | WOF-aware: 圧縮後サイズ |
+| disk-insight current | MFT $DATA projected alloc（非圧縮・大きい） |
+| disk-insight wof_adjusted | WofCompressedData stream alloc（圧縮後・Explorer に近い） |
+
+#### 未解決: M-1（Explorer "Size on disk" の実測）
+
+「Explorer 11.0 GB」（PFx86）は Explorer **"Size"**（論理サイズ）の可能性が高い。
+「Explorer "Size on disk" = WizTree Allocated = 7.8 GB、disk-insight = 10.1 GB」は
+仮説段階。M-1 実測で確認が必要。
+
+#### 判定
+
+**B+D — 原因はほぼ説明できるが、実測値が不足している。**
+
+- Cause A（メトリクス混同）・Cause C（WOF）・Cause D（hardlink）は高確度
+- Explorer "Size on disk" の明示的計測がなければ「Explorer = WizTree」が未確認
+- Cause I（集計バグ）は低確度だが排除できていない
+
+**v0.3.0-daily-use: HOLD 継続** — M-1 実測が信頼改善の次ステップ。
+
 ### 後回し（v0.3.0 より後）
 
 - delete action（安全設計・確認ダイアログ必須）

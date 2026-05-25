@@ -282,3 +282,49 @@ No change to the public-facing accuracy claim is needed beyond that.
 - The "why is the number different" question has a documented answer.
 
 **Next: K-4 daily-use verification retry.**
+
+---
+
+## 8. K-3b reference: concrete size discrepancy investigation
+
+**See**: `docs/size-discrepancy-investigation.md`
+
+K-3 established that size differences are "explained". K-3b goes further:
+investigating the specific cases where Explorer and WizTree agree but
+disk-insight differs — the "Explorer = WizTree, disk-insight differs" pattern
+that makes the numbers hard to trust.
+
+### What K-3b found
+
+The root cause is **Case A WOF behavior** in `current` policy:
+
+- When `e.alloc_size > 0` for a WOF-compressed file, `current_final_alloc` uses
+  the projected NTFS $DATA allocation (uncompressed size), not the compressed
+  `WofCompressedData` stream allocation.
+- Explorer "Size on disk" and WizTree "Allocated" both use the WOF-aware API
+  layer, which returns the compressed backing size.
+- Result: disk-insight `current` > Explorer "Size on disk" ≈ WizTree "Allocated"
+  for WOF-heavy paths (Program Files, Windows components).
+
+A secondary issue: **Case B WOF** (`e.alloc_size == 0`, WOF gate active) returns
+0 for `current` — these files are not counted, which could cause undercount in
+some paths.
+
+### Critical unknown (M-1)
+
+The prior "Explorer 11.0 GB" for `C:\Program Files (x86)` is unconfirmed — it
+likely refers to Explorer **"Size"** (logical), not **"Size on disk"** (allocated).
+Without explicit "Size on disk" measurements, the "Explorer = WizTree = 7.8 GB,
+disk-insight = 10.1 GB" pattern is a hypothesis, not confirmed.
+
+**M-1 measurement needed**: explicitly record Explorer "Size on disk" for
+PFx86, Program Files, Windows, and Users.
+
+### K-3b verdict
+
+**B + D**:
+- Cause A (metric mismatch) and Cause C (WOF) are highly confident explanations
+- Cause D (hardlink/WinSxS) is confirmed and quantified
+- Explorer "Size on disk" for key paths is unmeasured — re-measurement required
+
+**v0.3.0-daily-use: HOLD** — size accuracy remains a trust issue pending M-1.

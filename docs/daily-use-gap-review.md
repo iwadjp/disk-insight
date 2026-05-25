@@ -799,3 +799,65 @@ hardlink dedup は未実装のため WinSxS は参考値扱い。
 評価結果はこのセクション（またはセクション 18 として）に追記する。
 
 **v0.3.0-daily-use: 引き続き HOLD（実機再評価待ち）**
+
+---
+
+## 18. K-3b: Size discrepancy investigation — DONE (2026-05-26)
+
+詳細: `docs/size-discrepancy-investigation.md`
+
+### K-3b の位置づけ
+
+K-4 の実機評価を経て、v0.3.0-daily-use HOLD の**主因がサイズ信頼性**であることが明確になった。
+
+> Explorer と WizTree が同じ値を示すのに、disk-insight だけ違う。
+> この理由が説明できないため、disk-insight の数値を信頼しにくい。
+
+K-3b はこの具体的差分の原因調査。
+
+### 判明した根本原因
+
+**Case A WOF behavior**: `current` policy は WOF 圧縮ファイルの
+NTFS $DATA projected allocation（非圧縮サイズ）を使う。
+Explorer / WizTree は WOF-aware API 経由で圧縮後サイズを返す。
+
+これが「disk-insight current > Explorer "Size on disk" ≈ WizTree Allocated」の主因。
+
+### 比較表（既存実測値 + 仮説）
+
+| パス | WizTree Allocated | disk-insight current | disk-insight wof_adjusted |
+|------|------------------:|--------------------:|-------------------------:|
+| C:\ | 174.9 GB | 186.5 GB | 170.6 GB |
+| Program Files (x86) | 7.8 GB | 10.1 GB | 8.3 GB |
+| Program Files | 24.6 GB | 29.7 GB | 24.8 GB |
+| Windows | 16.1 GB | 27.1 GB | 18.4 GB |
+| WinSxS | 4.1 GB | 11.5 GB | 8.7 GB |
+| Users | 85.2 GB | 85.0 GB | 84.8 GB |
+
+C:\Users: 全ツール一致 → WOF / hardlink の問題でないことを確認（対照群）
+
+### 信頼性の現状
+
+| 用途 | 信頼性 | 理由 |
+|------|--------|------|
+| top-N ランキング | 高 | 相対サイズは正確 |
+| C:\Users | 高 | 全ツール一致 |
+| Program Files (wof_adjusted) | 高 | WizTree ±0.2 GB |
+| Program Files (current) | 低〜中 | WOF Case A で大きめ |
+| WinSxS | 低 | WOF + hardlink 両方 |
+
+### 未解決（M-1）
+
+「Explorer 11.0 GB」（PFx86）は Explorer **"Size"**（論理サイズ）の疑いあり。
+Explorer "Size on disk" の明示的計測なしには「Explorer = WizTree ≠ disk-insight」
+という主張が未検証。
+
+### HOLD 理由との対応
+
+| HOLD 理由 | K-3b での扱い |
+|-----------|-------------|
+| サイズ差の理由が説明できない | 主因（Case A WOF）を特定・文書化 |
+| Explorer = WizTree の確認 | 未達（M-1 実測が必要） |
+| 集計バグの可能性 | 低確度だが排除できていない（C:\Users 一致で低減） |
+
+**v0.3.0-daily-use: HOLD** — M-1 実測が次ステップ。実測後に信頼度を再評価する。
