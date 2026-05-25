@@ -765,6 +765,18 @@ tbody tr:last-child td {
   background: #f5f7fa;
 }
 
+.direct-child-row--dir {
+  cursor: pointer;
+}
+
+.direct-child-row--dir:hover {
+  background: #edf2f7;
+}
+
+.direct-child-row--dir:hover .direct-child-name {
+  color: #1a56db;
+}
+
 .direct-child-badge {
   flex-shrink: 0;
   font-size: 10px;

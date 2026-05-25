@@ -610,6 +610,7 @@ function DirectChildrenPanel({
   isLoading,
   error,
   sourceKind,
+  onNavigate,
   onOpenExplorer,
   onSelectFile,
   onCopyError,
@@ -619,6 +620,7 @@ function DirectChildrenPanel({
   isLoading: boolean;
   error: string | null;
   sourceKind: SourceKind | null;
+  onNavigate: (node: TreeNode) => void;
   onOpenExplorer: (path: string) => void;
   onSelectFile: (path: string) => void;
   onCopyError: (msg: string) => void;
@@ -647,17 +649,23 @@ function DirectChildrenPanel({
     body = (
       <div className="direct-children-list">
         {sorted.map((node) => (
-          <div key={node.record_index} className="direct-child-row">
+          <div
+            key={node.record_index}
+            className={`direct-child-row${node.is_directory ? " direct-child-row--dir" : ""}`}
+            onClick={node.is_directory ? () => onNavigate(node) : undefined}
+            title={node.is_directory ? `Open ${node.path}` : undefined}
+          >
             <span
               className={`direct-child-badge direct-child-badge--${node.is_directory ? "dir" : "file"}`}
             >
               {node.is_directory ? "DIR" : "FILE"}
             </span>
-            <span className="direct-child-name" title={node.path}>
+            <span className="direct-child-name">
               {node.name || node.path}
             </span>
             <span className="direct-child-size">{formatBytes(node.subtree_size)}</span>
-            <div className="direct-child-actions">
+            {/* stopPropagation prevents action clicks from firing row navigation */}
+            <div className="direct-child-actions" onClick={(e) => e.stopPropagation()}>
               <button
                 className="btn btn-sm"
                 onClick={() =>
@@ -1064,6 +1072,7 @@ function App() {
                   isLoading={selectedChildrenLoading}
                   error={selectedChildrenError}
                   sourceKind={sourceKind}
+                  onNavigate={handleSelectTreeNode}
                   onOpenExplorer={handleOpenExplorer}
                   onSelectFile={handleSelectFile}
                   onCopyError={handleCopyError}

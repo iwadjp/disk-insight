@@ -957,6 +957,7 @@ is unchanged; all existing behavior is preserved.
 | I-1 | TreeView polish（active accent bar、hover、ellipsis truncation、toggle hit area、loading color、large-warning bg） |
 | J-1 | Daily-use gap review（docs/daily-use-gap-review.md 作成、最重要ブロッカーを特定） |
 | J-2 | Selected folder direct children panel（get_children 再利用、dir-first / size-desc、actions 付き） |
+| J-2b | Direct children row navigation（DIR 行クリックで selected folder 移動、stopPropagation でアクション保護） |
 
 ---
 
@@ -1247,6 +1248,34 @@ Gap A（右ペインが global top-N prefix filter）を解消する最重要実
 - virtual scroll 未実装のまま
 - delete 未追加
 - J-3 で sort polish 予定
+
+### J-2b: Direct children row navigation
+
+**STATUS: COMPLETE — 2026-05-25**
+
+Direct children panel の DIR 行クリックで selected folder に移動できるようにした。
+
+#### 変更内容
+
+- `DirectChildrenPanel` に `onNavigate: (node: TreeNode) => void` prop を追加
+- DIR 行に `onClick={() => onNavigate(node)}` を追加
+  - `.direct-child-row--dir` クラスで cursor: pointer / hover 青テキスト
+  - `title` 属性で tooltip 表示
+- `.direct-child-actions` div に `onClick={(e) => e.stopPropagation()}` を追加
+  - アクションボタン押下で row navigation が誤発火しないようにする
+- `App` から `onNavigate={handleSelectTreeNode}` を渡す
+  - 既存の `treeNodeToDirEntry` 変換を再利用（TreeView と同じパス）
+- FILE 行には onClick なし（navigation しない）
+- TreeView の active row: `selectedDir.record_index` で一致判定するため、
+  対象フォルダが visibleRows に表示されている場合は自然にハイライトされる
+  （親階層の自動展開は行わない）
+
+#### 制約確認
+
+- Rust core / Tauri command 変更なし
+- auto expand all 未実装
+- virtual scroll 未実装
+- delete 未追加
 
 ### J-3: TreeView quick navigation（中）
 

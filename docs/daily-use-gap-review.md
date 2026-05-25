@@ -286,6 +286,12 @@ The existing top directories / top files tables are retained with their titles
 updated to "Top directories (scan results) under …" and "Top files (scan results)
 under …" to clarify the distinction.
 
+J-2b (2026-05-25) adds DIR row click navigation to the direct children panel.
+Clicking a directory row in the panel now sets it as the selected folder and
+refreshes the panel with that folder's children. Combined with J-2, the user
+can drill down through the hierarchy from the right pane, matching the core
+WizTree browsing workflow without needing to use the TreeView for every step.
+
 ---
 
 ## 9. Decision (current assessment)
