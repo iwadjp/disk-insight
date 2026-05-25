@@ -346,7 +346,8 @@ function TreeNodeRow({
   const rowClass =
     "tree-row"
     + (isSelected ? " tree-row--active" : "")
-    + (isDir ? "" : " tree-row--file");
+    + (isDir ? "" : " tree-row--file")
+    + (isLoading ? " tree-row--loading" : "");
 
   return (
     <div className={rowClass} style={{ paddingLeft: indent }}>

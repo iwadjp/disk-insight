@@ -828,6 +828,41 @@ click, the clicked row is highlighted and the card shows the correct full path.
 
 ---
 
+## I-1 TreeView polish (post-v0.2.0)
+
+I-1 improves the visual quality and usability of the left-pane TreeView without
+adding new features or changing data flow.
+
+### Changes
+
+- **Active row accent**: added `box-shadow: inset 3px 0 0 #1a56db` to
+  `.tree-row--active` so the selected row has a visible left-edge blue bar.
+  Uses `box-shadow` (not `border-left`) to avoid disrupting the depth-based
+  inline `padding-left`.
+- **Hover**: darkened from `#f0f4f8` to `#edf2f7` for slightly more contrast.
+- **Name truncation**: `.tree-name` changed from `word-break: break-all /
+  overflow-wrap: anywhere` (wrapping) to `overflow: hidden; text-overflow:
+  ellipsis; white-space: nowrap` (single-line with ellipsis). Also added
+  `flex: 1; min-width: 0` so the flex layout honours the truncation. The full
+  path remains visible via the existing `title` tooltip on the label button.
+- **Toggle hit area**: `.tree-toggle` increased from 22×22 px to 24×24 px;
+  font-size increased from 11 px to 12 px.
+- **Loading indicator**: added `tree-row--loading` class to `TreeNodeRow` when
+  `isLoading` is true. CSS rule `.tree-row--loading > .tree-toggle` colours the
+  toggle `#1a56db` (blue) while the `…` spinner is showing.
+- **Large folder warning**: added `background: #fffbeb; border-bottom-color:
+  #fde68a` to `.tree-large-warning` so the amber warning row is clearly
+  distinct from normal tree rows.
+
+### Scope guard
+
+- Virtual scroll is not implemented.
+- No new features or Tauri commands.
+- Rust core, MFT scan, final_alloc policy unchanged.
+- Delete action not added.
+
+---
+
 ## UI-StoragePolicy-1 Storage policy selector
 
 UI-StoragePolicy-1 exposes the `--wof-adjusted` storage policy in the Tauri UI
@@ -919,6 +954,7 @@ is unchanged; all existing behavior is preserved.
 | F-1 FU | Select file 成功時ステータスメッセージ表示（Explorer 背面表示の無反応感を軽減） |
 | G-1 | Drive 自動検出（GetLogicalDrives / GetDriveTypeW）、Drive selector 化 |
 | UI-StoragePolicy-1 | Size policy selector（Current / WOF adjusted experimental）、status bar policy badge |
+| I-1 | TreeView polish（active accent bar、hover、ellipsis truncation、toggle hit area、loading color、large-warning bg） |
 
 ---
 

@@ -460,11 +460,12 @@ tbody tr:last-child td {
 }
 
 .tree-row:hover {
-  background: #f0f4f8;
+  background: #edf2f7;
 }
 
 .tree-row--active {
   background: #e8f0fe;
+  box-shadow: inset 3px 0 0 #1a56db;
 }
 
 .tree-row--active:hover {
@@ -477,8 +478,8 @@ tbody tr:last-child td {
 
 .tree-toggle {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   margin: 0;
   display: flex;
@@ -486,7 +487,7 @@ tbody tr:last-child td {
   justify-content: center;
   border: none;
   background: transparent;
-  font-size: 11px;
+  font-size: 12px;
   color: #5e6b78;
   cursor: pointer;
   border-radius: 4px;
@@ -499,6 +500,10 @@ tbody tr:last-child td {
 
 .tree-toggle:disabled {
   cursor: default;
+}
+
+.tree-row--loading > .tree-toggle {
+  color: #1a56db;
 }
 
 .tree-toggle--leaf {
@@ -529,11 +534,14 @@ tbody tr:last-child td {
 }
 
 .tree-name {
+  flex: 1;
+  min-width: 0;
   font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
   font-size: 12px;
   line-height: 1.3;
-  overflow-wrap: anywhere;
-  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: inherit;
 }
 
@@ -592,7 +600,8 @@ tbody tr:last-child td {
   font-size: 11px;
   color: #92400e;
   font-style: italic;
-  border-bottom: 1px solid #edf1f5;
+  background: #fffbeb;
+  border-bottom: 1px solid #fde68a;
 }
 
 /* ── Right pane ── */
