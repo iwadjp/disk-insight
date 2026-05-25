@@ -1026,7 +1026,7 @@ is unchanged; all existing behavior is preserved.
 
 ## next-phase milestone: Explorer風TreeView実用品
 
-**STATUS: 進行中 (next-phase ブランチ)**
+**STATUS: PASS — 2026-05-25** (H-3 verification complete; tag candidate: v0.2.0-treeview-wof)
 
 minimal usable milestone（D-13 PASS）の次の一区切り。
 Explorer 風の TreeView を中心に据えた実用品として、以下がすべて揃った状態を目標とする。
@@ -1087,19 +1087,48 @@ Explorer 風の TreeView を中心に据えた実用品として、以下がす�
 - TreeView の使い方・展開方法を追記
 - runbook のチェックリストを next-phase 対応に更新
 
-#### H-3: next-phase milestone 判定（確認のみ）
+#### H-3: next-phase milestone 判定
 
-- Explorer 風 TreeView 実用品として一区切りできるか確認
-- チェックリスト:
-  - [ ] TreeView で任意フォルダまで展開できる
-  - [ ] 選択フォルダが right pane に反映される
-  - [ ] top files の Select file が動作する
-  - [ ] Drive selector に検出ドライブが表示される
-  - [ ] Scan / Load sample が動作する
-  - [ ] Open folder / Copy path が動作する
-  - [ ] delete 機能が追加されていない
-  - [ ] virtual scroll は未実装のままで問題ない
-  - [ ] drive NTFS 判定は未実装のままで問題ない
+**STATUS: PASS — 2026-05-25**
+
+milestone candidate: **v0.2.0-treeview-wof**
+
+チェックリスト:
+  - [x] TreeView で任意フォルダまで展開できる
+  - [x] 選択フォルダが right pane に反映される
+  - [x] top files の Select file が動作する
+  - [x] Drive selector に検出ドライブが表示される
+  - [x] Scan / Load sample が動作する
+  - [x] Open folder / Copy path が動作する
+  - [x] delete 機能が追加されていない
+  - [x] virtual scroll は未実装のままで問題ない
+  - [x] drive NTFS 判定は未実装のままで問題ない
+
+追加確認:
+  - [x] `cargo build --release` / `npm run build` / `npm run tauri build` 全て成功（警告なし）
+  - [x] `--wof-adjusted` CLI/JSON 動作確認（current 186 GB / wof_adjusted 170 GB）
+  - [x] `--diag-pfx86` / `--diag-wof-global` / `--diag-winsxs` 全て動作
+  - [x] Size policy selector UI（Current default / WOF adjusted experimental）動作確認
+  - [x] status bar policy badge 表示確認
+  - [x] 両リポジトリ clean
+
+含まれる成果物:
+  - Drive selector（G-1）
+  - lazy TreeView + visibleRows flat render + safety guards（E-1a〜E-5）
+  - Open folder / Select file / Copy path
+  - Select file 成功メッセージ
+  - Current / WOF adjusted policy の UI 切替（UI-StoragePolicy-1）
+  - `--wof-adjusted` 実験的 CLI/JSON オプション
+  - `--diag-pfx86` / `--diag-wof-global` / `--diag-winsxs` 診断 CLI
+  - WOF final allocation policy docs / WinSxS 残差ドキュメント
+
+含まれない（後回し）:
+  - delete action
+  - virtual scroll
+  - hardlink / component-store dedup
+  - WinSxS correction
+  - WOF adjusted をデフォルトに昇格
+  - NTFS 判定・ドライブ容量表示
 
 ### 後回し（next-phase milestone より後）
 

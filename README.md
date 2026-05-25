@@ -156,17 +156,17 @@ not to produce byte-exact matches with the OS disk usage report.
 
 - [x] D-13 Milestone sign-off
 
-**Next-phase milestone: Explorer-style TreeView** — in progress (`next-phase` branch).
+**Next-phase milestone: Explorer-style TreeView** — **PASS (2026-05-25)**. Tag candidate: `v0.2.0-treeview-wof`.
 
 - [x] E-1〜E-5 Lazy TreeView with flat render and safety guards
 - [x] F-1 Select file in Explorer (`explorer /select,file`)
 - [x] G-1 Drive auto-detection selector
 - [x] Size accuracy CLI/JSON experiments, including `--wof-adjusted`
 - [x] UI-StoragePolicy-1 Storage policy selector (Current / WOF adjusted experimental) in Tauri UI
+- [x] H-3 Next-phase milestone sign-off (PASS 2026-05-25; tag candidate: v0.2.0-treeview-wof)
 - [ ] G-2 Drive selector polish
 - [ ] H-1 TreeView UX polish
 - [ ] H-2 README / runbook update
-- [ ] H-3 Next-phase milestone sign-off
 
 `--wof-adjusted` is experimental and does not affect the default UI/Tauri scan.
 
