@@ -756,3 +756,46 @@ hardlink dedup は未実装のため WinSxS は参考値扱い。
 - WOF / hardlink / WinSxS 本番補正は引き続き後回し
 
 **次: K-4 daily-use 再判定。**
+
+---
+
+## 17. K-4: Daily-use retry checklist — DONE (2026-05-26)
+
+詳細: `docs/daily-use-retry-checklist.md`
+
+### 方針
+
+実判定はユーザー実機評価で行う。今回は判定そのものではなく、
+「感覚ではなくチェックリストに沿って評価できる状態」を整えた。
+
+### 評価の軸
+
+| 軸 | 確認内容 |
+|----|---------|
+| scan speed / progress | WizTree との速度差・progress strip の効果 |
+| navigation | Direct children drill-down / filter / sort / actions |
+| size meaning | current / wof_adjusted の意味・WinSxS 制約の納得感 |
+| 固有価値 | delete-free / WOF 比較 / Explorer 連携 など |
+
+### PASS / HOLD 基準（再掲）
+
+**PASS**（すべて満たす）:
+- disk-insight を選びたいと思える用途が少なくとも1つある
+- scan 中の不安が許容範囲（progress strip が機能している）
+- サイズ表示の意味が理解できる
+- 目的フォルダに自然に辿れる（3〜5クリック以内）
+- delete なしが制約ではなく価値として成立している
+
+**HOLD**（いずれか1つでも当てはまる）:
+- WizTree がすべての面で単純に優れており disk-insight を選ぶ理由がない
+- scan が遅すぎて調査ワークフローが成立しない
+- サイズ表示が依然として混乱する
+- 目的フォルダへの操作が重い
+
+### 判定待ち
+
+実機評価は未実施。次回評価時に `docs/daily-use-retry-checklist.md` を使用する。
+
+評価結果はこのセクション（またはセクション 18 として）に追記する。
+
+**v0.3.0-daily-use: 引き続き HOLD（実機再評価待ち）**

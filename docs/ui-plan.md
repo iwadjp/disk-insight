@@ -1711,9 +1711,25 @@ cold cache が主因なら、scan progress visibility (K-2) が体感改善の�
 
 **K-3: DONE。** サイズ意味の文書整備完了。次: K-4 daily-use 再判定。
 
-### K-4: Daily-use verification retry
+### K-4: Daily-use retry checklist — DONE (2026-05-26)
 
-K-1〜K-3 後に再判定。PASS なら `v0.3.0-daily-use` tag 候補。
+詳細: `docs/daily-use-retry-checklist.md`
+
+実判定はユーザー実機評価で行う。チェックリストを整備した。
+
+**チェックリスト構成**:
+1. 目的 — 「選ぶ理由があるか」を問う
+2. 事前準備
+3. scan speed / progress strip 評価
+4. navigation（drill-down / filter / sort / actions）評価
+5. size meaning（current vs wof_adjusted vs WizTree）評価
+6. 固有価値確認（delete-free / WOF comparison / Direct children / etc.）
+7. PASS / HOLD 判定基準
+8. 次アクション（PASS: tag候補 / HOLD: 次タスク候補）
+
+**判定はユーザー本人が実機で行う。tag はまだ作成しない。**
+
+PASS なら `v0.3.0-daily-use` tag 候補。GitHub 公開は別判断。
 
 #### 後回し（v0.3.0 以降）
 

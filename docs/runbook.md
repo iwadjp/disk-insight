@@ -379,7 +379,24 @@ not applied.
 > Redirect with `cmd /c` for UTF-8 output:
 > `cmd /c ".\target\release\disk-insight.exe --diag-pfx86 > .\work\pfx86_diag.txt"`
 
-## 10. Troubleshooting
+## 10. Daily-use evaluation
+
+To evaluate whether disk-insight meets the `v0.3.0-daily-use` milestone, use
+the checklist at `docs/daily-use-retry-checklist.md`.
+
+The checklist covers:
+- Scan speed and progress strip effectiveness
+- Folder navigation (drill-down, filter, sort, parent row)
+- Size policy comparison (current vs wof_adjusted vs WizTree)
+- Unique value assessment (delete-free, WOF comparison, Explorer integration)
+- PASS / HOLD criteria and next-action guidance
+
+Run the checklist with both WizTree and disk-insight open side by side.
+Record results in `docs/daily-use-gap-review.md` Section 18.
+
+---
+
+## 11. Troubleshooting
 
 ### Drive open failed / access denied
 
@@ -402,11 +419,11 @@ Expected for large drives. MFT read time depends on drive speed and fragmentatio
 `spawn_blocking` is used so the UI remains responsive throughout.
 
 Cold-cache scans (first scan after boot or long idle) are slower — C: can reach
-20–22 s, D: 60–80 s. This is normal. See `docs/scan-progress-design.md` for the
-K-2 plan to add progress visibility.
+20–22 s, D: 60–80 s. This is normal.
 
-**Note**: scan progress display is not yet implemented (K-2b/K-2c). The UI shows
-a spinner and banner only. Phase-level feedback is planned.
+The scanning strip (K-2b/K-2c) shows phase label, elapsed time, and an
+indeterminate shimmer bar during scan: "Reading MFT (I/O) · 14.2s". This is
+expected behavior. See `docs/scan-progress-design.md` for implementation details.
 
 ### UI "not responding" during scan
 
