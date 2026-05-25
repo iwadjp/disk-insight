@@ -324,14 +324,14 @@ Program Files is a separate Explorer divergence case: WizTree aligns closely
 with disk-insight, while Explorer Properties is much smaller.
 
 **M-1 measurement still needed**: explicitly record Explorer "Size on disk" for
-Windows and Users.
+Windows.
 
 ### K-3b verdict
 
 **B + D**:
 - Cause A (metric mismatch) and Cause C (WOF) are highly confident explanations
 - Cause D (hardlink/WinSxS) is confirmed and quantified
-- Explorer "Size on disk" for Windows and Users is still unmeasured
+- Explorer "Size on disk" for Windows is still unmeasured
 
 **v0.3.0-daily-use: HOLD** — size accuracy remains a trust issue pending M-1.
 
@@ -363,6 +363,7 @@ The "Explorer 11.0 GB" value from prior notes may be logical "Size" — this is 
 | Explorer SoD ≈ WizTree Alloc, but wof_adjusted also differs | WOF is not the full explanation — investigate hardlink or other causes |
 | Explorer Size ≈ 11 GB (not Size on disk) | Cause A (metric mismatch) confirmed — prior comparison was invalid |
 | WizTree Alloc ≈ wof_adjusted and WizTree Size ≈ current, but Explorer is much smaller | Explorer divergence / special folder accounting case |
+| Explorer Size ≈ WizTree Size ≈ current, and Explorer SoD ≈ WizTree Alloc | Alignment case — ordinary subtree agrees across tools |
 
 ### Status
 
@@ -411,3 +412,29 @@ related Program Files handling. There is not enough evidence to call this a
 disk-insight aggregation bug. The result increases confidence in
 `wof_adjusted` for Program Files while leaving the Explorer-vs-WizTree/MFT gap
 unresolved.
+
+### Users measurement result
+
+`C:\Users` Explorer Properties reported:
+- Size: 85.5 GB / 91,876,082,105 bytes
+- Size on disk: 86.6 GB / 93,070,688,256 bytes
+- Files: 844,896
+- Folders: 151,681
+
+WizTree reported Size 85.5 GB, Allocated 85.6 GB, 995,577 items, 844,093 files,
+and 151,671 folders. disk-insight `current` reported 85.4 GB.
+`wof_adjusted` is not yet measured for this path.
+
+Current classification: **Alignment case**.
+
+This is a positive control for size trust:
+- Explorer Size, WizTree Size, and disk-insight `current` are all around
+  85.4-85.5 GB.
+- Explorer Size on disk and WizTree Allocated are also close, around
+  85.6-86.6 GB.
+- Ordinary user-profile data does not show the PFx86 metric mix-up pattern or
+  the Program Files Explorer divergence pattern.
+
+Not all paths exhibit a major discrepancy. Remaining size trust concerns are
+path-specific, especially PFx86, Program Files, Windows, and WinSxS/component
+store behavior.

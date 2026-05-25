@@ -889,10 +889,11 @@ Explorer / WizTree / disk-insight の値を明示的に取り直し、比較す�
 | C:\Program Files (x86) | 7.8 GB | 10.1 GB | 8.251 GB | 11.0 GB |
 | C:\Program Files | 24.6 GB | 29.7 GB | 24.8 GB | 19.5 GB |
 | C:\Windows | 16.1 GB | 27.1 GB | 18.4 GB | TBD |
-| C:\Users | 85.2 GB | 85.0 GB | 84.8 GB | TBD |
+| C:\Users | 85.6 GB | 85.4 GB | TBD | 86.6 GB |
 
 **PFx86 Explorer SoD = 11.0 GB**。PFx86 は Case 3 + residual deltas。
 **Program Files Explorer SoD = 19.5 GB**。Program Files は Explorer divergence case。
+**Users Explorer SoD = 86.6 GB**。Users は Alignment case。
 
 ### 判定後の含意
 
@@ -910,7 +911,7 @@ Explorer / WizTree / disk-insight の値を明示的に取り直し、比較す�
 
 詳細手順: `docs/size-discrepancy-investigation.md` §M-1c
 
-**v0.3.0-daily-use: HOLD** — PFx86 と Program Files は Section 20 / 21 に結果を追記済み。
+**v0.3.0-daily-use: HOLD** — PFx86 / Program Files / Users は Section 20-22 に結果を追記済み。
 
 ---
 
@@ -947,8 +948,7 @@ metric is being compared:
   need investigation before claiming accuracy.
 
 **v0.3.0-daily-use: HOLD continues.** The next trust improvement should be
-clearer size labels / help text, or continued M-1 measurements for Program
-Files, Windows, and Users.
+clearer size labels / help text, or continued M-1 measurement for Windows.
 
 ---
 
@@ -991,3 +991,41 @@ evidence for a disk-insight aggregation bug.
 
 **v0.3.0-daily-use: HOLD continues.** The size-trust problem now has at least
 two patterns: PFx86 metric-mix-up and Program Files Explorer divergence.
+
+---
+
+## 22. M-1 Users measurement result — RECORDED (2026-05-26)
+
+Details: `docs/size-discrepancy-investigation.md` §M-1
+
+### Measurement
+
+`C:\Users`:
+
+| Metric | Value |
+|--------|------:|
+| Explorer Size | 85.5 GB / 91,876,082,105 bytes |
+| Explorer Size on disk | 86.6 GB / 93,070,688,256 bytes |
+| Explorer files / folders | 844,896 / 151,681 |
+| WizTree Size | 85.5 GB |
+| WizTree Allocated | 85.6 GB |
+| WizTree items / files / folders | 995,577 / 844,093 / 151,671 |
+| disk-insight current | 85.4 GB |
+| disk-insight wof_adjusted | TBD / not measured |
+
+### Interpretation
+
+Users is an **Alignment case**.
+
+- Explorer Size, WizTree Size, and disk-insight `current` are all around
+  85.4-85.5 GB.
+- Explorer Size on disk and WizTree Allocated are also close.
+- This does not show the PFx86 metric-mix-up pattern.
+- This does not show the Program Files Explorer divergence pattern.
+
+Size trust is therefore not uniformly bad. The remaining concerns are
+path-specific behavior in PFx86, Program Files, Windows, and component-store
+areas.
+
+**v0.3.0-daily-use: HOLD continues.** Users is a positive alignment case, but
+the UI still needs clearer size wording and Windows remains unmeasured in M-1.

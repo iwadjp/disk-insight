@@ -1217,6 +1217,23 @@ Program Files / WindowsApps.
 
 No implementation is included here.
 
+### M-1 Users measurement recorded — alignment case (2026-05-26)
+
+`C:\Users` measurement adds a positive control:
+
+- Explorer Size, WizTree Size, and disk-insight `current` are all around
+  85.4-85.5 GB.
+- Explorer Size on disk and WizTree Allocated are also close.
+- disk-insight `wof_adjusted` is not yet measured for this path.
+
+Size trust work now distinguishes at least three patterns:
+- PFx86 metric mix-up.
+- Program Files Explorer divergence.
+- Users alignment case.
+
+UI wording should preserve this distinction instead of implying one universal
+reason for every size difference. No implementation is included here.
+
 ---
 
 ## v0.3.0-daily-use milestone (candidate)
