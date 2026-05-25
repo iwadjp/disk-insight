@@ -272,9 +272,9 @@ Show elapsed time next to the Scan button while scanning. Compact but limited.
 
 ## 9. Implementation roadmap
 
-### K-2b: Minimal phase progress events (Rust + Tauri side) — DONE 2026-05-26
+### K-2b: Minimal phase progress events (Rust + Tauri side)
 
-**Actual implementation:**
+**Initial implementation (2026-05-26):**
 
 - Added `build_mft_tree_model_with_policy_progress<F: FnMut(&str, u64)>` to `mft_probe.rs`.
   Progress callback receives `(phase_key, elapsed_ms_from_total_start)`.
@@ -287,8 +287,30 @@ Show elapsed time next to the Scan button while scanning. Compact but limited.
   Closure captures `app_cb`, `scan_id_cb`, `drive_str_cb` for emit inside `spawn_blocking`.
 - UI: `listen<ScanProgress>("scan_progress", ...)` listener added in `useEffect`.
   `scanProgress` state + `currentScanIdRef` added.  `phaseLabel()` helper added.
-  Scanning banner now shows `{phaseLabel(phase)} · {elapsed_s}s` as `.scanning-phase` span.
 - Existing `--perf` / `--perf-model` / `--json` / `--diag` / `--wof-adjusted` paths unchanged.
+
+**K-2b follow-up (2026-05-26) — visibility fix:**
+
+Initial implementation compiled and ran, but the scanning banner showed no phase/elapsed.
+Root cause was not confirmed in code review (events may have arrived after scan complete, or
+events may not have reached the UI in the expected timing window).
+
+Fixes applied:
+- `[progress-tauri]` eprintln log added to the emit closure in `scan_drive` for diagnosis.
+- `[progress-ui]` console.log added in the JS listener for diagnosis.
+- **Local elapsed timer**: `scanStartMsRef` + `localElapsedMs` state + `setInterval` useEffect
+  added. Timer ticks every 500 ms regardless of events. Provides fallback when events are delayed
+  or never arrive during the current render cycle.
+- **Banner always shows phase**: The `.scanning-phase` span now shows immediately when scan
+  starts ("Starting scan · 0.0s"), updating to actual phase when events arrive.
+- Stale event filtering logic simplified (log and skip, rather than silent drop).
+
+**Diagnosis procedure** (if banner still shows nothing):
+1. Check terminal for `[progress-tauri] emit phase=...` — confirms Rust is emitting.
+2. Check DevTools console for `[progress-ui] received` — confirms JS listener is working.
+3. If (1) present but not (2): event routing issue (Tauri version, window target).
+4. If both absent: emit is failing silently (check `let _ = app_cb.emit(...)` error).
+5. If both present but banner still blank: React state update / render issue.
 
 ### K-2c: UI progress strip
 

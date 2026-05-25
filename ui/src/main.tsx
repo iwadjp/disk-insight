@@ -895,11 +895,13 @@ function DirectChildrenPanel({
 function App() {
   const scanTimingRef = useRef<{ start: number; invokeStart: number } | null>(null);
   const currentScanIdRef = useRef<string | null>(null);
+  const scanStartMsRef = useRef<number | null>(null);
 
   const [data, setData] = useState<DiskInsightOutput | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingMsg, setLoadingMsg] = useState("Loading sample data...");
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
+  const [localElapsedMs, setLocalElapsedMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isScanError, setIsScanError] = useState(false);
   const [sourceKind, setSourceKind] = useState<SourceKind | null>(null);
@@ -1014,6 +1016,7 @@ function App() {
       console.log(`[perf-ui] invoke start  t+${(invokeStart - t0).toFixed(0)} ms`);
     }
     if (isScan) setScanProgress(null);
+    if (!isScan) scanStartMsRef.current = null;
     setIsLoading(true);
     setLoadingMsg(msg);
     setError(null);
@@ -1169,6 +1172,8 @@ function App() {
     const t0 = performance.now();
     scanTimingRef.current = { start: t0, invokeStart: t0 };
     currentScanIdRef.current = null;
+    scanStartMsRef.current = t0;
+    setLocalElapsedMs(0);
     console.log(`[perf-ui] scan click  drive=${driveInput} policy=${storagePolicy}`);
     const drive = parseDriveLetter(driveInput);
     if (!drive) {
@@ -1225,14 +1230,30 @@ function App() {
     if (!isTauriRuntime()) return;
     const unlistenPromise = listen<ScanProgress>("scan_progress", (event) => {
       const p = event.payload;
-      // Only accept events for the current scan; ignore stale events.
-      if (currentScanIdRef.current !== null && p.scan_id !== currentScanIdRef.current) return;
-      if (currentScanIdRef.current === null) currentScanIdRef.current = p.scan_id;
+      console.log("[progress-ui] received", p.phase, p.elapsed_ms, "scan_id=" + p.scan_id);
+      // Accept events: if no current scan_id yet, adopt this event's scan_id.
+      if (currentScanIdRef.current === null) {
+        currentScanIdRef.current = p.scan_id;
+      } else if (p.scan_id !== currentScanIdRef.current) {
+        console.log("[progress-ui] stale event ignored, expected=" + currentScanIdRef.current);
+        return;
+      }
       setScanProgress(p);
     });
     return () => { unlistenPromise.then((f) => f()); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // K-2b: local elapsed timer — ticks every 500 ms during a real scan.
+  // Provides elapsed display even if Tauri events don't arrive.
+  useEffect(() => {
+    if (!isLoading || scanStartMsRef.current === null) return;
+    const t0 = scanStartMsRef.current;
+    const id = setInterval(() => {
+      setLocalElapsedMs(Math.floor(performance.now() - t0));
+    }, 500);
+    return () => clearInterval(id);
+  }, [isLoading]);
 
   useEffect(() => {
     runLoad(loadSampleData, "Loading sample data...", false, "sample");
@@ -1331,9 +1352,11 @@ function App() {
         <div className="scanning-banner">
           <span className="scanning-spinner" aria-hidden="true" />
           <span>{loadingMsg}</span>
-          {scanProgress && scanProgress.phase !== "done" && (
+          {scanStartMsRef.current !== null && (
             <span className="scanning-phase">
-              {phaseLabel(scanProgress.phase)} · {(scanProgress.elapsed_ms / 1000).toFixed(1)}s
+              {(scanProgress && scanProgress.phase !== "done")
+                ? `${phaseLabel(scanProgress.phase)} · ${(scanProgress.elapsed_ms / 1000).toFixed(1)}s`
+                : `Starting scan · ${(localElapsedMs / 1000).toFixed(1)}s`}
             </span>
           )}
         </div>

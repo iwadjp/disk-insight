@@ -94,6 +94,7 @@ async fn scan_drive(
     let spawn_start = std::time::Instant::now();
     let model = tauri::async_runtime::spawn_blocking(move || {
         build_mft_tree_model_with_policy_progress(drive_char, top_n, policy, |phase, elapsed_ms| {
+            eprintln!("[progress-tauri] emit phase={} elapsed_ms={}", phase, elapsed_ms);
             let event = ScanProgressEvent {
                 scan_id:    scan_id_cb.clone(),
                 drive:      drive_str_cb.clone(),
