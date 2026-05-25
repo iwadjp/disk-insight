@@ -1,4 +1,4 @@
-use disk_insight::mft_probe::{build_mft_tree_model, JsonTreeNode, JsonTreeOutput};
+use disk_insight::mft_probe::{build_mft_tree_model_with_policy, JsonTreeNode, JsonTreeOutput, StoragePolicy};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
@@ -33,6 +33,7 @@ async fn scan_drive(
     state: State<'_, AppState>,
     drive: String,
     top: Option<usize>,
+    storage_policy: Option<String>,
 ) -> Result<JsonTreeOutput, String> {
     let top_n = top.unwrap_or(100).max(1);
     let drive_char = drive
@@ -43,8 +44,13 @@ async fn scan_drive(
         .map(|c| c.to_ascii_uppercase())
         .ok_or_else(|| format!("invalid drive: {}", drive))?;
 
+    let policy = match storage_policy.as_deref() {
+        Some("wof_adjusted") => StoragePolicy::WofAdjusted,
+        _ => StoragePolicy::Current,
+    };
+
     let model = tauri::async_runtime::spawn_blocking(move || {
-        build_mft_tree_model(drive_char, top_n).map_err(|e| format!("{e:#}"))
+        build_mft_tree_model_with_policy(drive_char, top_n, policy).map_err(|e| format!("{e:#}"))
     })
     .await
     .map_err(|e| format!("scan task failed: {e}"))??;

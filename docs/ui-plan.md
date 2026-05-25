@@ -828,6 +828,57 @@ click, the clicked row is highlighted and the card shows the correct full path.
 
 ---
 
+## UI-StoragePolicy-1 Storage policy selector
+
+UI-StoragePolicy-1 exposes the `--wof-adjusted` storage policy in the Tauri UI
+as an optional, clearly experimental alternative. The default `current` policy
+is unchanged; all existing behavior is preserved.
+
+### Rust side
+
+- `scan_drive` Tauri command gains `storage_policy: Option<String>` parameter.
+- `Some("wof_adjusted")` maps to `StoragePolicy::WofAdjusted`.
+- Any other value (including `None`) maps to `StoragePolicy::Current`.
+- Calls `build_mft_tree_model_with_policy(drive_char, top_n, policy)`.
+- Import changed from `build_mft_tree_model` to `build_mft_tree_model_with_policy`
+  and `StoragePolicy`.
+
+### UI side
+
+- Added `storagePolicy: string` state in `App`, initialized to `"current"`.
+- Added `<select className="top-select">` labeled "Size policy" in the toolbar,
+  with options:
+  - `current` — "Current (default)"
+  - `wof_adjusted` — "WOF adjusted (experimental)"
+- Inline `<span className="policy-warning">` appears next to the selector when
+  `wof_adjusted` is selected. Text: "Experimental — no hardlink/WinSxS dedup"
+- `scanDrive(drive, top, storagePolicy)` passes `storagePolicy` to Tauri as
+  `storagePolicy` (Tauri snake_case conversion maps to `storage_policy`).
+- `handleScan` reads `storagePolicy` state and passes it to `runLoad`.
+- Scanning banner message appends `" [WOF adjusted]"` when the policy is
+  `wof_adjusted`.
+- `Summary` TypeScript type gains optional `allocated_size?: number` and
+  `storage_policy?: string` fields.
+- `StatusBar` shows a `source-badge--experimental` badge labeled `wof_adjusted`
+  for live scans when `data.summary.storage_policy` is not `current`.
+
+### CSS
+
+- Added `.source-badge--experimental` (yellow tones: `#fef9c3` bg / `#854d0e` text).
+- Added `.policy-warning` (amber inline warning: `#fffbeb` bg / `#92400e` text,
+  `#fde68a` border, `border-radius: 4px`).
+
+### Scope guard
+
+- Default scan policy remains `current`. WOF adjusted is only active when the
+  user explicitly selects it.
+- Hardlink, component-store, WinSxS, and cluster deduplication are not applied.
+- `final_alloc` policy for `current` is unchanged.
+- Load sample always uses the embedded JSON (no policy selector applied).
+- No delete action, right-click menu, virtual scroll, or Treemap.
+
+---
+
 ## Completed phases summary
 
 | Phase | Description |
@@ -867,6 +918,7 @@ click, the clicked row is highlighted and the card shows the correct full path.
 | F-1 | top files に Select file 追加（Explorer `/select,file` でファイル選択表示） |
 | F-1 FU | Select file 成功時ステータスメッセージ表示（Explorer 背面表示の無反応感を軽減） |
 | G-1 | Drive 自動検出（GetLogicalDrives / GetDriveTypeW）、Drive selector 化 |
+| UI-StoragePolicy-1 | Size policy selector（Current / WOF adjusted experimental）、status bar policy badge |
 
 ---
 
@@ -989,8 +1041,12 @@ Explorer 風の TreeView を中心に据えた実用品として、以下がす�
 - Explorer "Select file", the select-file success message, and Drive selector
   are implemented.
 - Size accuracy work is a separate line from UI functionality.
-- `--wof-adjusted` is available as an experimental CLI / JSON option only.
-- UI / Tauri live scan remains on the default `current` storage policy.
+- `--wof-adjusted` is available as an experimental CLI / JSON option.
+- The UI now exposes a "Size policy" selector (UI-StoragePolicy-1):
+  - Default: `Current (default)`.
+  - Optional: `WOF adjusted (experimental)` with inline warning.
+  - Status bar shows a `wof_adjusted` badge when a WOF-adjusted scan is live.
+  - Hardlink, WinSxS, and component-store correction are not applied.
 - Delete, virtual scroll, hardlink correction, and WinSxS/component-store
   correction are not implemented.
 
@@ -1008,6 +1064,7 @@ Explorer 風の TreeView を中心に据えた実用品として、以下がす�
 | F-1 | top files に Select file ボタン追加（`explorer /select,file`） |
 | F-1 FU | Select file 成功時ステータスメッセージ表示 |
 | G-1 | Drive 自動検出（`GetLogicalDrives` / `GetDriveTypeW`）、Drive selector 化 |
+| UI-StoragePolicy-1 | Size policy selector（Current / WOF adjusted experimental）、status bar policy badge |
 
 ### 残タスク候補
 

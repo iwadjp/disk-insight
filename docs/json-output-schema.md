@@ -142,7 +142,7 @@ These are not part of the JSON file output but share the schema for shared types
 | Command | Arguments | Returns | Notes |
 | --- | --- | --- | --- |
 | `load_sample_json` | none | embedded sample JSON | Same shape as `--json` output. |
-| `scan_drive` | `drive: string`, `top?: usize` | `JsonTreeOutput` | Populates the in-memory `children_map` for `get_children`. |
+| `scan_drive` | `drive: string`, `top?: usize`, `storagePolicy?: string` | `JsonTreeOutput` | Populates the in-memory `children_map` for `get_children`. `storagePolicy` accepts `"current"` (default) or `"wof_adjusted"` (experimental). |
 | `get_children` | `parentRecordIndex: u64` | `Vec<JsonTreeNode>` | Direct children of the given directory record index, sorted by `subtree_size` desc, `name` asc. Returns an error string if no live scan data is loaded yet. Returns `[]` when the parent index is unknown. |
 | `open_in_explorer` | `path: string` | `void` | Opens the given path in Explorer. |
 

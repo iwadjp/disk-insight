@@ -212,6 +212,15 @@ Work through these in order after building. Run as Administrator.
 - [ ] Top files table: "Select file" opens Explorer with the file highlighted (F-1)
 - [ ] Top files table: "Copy path" copies the file path to clipboard
 
+### Storage policy selector (UI-StoragePolicy-1)
+
+- [ ] "Size policy" selector shows "Current (default)" by default
+- [ ] Changing to "WOF adjusted (experimental)" shows amber warning inline
+- [ ] Scanning with WOF adjusted: banner message appends `[WOF adjusted]`
+- [ ] After WOF adjusted scan: status bar shows `wof_adjusted` badge (yellow)
+- [ ] Switching back to "Current (default)" and scanning: badge disappears
+- [ ] Allocated totals differ between current and WOF adjusted scans
+
 ### Safety
 
 - [ ] No delete button exists anywhere in the UI

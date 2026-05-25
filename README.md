@@ -162,6 +162,7 @@ not to produce byte-exact matches with the OS disk usage report.
 - [x] F-1 Select file in Explorer (`explorer /select,file`)
 - [x] G-1 Drive auto-detection selector
 - [x] Size accuracy CLI/JSON experiments, including `--wof-adjusted`
+- [x] UI-StoragePolicy-1 Storage policy selector (Current / WOF adjusted experimental) in Tauri UI
 - [ ] G-2 Drive selector polish
 - [ ] H-1 TreeView UX polish
 - [ ] H-2 README / runbook update

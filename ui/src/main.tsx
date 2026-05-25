@@ -12,6 +12,8 @@ type Summary = {
   orphans: number;
   root_nodes: number;
   total_final_allocated: number;
+  allocated_size?: number;
+  storage_policy?: string;
   read_time_ms: number;
   parse_time_ms: number;
   tree_build_time_ms: number;
@@ -112,11 +114,11 @@ async function loadSampleData(): Promise<DiskInsightOutput> {
   return response.json() as Promise<DiskInsightOutput>;
 }
 
-async function scanDrive(drive: string, top: number): Promise<DiskInsightOutput> {
+async function scanDrive(drive: string, top: number, storagePolicy: string): Promise<DiskInsightOutput> {
   if (!isTauriRuntime()) {
     throw new Error("Real scan is available only in the Tauri desktop app.");
   }
-  return invoke<DiskInsightOutput>("scan_drive", { drive, top });
+  return invoke<DiskInsightOutput>("scan_drive", { drive, top, storagePolicy });
 }
 
 async function openInExplorer(path: string): Promise<void> {
@@ -275,11 +277,18 @@ function StatusBar({
       ? `Scan completed in ${formatNumber(data.summary.total_time_ms)} ms`
       : null;
 
+  const policyLabel = data.summary.storage_policy && data.summary.storage_policy !== "current"
+    ? data.summary.storage_policy
+    : null;
+
   return (
     <div className="status-bar">
       <span className={`source-badge source-badge--${sourceKind}`}>{sourceLabel}</span>
       {sourceKind === "live" && scanTopN !== null && (
         <span className="status-meta">Top {scanTopN}</span>
+      )}
+      {sourceKind === "live" && policyLabel && (
+        <span className="source-badge source-badge--experimental">{policyLabel}</span>
       )}
       <span className="status-meta">{updatedLabel}</span>
       {durationLabel && <span className="status-meta">{durationLabel}</span>}
@@ -601,6 +610,7 @@ function App() {
   const [driveInput, setDriveInput] = useState("C");
   const [topN, setTopN] = useState(100);
   const [scanTopN, setScanTopN] = useState<number | null>(null);
+  const [storagePolicy, setStoragePolicy] = useState("current");
   const [selectedDir, setSelectedDir] = useState<DirectoryEntry | undefined>(undefined);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
@@ -760,8 +770,9 @@ function App() {
       setIsScanError(false);
       return;
     }
-    const msg = `Scanning ${drive}: — reading NTFS metadata. Top ${topN} entries.`;
-    runLoad(() => scanDrive(drive, topN), msg, true, "live", topN);
+    const policyNote = storagePolicy === "wof_adjusted" ? " [WOF adjusted]" : "";
+    const msg = `Scanning ${drive}: — reading NTFS metadata. Top ${topN} entries.${policyNote}`;
+    runLoad(() => scanDrive(drive, topN, storagePolicy), msg, true, "live", topN);
   }
 
   useEffect(() => {
@@ -815,6 +826,22 @@ function App() {
               ))}
             </select>
           </label>
+          <label className="toolbar-label">
+            Size policy
+            <select
+              className="top-select"
+              value={storagePolicy}
+              onChange={(e) => setStoragePolicy(e.target.value)}
+              disabled={isLoading}
+              title="WOF adjusted is experimental. No hardlink or WinSxS deduplication."
+            >
+              <option value="current">Current (default)</option>
+              <option value="wof_adjusted">WOF adjusted (experimental)</option>
+            </select>
+          </label>
+          {storagePolicy === "wof_adjusted" && (
+            <span className="policy-warning">Experimental — no hardlink/WinSxS dedup</span>
+          )}
           <div className="toolbar-separator" />
           <button
             className="btn"
