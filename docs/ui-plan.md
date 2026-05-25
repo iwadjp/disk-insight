@@ -1182,6 +1182,26 @@ milestone candidate: **v0.2.0-treeview-wof**
 
 ---
 
+### M-1 PFx86 measurement recorded — UI wording follow-up (2026-05-26)
+
+`C:\Program Files (x86)` Explorer measurement was recorded in
+`docs/size-discrepancy-investigation.md`.
+
+Result: Explorer Size and WizTree Size align around 15.2 GB, while
+disk-insight `current` and `wof_adjusted` are allocation-oriented values. The
+daily-use trust issue is therefore partly a metric-labeling problem, not only a
+calculation problem.
+
+Next UI candidate:
+- Rename or explain "Size" as **Allocated estimate** where appropriate.
+- Show **WOF-adjusted estimate** for the experimental policy.
+- Add short help text such as "Why different from Explorer Size?"
+
+No UI implementation is included in this M-1 follow-up. `delete`, virtual
+scroll, hardlink correction, and WinSxS correction remain unimplemented.
+
+---
+
 ## v0.3.0-daily-use milestone (candidate)
 
 **STATUS: HOLD — 2026-05-25**

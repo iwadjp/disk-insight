@@ -359,6 +359,23 @@ The "Explorer 11.0 GB" value from prior notes may be logical "Size" — this is 
 
 ### Status
 
-**M-1: measurement table created, values TBD.**
+**M-1 PFx86 measurement recorded (2026-05-26).**
 
-Fill in `docs/size-discrepancy-investigation.md` §M-1a after measuring.
+`C:\Program Files (x86)` Explorer Properties reported:
+- Size: 15.2 GB / 16,342,637,554 bytes
+- Size on disk: 11.0 GB / 11,882,143,744 bytes
+
+This changes the PFx86 interpretation. Explorer **Size** and WizTree **Size**
+align around 15.2 GB, while disk-insight `current` (~10.1 GB) and
+`wof_adjusted` (~8.251 GB) are allocation-oriented values. The prior comparison
+mixed logical-size and allocated-style metrics.
+
+Current classification: **Case 3 + residual differences remain**.
+- disk-insight is not showing Explorer "Size"; it is showing allocation-oriented values.
+- UI labels and explanations should make `current` / `wof_adjusted` meaning clearer.
+- Residual deltas remain: Explorer Size on disk 11.0 GB vs current ~10.1 GB,
+  and WizTree Allocated ~7.8 GB vs wof_adjusted ~8.251 GB.
+- This is not a full accuracy resolution and does not prove an aggregation bug.
+
+**v0.3.0-daily-use: HOLD continues** until the metric wording and residual
+comparison story are clearer.
