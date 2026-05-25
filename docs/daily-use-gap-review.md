@@ -298,6 +298,12 @@ refreshes the panel with that folder's children. Combined with J-2, the user
 can drill down through the hierarchy from the right pane, matching the core
 WizTree browsing workflow without needing to use the TreeView for every step.
 
+J-4 (2026-05-25) adds session preferences via `localStorage`. On next launch,
+disk-insight restores the last selected drive (validated against detected drives),
+top-N count, storage policy, and direct-children sort key/direction. The sort
+state was lifted from `DirectChildrenPanel` local state to `App` to enable
+cross-session persistence.
+
 ---
 
 ## 9. Decision (current assessment)

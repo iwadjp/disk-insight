@@ -81,6 +81,35 @@ type SortDirection = "asc" | "desc";
 const TOP_OPTIONS = [10, 30, 50, 100, 200, 500];
 const LARGE_FOLDER_THRESHOLD = 200;
 const LARGE_TREE_THRESHOLD = 1000;
+const PREF_KEY = "disk-insight.preferences.v1";
+
+type AppPreferences = {
+  drive?: string;
+  topCount?: number;
+  storagePolicy?: string;
+  directChildrenSortKey?: DirectChildrenSortKey;
+  directChildrenSortDirection?: SortDirection;
+};
+
+function loadPreferences(): AppPreferences {
+  try {
+    const raw = localStorage.getItem(PREF_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as AppPreferences;
+  } catch {
+    return {};
+  }
+}
+
+function savePreferences(prefs: AppPreferences): void {
+  try {
+    localStorage.setItem(PREF_KEY, JSON.stringify(prefs));
+  } catch {
+    // localStorage unavailable; ignore
+  }
+}
+
+const _initialPrefs = loadPreferences();
 
 function parseDriveLetter(input: string): string | null {
   const s = input.trim().replace(/:$/, "");
@@ -640,6 +669,10 @@ function DirectChildrenPanel({
   isLoading,
   error,
   sourceKind,
+  sortKey,
+  sortDir,
+  onSortKeyChange,
+  onSortDirChange,
   onNavigate,
   onOpenExplorer,
   onSelectFile,
@@ -650,13 +683,15 @@ function DirectChildrenPanel({
   isLoading: boolean;
   error: string | null;
   sourceKind: SourceKind | null;
+  sortKey: DirectChildrenSortKey;
+  sortDir: SortDirection;
+  onSortKeyChange: (key: DirectChildrenSortKey) => void;
+  onSortDirChange: (dir: SortDirection) => void;
   onNavigate: (node: TreeNode) => void;
   onOpenExplorer: (path: string) => void;
   onSelectFile: (path: string) => void;
   onCopyError: (msg: string) => void;
 }) {
-  const [sortKey, setSortKey] = useState<DirectChildrenSortKey>("size");
-  const [sortDir, setSortDir] = useState<SortDirection>("desc");
 
   const sorted = useMemo(
     () => (children ? sortDirectChildren(children, sortKey, sortDir) : []),
@@ -738,7 +773,7 @@ function DirectChildrenPanel({
             <select
               className="sort-select"
               value={sortKey}
-              onChange={(e) => setSortKey(e.target.value as DirectChildrenSortKey)}
+              onChange={(e) => onSortKeyChange(e.target.value as DirectChildrenSortKey)}
             >
               <option value="size">Size</option>
               <option value="name">Name</option>
@@ -747,7 +782,7 @@ function DirectChildrenPanel({
           </label>
           <button
             className="btn btn-sm sort-dir-btn"
-            onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
+            onClick={() => onSortDirChange(sortDir === "desc" ? "asc" : "desc")}
             title={sortDir === "desc" ? "Descending — click for ascending" : "Ascending — click for descending"}
           >
             {sortDir === "desc" ? "↓" : "↑"}
@@ -770,10 +805,28 @@ function App() {
   const [drives, setDrives] = useState<DriveInfo[]>([
     { letter: "C", root: "C:\\", display: "C:", drive_type: "unknown" },
   ]);
-  const [driveInput, setDriveInput] = useState("C");
-  const [topN, setTopN] = useState(100);
+  const [driveInput, setDriveInput] = useState(
+    _initialPrefs.drive ?? "C",
+  );
+  const [topN, setTopN] = useState(
+    TOP_OPTIONS.includes(_initialPrefs.topCount ?? -1)
+      ? (_initialPrefs.topCount as number)
+      : 100,
+  );
   const [scanTopN, setScanTopN] = useState<number | null>(null);
-  const [storagePolicy, setStoragePolicy] = useState("current");
+  const [storagePolicy, setStoragePolicy] = useState(
+    _initialPrefs.storagePolicy === "wof_adjusted" ? "wof_adjusted" : "current",
+  );
+  const [directChildrenSortKey, setDirectChildrenSortKey] = useState<DirectChildrenSortKey>(
+    (["size", "name", "type"] as DirectChildrenSortKey[]).includes(
+      _initialPrefs.directChildrenSortKey as DirectChildrenSortKey,
+    )
+      ? (_initialPrefs.directChildrenSortKey as DirectChildrenSortKey)
+      : "size",
+  );
+  const [directChildrenSortDir, setDirectChildrenSortDir] = useState<SortDirection>(
+    _initialPrefs.directChildrenSortDirection === "asc" ? "asc" : "desc",
+  );
   const [selectedDir, setSelectedDir] = useState<DirectoryEntry | undefined>(undefined);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
@@ -974,14 +1027,29 @@ function App() {
   }
 
   useEffect(() => {
+    savePreferences({
+      drive: driveInput,
+      topCount: topN,
+      storagePolicy,
+      directChildrenSortKey,
+      directChildrenSortDirection: directChildrenSortDir,
+    });
+  }, [driveInput, topN, storagePolicy, directChildrenSortKey, directChildrenSortDir]);
+
+  useEffect(() => {
     runLoad(loadSampleData, "Loading sample data...", false, "sample");
     if (isTauriRuntime()) {
       invoke<DriveInfo[]>("list_drives")
         .then((detected) => {
           if (detected.length > 0) {
             setDrives(detected);
-            const hasC = detected.some((d) => d.letter === "C");
-            setDriveInput(hasC ? "C" : detected[0].letter);
+            const savedDrive = _initialPrefs.drive;
+            const savedValid =
+              savedDrive != null && detected.some((d) => d.letter === savedDrive);
+            if (!savedValid) {
+              const hasC = detected.some((d) => d.letter === "C");
+              setDriveInput(hasC ? "C" : detected[0].letter);
+            }
           }
         })
         .catch(() => {
@@ -1126,6 +1194,10 @@ function App() {
                   isLoading={selectedChildrenLoading}
                   error={selectedChildrenError}
                   sourceKind={sourceKind}
+                  sortKey={directChildrenSortKey}
+                  sortDir={directChildrenSortDir}
+                  onSortKeyChange={setDirectChildrenSortKey}
+                  onSortDirChange={setDirectChildrenSortDir}
                   onNavigate={handleSelectTreeNode}
                   onOpenExplorer={handleOpenExplorer}
                   onSelectFile={handleSelectFile}

@@ -1313,13 +1313,41 @@ Direct children panel に sort control を追加した。
 - Expand all / Collapse all（指定深さまで）
 - 展開状態の保持（rescan 後に同じ場所を開いた状態を復元）
 
-### J-4: Search or filter（小〜大）
+### J-4: Session preferences
+
+**STATUS: COMPLETE — 2026-05-25**
+
+`localStorage` を使って軽い UI 設定を保存・復元する。
+
+#### 変更内容
+
+- `PREF_KEY = "disk-insight.preferences.v1"` 定数を追加
+- `AppPreferences` 型: `drive / topCount / storagePolicy / directChildrenSortKey / directChildrenSortDirection`
+- `loadPreferences()` / `savePreferences()` ヘルパーを追加（try/catch でサイレント失敗）
+- `_initialPrefs = loadPreferences()` をモジュールレベルで1回だけ読み込む
+- `App` の `driveInput` / `topN` / `storagePolicy` を `_initialPrefs` の値で初期化
+  - `topN`: `TOP_OPTIONS` に含まれない値はデフォルト 100
+  - `storagePolicy`: `"wof_adjusted"` 以外はデフォルト `"current"`
+- `directChildrenSortKey` / `directChildrenSortDir` state を `DirectChildrenPanel` から `App` に lift
+  - `_initialPrefs` の値で初期化（不正値はデフォルト `"size"` / `"desc"`）
+  - `DirectChildrenPanel` は `sortKey` / `sortDir` を props で受け取り、`onSortKeyChange` / `onSortDirChange` コールバックで通知
+- `list_drives()` 完了後、saved drive が detected list に存在しない場合のみ C: または先頭ドライブにフォールバック
+- `useEffect` で `driveInput / topN / storagePolicy / directChildrenSortKey / directChildrenSortDir` の変化時に保存
+
+#### 制約確認
+
+- Rust core / Tauri command 変更なし
+- リセットボタン・設定ダイアログなし
+- virtual scroll 未実装
+- delete 未追加
+
+### J-5: Search or filter（小〜大）
 
 - パス・名前でのフィルタ
 - 最小実装: 上位リストの絞り込み（フォルダ名 prefix filter）
 - 本格実装: TreeView 内でのハイライト（後フェーズ候補）
 
-### J-5: Sorting polish（小）
+### J-6: Sorting polish（小）
 
 - カラムヘッダクリックでソート切替
 - サイズ降順 / 昇順 / 名前順
