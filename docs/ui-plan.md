@@ -956,6 +956,7 @@ is unchanged; all existing behavior is preserved.
 | UI-StoragePolicy-1 | Size policy selector（Current / WOF adjusted experimental）、status bar policy badge |
 | I-1 | TreeView polish（active accent bar、hover、ellipsis truncation、toggle hit area、loading color、large-warning bg） |
 | J-1 | Daily-use gap review（docs/daily-use-gap-review.md 作成、最重要ブロッカーを特定） |
+| J-2 | Selected folder direct children panel（get_children 再利用、dir-first / size-desc、actions 付き） |
 
 ---
 
@@ -1210,12 +1211,42 @@ WizTree と並べて使い、不満点・不足点を洗い出す。
 - selected folder の direct children を表示できないため、フォルダを掘っても中身が見えない
 - J-2 Selected folder detail panel を最優先で実施する
 
-### J-2: Right pane usability polish（小〜中）
+### J-2: Selected folder direct children panel
 
-- 上位ディレクトリ・ファイルの操作感向上
-- Open folder / Select file / Copy path のボタン配置・ラベル改善
-- Summary の見やすさ（scan 時間・drive info など）
-- empty state の改善（未スキャン時に何が表示されるか）
+**STATUS: COMPLETE — 2026-05-25**
+
+Gap A（右ペインが global top-N prefix filter）を解消する最重要実装。
+
+#### 変更内容
+
+- `DirectChildrenPanel` コンポーネントを追加（ui/src/main.tsx）
+  - selected folder の direct children を取得・表示
+  - 既存 `childrenByParent` キャッシュを再利用（TreeView と共有）
+  - キャッシュにない場合は `get_children(selectedDir.record_index)` を自動発行
+  - dir-first / size-desc / name-asc でソート
+  - 各行: DIR/FILE バッジ・名前（ellipsis）・サイズ・アクション
+    - folder: Open folder, Copy path
+    - file: Open folder, Select file, Copy path
+  - Loading / error / sample / empty のそれぞれの状態表示
+- `useEffect` を追加（App 内）
+  - `selectedDir` または `sourceKind` が変わったら children を取得
+  - cancelled flag でステール更新を防止
+- `selectedChildrenLoading` / `selectedChildrenError` state を追加
+- `runLoad` でリセット
+- `SelectedFolderCard` の "Filtered within current top results" ノートを削除
+- 既存 DirectoriesTable / FilesTable のタイトルを更新
+  - "Top directories under {path}" → "Top directories (scan results) under {path}"
+  - "Top files under {path}" → "Top files (scan results) under {path}"
+- `sortDirectChildren` ヘルパー追加
+- CSS: `.direct-children-panel` / `.direct-child-row` / `.direct-child-badge` / etc. を追加
+
+#### 制約確認
+
+- Rust core / MFT scan / final_alloc / WOF policy 変更なし
+- Tauri command 変更なし（既存 `get_children` を再利用）
+- virtual scroll 未実装のまま
+- delete 未追加
+- J-3 で sort polish 予定
 
 ### J-3: TreeView quick navigation（中）
 

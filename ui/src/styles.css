@@ -711,6 +711,121 @@ tbody tr:last-child td {
   }
 }
 
+/* ── Direct children panel ── */
+.direct-children-panel {
+  background: #ffffff;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.direct-children-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #d9e1e8;
+}
+
+.direct-children-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #465563;
+}
+
+.direct-children-count {
+  font-size: 12px;
+  color: #5e6b78;
+  white-space: nowrap;
+}
+
+.direct-children-list {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.direct-child-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-bottom: 1px solid #edf1f5;
+  min-height: 32px;
+}
+
+.direct-child-row:last-child {
+  border-bottom: none;
+}
+
+.direct-child-row:hover {
+  background: #f5f7fa;
+}
+
+.direct-child-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  width: 36px;
+  text-align: center;
+}
+
+.direct-child-badge--dir {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.direct-child-badge--file {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.direct-child-name {
+  flex: 1;
+  min-width: 0;
+  font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #17202a;
+}
+
+.direct-child-size {
+  flex-shrink: 0;
+  width: 80px;
+  font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-size: 12px;
+  color: #5e6b78;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.direct-child-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.direct-children-note {
+  padding: 14px 16px;
+  margin: 0;
+  font-size: 13px;
+  color: #5e6b78;
+}
+
+.direct-children-note--error {
+  color: #9b1c1c;
+}
+
 @media (max-width: 560px) {
   .app {
     width: min(100% - 20px, 1280px);

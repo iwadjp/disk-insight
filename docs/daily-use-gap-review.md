@@ -264,7 +264,31 @@ Perform the following with both WizTree and disk-insight side by side.
 
 ---
 
-## 7. Decision (current assessment)
+## 8. J-2 implementation result (2026-05-25)
+
+J-2 Selected folder direct children panel is implemented and built.
+
+`DirectChildrenPanel` was added to the right pane. When a folder is selected in
+the TreeView, the panel fetches its direct children via the existing `get_children`
+Tauri command (backed by the in-memory `children_map`). The result is displayed as
+a sorted list (directories first, then size descending) with DIR/FILE badges and
+Open folder / Select file / Copy path actions per row.
+
+The `childrenByParent` cache is shared between the TreeView and the panel, so
+expanding a folder in the TreeView and then selecting it (or vice versa) avoids a
+redundant fetch.
+
+Gap A is addressed: selecting `C:\Users\iwadj` now shows AppData, Desktop,
+Downloads, and other direct children with their sizes, without needing any of them
+to be in the global top-N scan results.
+
+The existing top directories / top files tables are retained with their titles
+updated to "Top directories (scan results) under …" and "Top files (scan results)
+under …" to clarify the distinction.
+
+---
+
+## 9. Decision (current assessment)
 
 ### v0.3.0 primary focus
 

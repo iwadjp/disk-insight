@@ -186,6 +186,14 @@ function buildVisibleRows(
   return rows;
 }
 
+function sortDirectChildren(children: TreeNode[]): TreeNode[] {
+  return [...children].sort((a, b) => {
+    if (a.is_directory !== b.is_directory) return a.is_directory ? -1 : 1;
+    if (b.subtree_size !== a.subtree_size) return b.subtree_size - a.subtree_size;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 function CopyButton({
   text,
   onError,
@@ -493,7 +501,6 @@ function SelectedFolderCard({
         <span>Direct files: <strong>{formatBytes(dir.direct_file_size)}</strong></span>
         <span>Children: <strong>{formatNumber(dir.child_count)}</strong></span>
       </div>
-      <div className="selected-folder-note">Filtered within current top results</div>
     </div>
   );
 }
@@ -597,6 +604,99 @@ function FilesTable({
   );
 }
 
+function DirectChildrenPanel({
+  dir,
+  children,
+  isLoading,
+  error,
+  sourceKind,
+  onOpenExplorer,
+  onSelectFile,
+  onCopyError,
+}: {
+  dir: DirectoryEntry;
+  children: TreeNode[] | undefined;
+  isLoading: boolean;
+  error: string | null;
+  sourceKind: SourceKind | null;
+  onOpenExplorer: (path: string) => void;
+  onSelectFile: (path: string) => void;
+  onCopyError: (msg: string) => void;
+}) {
+  const sorted = useMemo(
+    () => (children ? sortDirectChildren(children) : []),
+    [children],
+  );
+
+  let body: React.ReactNode;
+  if (isLoading) {
+    body = <p className="direct-children-note">Loading direct children…</p>;
+  } else if (error) {
+    body = <p className="direct-children-note direct-children-note--error">{error}</p>;
+  } else if (sourceKind !== "live") {
+    body = (
+      <p className="direct-children-note">
+        Direct children are available after a live scan in the Tauri app.
+      </p>
+    );
+  } else if (children === undefined) {
+    body = <p className="direct-children-note">Fetching…</p>;
+  } else if (children.length === 0) {
+    body = <p className="direct-children-note">This folder has no children.</p>;
+  } else {
+    body = (
+      <div className="direct-children-list">
+        {sorted.map((node) => (
+          <div key={node.record_index} className="direct-child-row">
+            <span
+              className={`direct-child-badge direct-child-badge--${node.is_directory ? "dir" : "file"}`}
+            >
+              {node.is_directory ? "DIR" : "FILE"}
+            </span>
+            <span className="direct-child-name" title={node.path}>
+              {node.name || node.path}
+            </span>
+            <span className="direct-child-size">{formatBytes(node.subtree_size)}</span>
+            <div className="direct-child-actions">
+              <button
+                className="btn btn-sm"
+                onClick={() =>
+                  onOpenExplorer(node.is_directory ? node.path : getParentDir(node.path))
+                }
+              >
+                Open folder
+              </button>
+              {!node.is_directory && (
+                <button className="btn btn-sm" onClick={() => onSelectFile(node.path)}>
+                  Select file
+                </button>
+              )}
+              <CopyButton text={node.path} onError={onCopyError} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="direct-children-panel">
+      <div className="direct-children-header">
+        <span className="direct-children-title">
+          Direct children of{" "}
+          <span className="heading-path">{dir.path}</span>
+        </span>
+        {children !== undefined && (
+          <span className="direct-children-count">
+            {formatNumber(children.length)} entries
+          </span>
+        )}
+      </div>
+      {body}
+    </div>
+  );
+}
+
 function App() {
   const [data, setData] = useState<DiskInsightOutput | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -619,11 +719,44 @@ function App() {
   const [childrenErrors, setChildrenErrors] = useState<Record<number, string>>({});
   const [treeError, setTreeError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [selectedChildrenLoading, setSelectedChildrenLoading] = useState(false);
+  const [selectedChildrenError, setSelectedChildrenError] = useState<string | null>(null);
 
   const visibleRows = useMemo(
     () => buildVisibleRows(data?.root_children ?? [], expandedIds, childrenByParent, childrenErrors),
     [data?.root_children, expandedIds, childrenByParent, childrenErrors],
   );
+
+  useEffect(() => {
+    if (!selectedDir || sourceKind !== "live") {
+      setSelectedChildrenLoading(false);
+      setSelectedChildrenError(null);
+      return;
+    }
+    const id = selectedDir.record_index;
+    if (childrenByParent[id] !== undefined) {
+      setSelectedChildrenLoading(false);
+      setSelectedChildrenError(null);
+      return;
+    }
+    let cancelled = false;
+    setSelectedChildrenLoading(true);
+    setSelectedChildrenError(null);
+    getChildren(id)
+      .then((kids) => {
+        if (cancelled) return;
+        setChildrenByParent((prev) => ({ ...prev, [id]: kids }));
+        setSelectedChildrenLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setSelectedChildrenError(err instanceof Error ? err.message : String(err));
+        setSelectedChildrenLoading(false);
+      });
+    return () => { cancelled = true; };
+    // childrenByParent intentionally omitted: cache check at effect start is sufficient
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDir, sourceKind]);
 
   function runLoad(
     loader: () => Promise<DiskInsightOutput>,
@@ -642,6 +775,8 @@ function App() {
     setChildrenByParent({});
     setChildrenErrors({});
     setTreeError(null);
+    setSelectedChildrenLoading(false);
+    setSelectedChildrenError(null);
     loader()
       .then((json) => {
         setData(json);
@@ -922,6 +1057,18 @@ function App() {
                   onCopyError={handleCopyError}
                 />
               )}
+              {selectedDir && (
+                <DirectChildrenPanel
+                  dir={selectedDir}
+                  children={childrenByParent[selectedDir.record_index]}
+                  isLoading={selectedChildrenLoading}
+                  error={selectedChildrenError}
+                  sourceKind={sourceKind}
+                  onOpenExplorer={handleOpenExplorer}
+                  onSelectFile={handleSelectFile}
+                  onCopyError={handleCopyError}
+                />
+              )}
               <DirectoriesTable
                 rows={
                   selectedDir
@@ -930,7 +1077,7 @@ function App() {
                 }
                 title={
                   selectedDir && !isDriveRoot(selectedDir.path)
-                    ? <>Top directories under <span className="heading-path">{selectedDir.path}</span></>
+                    ? <>Top directories (scan results) under <span className="heading-path">{selectedDir.path}</span></>
                     : "Top directories"
                 }
               />
@@ -942,7 +1089,7 @@ function App() {
                 }
                 title={
                   selectedDir && !isDriveRoot(selectedDir.path)
-                    ? <>Top files under <span className="heading-path">{selectedDir.path}</span></>
+                    ? <>Top files (scan results) under <span className="heading-path">{selectedDir.path}</span></>
                     : "Top files"
                 }
                 onOpenLocation={handleOpenExplorer}
