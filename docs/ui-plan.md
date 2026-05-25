@@ -1175,3 +1175,69 @@ milestone candidate: **v0.2.0-treeview-wof**
 - 右クリックメニュー
 - cmd open
 - WinSxS / hardlink / WOF 精度改善
+
+---
+
+## v0.3.0-daily-use milestone (candidate)
+
+**STATUS: planning — 2026-05-25**
+
+次ゴール: 著者が自分の用途で毎日使えるレベルに達すること。
+公開判断はその後（daily-use PASS 後に改めて判断する）。
+
+### 背景
+
+v0.2.0-treeview-wof は機能的に動作しているが、
+WizTree の代替として日常使いするには不満点がある。
+v0.3.0 では実際に使ってみて見つかったギャップを埋めることを優先する。
+実装よりも「使って確かめる」を重視する段階。
+
+### J-1: Daily-use gap review（観察・記録のみ）
+
+WizTree と並べて使い、不満点・不足点を洗い出す。
+実装はしない。観察・記録のみ。
+
+- どのフォルダに行くか、どういう操作をするか
+- WizTree で自然にできて disk-insight でできないこと
+- UI の不満点（操作手数・見にくさ・速度感）
+- 結果: 次に実装する候補の優先順位を決める
+
+### J-2: Right pane usability polish（小〜中）
+
+- 上位ディレクトリ・ファイルの操作感向上
+- Open folder / Select file / Copy path のボタン配置・ラベル改善
+- Summary の見やすさ（scan 時間・drive info など）
+- empty state の改善（未スキャン時に何が表示されるか）
+
+### J-3: TreeView quick navigation（中）
+
+- キーボード操作（矢印キーで展開 / 選択）
+- Expand all / Collapse all（指定深さまで）
+- 展開状態の保持（rescan 後に同じ場所を開いた状態を復元）
+
+### J-4: Search or filter（小〜大）
+
+- パス・名前でのフィルタ
+- 最小実装: 上位リストの絞り込み（フォルダ名 prefix filter）
+- 本格実装: TreeView 内でのハイライト（後フェーズ候補）
+
+### J-5: Sorting polish（小）
+
+- カラムヘッダクリックでソート切替
+- サイズ降順 / 昇順 / 名前順
+- 現在のソートキーの視覚表示
+
+### J-6: Daily-use milestone verification
+
+- 実際に1週間以上の自己使用
+- WizTree 不使用で快適に操作できること
+- 主要不満点が解消されていること
+
+### 後回し（v0.3.0 より後）
+
+- delete action（安全設計・確認ダイアログ必須）
+- virtual scroll 本実装（大規模ディレクトリ向け）
+- Treemap
+- 右クリックメニュー
+- NTFS 判定・容量 / 空き領域表示
+- WinSxS / hardlink / WOF 精度改善

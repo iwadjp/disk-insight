@@ -172,6 +172,14 @@ not to produce byte-exact matches with the OS disk usage report.
 
 ---
 
+## Publication status
+
+Public release is deferred until the app reaches the author's own daily-use threshold.
+Current state is experimental and usable for personal disk analysis.
+The next milestone (`v0.3.0-daily-use`) focuses on closing that gap before any public release decision.
+
+---
+
 ## Deferred
 
 | Feature | Notes |
