@@ -442,18 +442,11 @@ cold cache では read_mft (I/O) が大幅に増加する。K-1b でギャップ
 
 ---
 
-## 12. K-1b: Tauri UI end-to-end timing（2026-05-25 実装済み、実測待ち）
+## 12. K-1b: Tauri UI end-to-end timing（2026-05-25 実装済み）
 
 ### 目的
 
 CLI warm cache 9.4s と Tauri UI 約25s のギャップ (~15s) の内訳を把握する。
-
-**候補:**
-- cold cache / warm cache 差（read_mft 増加）
-- Tauri invoke 戻り値転送（JSON serialize + IPC）
-- React setState / render
-- visibleRows build
-- direct children 初期取得
 
 ### 実装
 
@@ -464,31 +457,81 @@ CLI warm cache 9.4s と Tauri UI 約25s のギャップ (~15s) の内訳を把�
 - `scan click`, `invoke start`, `invoke resolved (invoke_ms)`, `setData called`
 - `data rendered (rAF)`, `data rendered (rAF+1)`, `direct children ready`
 
-### 測定手順
-
-管理者権限で `npm run tauri dev`、DevTools Console で `[perf-ui]`、terminal で `[perf-tauri]` を確認。
-
-### 期待される出力形式
+### 実測値（K-1b, C: current）
 
 ```text
-[perf-tauri] scan_drive start  drive=C top=100 policy=current
-[perf-tauri] build_model done  XXXX ms  root_children=53 ...
-[perf-tauri] state_lock  X ms
-[perf-tauri] scan_drive return  total=XXXX ms
+[perf-tauri] build_model done  22,757 ms
+[perf-tauri] scan_drive return  total=22,758 ms
 
-[perf-ui] scan click  drive=C policy=current
-[perf-ui] invoke start  t+X ms
-[perf-ui] invoke resolved  t+XXXX ms  invoke_ms=XXXX
-[perf-ui] setData called  t+XXXX ms
-[perf-ui] data rendered (rAF)  t+XXXX ms  files=XXXXXXX
-[perf-ui] direct children ready  t+XXXX ms  path=C:  count=53
+[perf-ui] invoke resolved  t+22,767 ms  invoke_ms=22,767
+[perf-ui] data rendered (rAF)  t+23,103 ms
+[perf-ui] direct children ready  t+23,115 ms
 ```
 
-実機計測後に数値をここに追記する。
+### 判明したこと
+
+- **React描画 ≈ 300ms（主因ではない）**
+- **build_model が全体の 22.8s / 22.8s — ここが主因**
+- cold cache vs warm cache の差の可能性あり（K-1c で検証）
+
+---
+
+## 13. K-1c: CLI model path vs Tauri model path comparison（2026-05-25 実装済み・実測完了）
+
+### 目的
+
+「Tauri が毎回 22.8s かかる」のが、CLI output path vs model path の差なのか、
+それとも I/O キャッシュ状態の差なのかを切り分ける。
+
+### 疑い
+
+- CLI `--perf` は `build_mft_tree_output_with_policy` 経由
+- Tauri は `build_mft_tree_model_with_policy` 経由（children_map 全件構築を含む）
+- CLI 9.4s に children_map が含まれていない可能性 → `--perf-model` で確認
+
+### 実装
+
+- `JsonSummary` に `children_map_time_ms` フィールド追加
+- `build_mft_tree_model_with_policy` 内で children_map 構築時間を計測
+- `pub fn print_perf_model_with_policy` 追加（`--perf-model` フラグ経由）
+
+### 実測結果（C: warm cache）
+
+| 計測 | build_model | read_mft | parse | tree_build | agg | children_map | total |
+|------|-------------|----------|-------|------------|-----|--------------|-------|
+| CLI `--perf` (C: current) | — | 4842 ms | 450 ms | 509 ms | 170 ms | 3145 ms | 9441 ms |
+| CLI `--perf-model` (C: current) | 9827 ms | 4871 ms | 462 ms | 511 ms | 173 ms | 3169 ms | 9519 ms |
+| CLI `--perf-model` (C: wof_adjusted) | 9772 ms | 4835 ms | 469 ms | 498 ms | 167 ms | 3150 ms | 9460 ms |
+| Tauri `[perf-tauri]` (K-1b) | 22,757 ms | — | — | — | — | — | — |
+
+children_map stats: keys=358,622 dirs、total_children=1,756,339
+
+### 判定
+
+**B: CLI `--perf-model` ≈ CLI `--perf` ≈ 9.5s。Tauri 22.8s との差 (~13s) は Tauri 固有要因（cold cache）。**
+
+- CLI output path と model path はほぼ同じ（children_map は既に両方に含まれていた）
+- children_map 3.1s は total の 33%（ボトルネックではある）
+- **主因: Tauri K-1b 測定時は C: MFT が OS page cache にない（cold state）**
+- cold read_mft 推定: warm 4.8s × 3〜4 ≈ 15〜18s
+- 22.8s ≈ cold read_mft (15-18s) + その他フェーズ (5s) と整合
+
+### 検証方法
+
+再起動直後の cold state で以下を実行し、read_mft が 15-18s になれば確定:
+
+```powershell
+.\target\release\disk-insight.exe --drive C --top 100 --perf-model
+```
+
+### 次のアクション
+
+- **K-1d（オプション）**: cold state での `--perf-model` 実測で仮説確定
+- **K-2**: scan progress visibility design（cold state でも何かが見えるようにする）
 
 ### タグ候補
 
-`v0.3.0-daily-use` — **保留**。K-1b 実測 → K-2 → K-3 → K-4 で再判定する。
+`v0.3.0-daily-use` — **保留**。K-2 → K-3 → K-4 で再判定する。
 
 ### GitHub public release
 

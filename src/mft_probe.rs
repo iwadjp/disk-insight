@@ -2447,6 +2447,7 @@ pub struct JsonSummary {
     pub parse_time_ms:         u64,
     pub tree_build_time_ms:    u64,
     pub aggregation_time_ms:   u64,
+    pub children_map_time_ms:  u64,
     pub total_time_ms:         u64,
 }
 
@@ -2967,6 +2968,7 @@ pub fn build_mft_tree_model_with_policy(
     // children_map: for every directory in the arena, store all its direct
     // children (files and directories) sorted by subtree_size desc, name asc.
     // Used by the Tauri get_children command to back lazy TreeView expansion.
+    let children_map_start = std::time::Instant::now();
     let dir_count_hint = arena.iter().filter(|n| n.is_dir).count();
     let mut children_map: HashMap<u64, Vec<JsonTreeNode>> =
         HashMap::with_capacity(dir_count_hint);
@@ -2980,6 +2982,7 @@ pub fn build_mft_tree_model_with_policy(
         });
         children_map.insert(arena[i].frn, children);
     }
+    let children_map_elapsed = children_map_start.elapsed();
 
     // Root children: direct children of the NTFS root directory (FRN 5).
     // Reuses the children_map entry; truncated to 200 for the embedded JSON.
@@ -3006,6 +3009,7 @@ pub fn build_mft_tree_model_with_policy(
         parse_time_ms:         parse_elapsed.as_millis() as u64,
         tree_build_time_ms:    tree_build_elapsed.as_millis() as u64,
         aggregation_time_ms:   agg_elapsed.as_millis() as u64,
+        children_map_time_ms:  children_map_elapsed.as_millis() as u64,
         total_time_ms:         total_elapsed.as_millis() as u64,
     };
 
@@ -3045,12 +3049,41 @@ pub fn print_probe7_human(drive: char, top_n: usize) -> Result<()> {
 fn print_perf_summary(s: &JsonSummary) {
     eprintln!("[perf] drive={}  policy={}  total={} ms",
         s.drive, s.storage_policy, s.total_time_ms);
-    eprintln!("[perf]   open_vol:    {:>6} ms", s.open_vol_time_ms);
-    eprintln!("[perf]   read_mft:    {:>6} ms", s.read_time_ms);
-    eprintln!("[perf]   parse:       {:>6} ms", s.parse_time_ms);
-    eprintln!("[perf]   tree_build:  {:>6} ms", s.tree_build_time_ms);
-    eprintln!("[perf]   aggregate:   {:>6} ms", s.aggregation_time_ms);
-    eprintln!("[perf]   total:       {:>6} ms", s.total_time_ms);
+    eprintln!("[perf]   open_vol:      {:>6} ms", s.open_vol_time_ms);
+    eprintln!("[perf]   read_mft:      {:>6} ms", s.read_time_ms);
+    eprintln!("[perf]   parse:         {:>6} ms", s.parse_time_ms);
+    eprintln!("[perf]   tree_build:    {:>6} ms", s.tree_build_time_ms);
+    eprintln!("[perf]   aggregate:     {:>6} ms", s.aggregation_time_ms);
+    eprintln!("[perf]   children_map:  {:>6} ms", s.children_map_time_ms);
+    eprintln!("[perf]   total:         {:>6} ms", s.total_time_ms);
+}
+
+// K-1c: CLI model path timing — calls the same build_mft_tree_model_with_policy
+// as the Tauri scan_drive command, for direct comparison with [perf-tauri] output.
+pub fn print_perf_model_with_policy(
+    drive: char,
+    top_n: usize,
+    storage_policy: StoragePolicy,
+) -> Result<()> {
+    let model_start = std::time::Instant::now();
+    let model = build_mft_tree_model_with_policy(drive, top_n, storage_policy)?;
+    let model_ms = model_start.elapsed().as_millis();
+
+    let children_map_keys = model.children_map.len();
+    let children_map_total: usize = model.children_map.values().map(|v| v.len()).sum();
+
+    eprintln!(
+        "[perf-cli-model] build_model done  {} ms  root_children={} top_dirs={} top_files={} \
+         children_map_keys={} children_map_total_children={}",
+        model_ms,
+        model.output.root_children.len(),
+        model.output.top_directories.len(),
+        model.output.top_files.len(),
+        children_map_keys,
+        children_map_total,
+    );
+    print_perf_summary(&model.output.summary);
+    Ok(())
 }
 
 pub fn print_probe7_human_with_policy(

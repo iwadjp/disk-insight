@@ -44,10 +44,34 @@ cmd /c ".\target\release\disk-insight.exe --json --top 30 > .\work\probe7.json"
 .\target\release\disk-insight.exe --drive C --top 30 --wof-adjusted
 cmd /c ".\target\release\disk-insight.exe --json --top 30 --wof-adjusted > .\work\probe7-wof.json"
 
-# Scan performance timing (K-1) - outputs phase breakdown to stderr
+# Scan performance timing (K-1) - CLI output path, phase breakdown to stderr
 .\target\release\disk-insight.exe --perf
 .\target\release\disk-insight.exe --json --perf
 .\target\release\disk-insight.exe --drive D --json --perf
+
+# K-1c: CLI model path timing - same code path as Tauri scan_drive (K-1c)
+# Compare [perf-cli-model] output with [perf-tauri] build_model done
+.\target\release\disk-insight.exe --drive C --top 100 --perf-model
+.\target\release\disk-insight.exe --drive C --top 100 --wof-adjusted --perf-model
+.\target\release\disk-insight.exe --drive D --top 100 --perf-model
+# Output format:
+#   [perf-cli-model] build_model done  XXXX ms  root_children=NN top_dirs=100 top_files=100
+#                    children_map_keys=NNNNNN children_map_total_children=NNNNNNN
+#   [perf] drive=C:  policy=current  total=XXXX ms
+#   [perf]   open_vol:      N ms
+#   [perf]   read_mft:   NNNN ms
+#   [perf]   parse:       NNN ms
+#   [perf]   tree_build:  NNN ms
+#   [perf]   aggregate:   NNN ms
+#   [perf]   children_map:NNN ms
+#   [perf]   total:      NNNN ms
+
+# Comparison guide:
+#   --perf        = CLI output path (build_mft_tree_output_with_policy)
+#   --perf-model  = Tauri model path (build_mft_tree_model_with_policy)
+#   [perf-tauri]  = Tauri UI, measured from scan_drive in src-tauri/src/main.rs
+# If CLI --perf-model ≈ Tauri build_model: model path is the bottleneck
+# If CLI --perf-model << Tauri: Tauri-specific factor (e.g. cold cache, thread scheduling)
 
 # K-1b: Tauri UI end-to-end timing
 # Run as admin, open DevTools (F12) > Console, scan C:

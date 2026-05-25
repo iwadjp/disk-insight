@@ -14,7 +14,8 @@ fn print_help() {
     eprintln!("  --drive <letter>   対象ドライブ (例: C  C:  D  d) [デフォルト: C]");
     eprintln!("  --top <number>     上位件数 [デフォルト: human=30 / json=100]");
     eprintln!("  --json             JSON形式で stdout に出力");
-    eprintln!("  --perf             フェーズ別タイミングを stderr に出力 (計測用)");
+    eprintln!("  --perf             フェーズ別タイミングを stderr に出力 (CLI output path)");
+    eprintln!("  --perf-model       Tauri と同じ model path のタイミングを stderr に出力 (K-1c 比較用)");
     eprintln!("  --wof-adjusted     Experimental WOF-adjusted allocation policy (no hardlink/component-store dedup)");
     eprintln!("  --diag-pfx86       Program Files (x86) 差分診断 (EdgeCore / Office16 / VFS)");
     eprintln!("  --diag-wof-global  WOF adjusted global simulation (diagnostic only)");
@@ -58,6 +59,7 @@ fn main() -> Result<()> {
 
     let mut json_mode = false;
     let mut perf_mode = false;
+    let mut perf_model_mode = false;
     let mut diag_pfx86 = false;
     let mut diag_wof_global = false;
     let mut diag_winsxs = false;
@@ -74,6 +76,10 @@ fn main() -> Result<()> {
             }
             "--perf" => {
                 perf_mode = true;
+                i += 1;
+            }
+            "--perf-model" => {
+                perf_model_mode = true;
                 i += 1;
             }
             "--wof-adjusted" => {
@@ -147,6 +153,15 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
         }
+    }
+
+    if perf_model_mode {
+        let top = top_n.unwrap_or(100);
+        if let Err(e) = mft_probe::print_perf_model_with_policy(drive, top, storage_policy) {
+            eprintln!("エラー: {}", e);
+            std::process::exit(1);
+        }
+        return Ok(());
     }
 
     if diag_pfx86 {

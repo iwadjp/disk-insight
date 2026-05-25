@@ -1518,6 +1518,47 @@ disk-insight.exe --drive D --json --perf --wof-adjusted
 - progress UI は未実装（K-2 で設計する）
 - React.StrictMode のため dev mode では rAF が 2 回ログされる場合がある
 
+### K-1c: CLI model path vs Tauri model path comparison（2026-05-25 実装済み・実測完了）
+
+**目的**: CLI `--perf` (9.4s) vs Tauri `build_model` (22.8s) の差が CLI vs Tauri の経路差なのかを切り分ける。
+
+**実装内容:**
+- `src/mft_probe.rs`:
+  - `JsonSummary` に `children_map_time_ms` フィールド追加
+  - `build_mft_tree_model_with_policy` 内で children_map 構築時間を計測
+  - `print_perf_summary` に `children_map` 行を追加
+  - `pub fn print_perf_model_with_policy` を追加（`[perf-cli-model]` ログ出力）
+- `src/main.rs`: `--perf-model` フラグを追加
+
+**使用方法:**
+```powershell
+.\target\release\disk-insight.exe --drive C --top 100 --perf-model
+.\target\release\disk-insight.exe --drive C --top 100 --wof-adjusted --perf-model
+```
+
+**実測結果 (C: warm cache):**
+
+| 計測 | build_model | read_mft | parse | tree_build | agg | children_map | total |
+|------|-------------|----------|-------|------------|-----|--------------|-------|
+| CLI `--perf` | - | 4842 ms | 450 ms | 509 ms | 170 ms | 3145 ms | 9441 ms |
+| CLI `--perf-model` | 9827 ms | 4871 ms | 462 ms | 511 ms | 173 ms | 3169 ms | 9519 ms |
+| Tauri `[perf-tauri]` (K-1b) | 22757 ms | - | - | - | - | - | - |
+
+children_map stats: keys=358,622 dirs, total_children=1,756,339
+
+**判定: B — CLI `--perf-model` ≈ CLI `--perf` ≈ 9.5s。Tauri 22.8s との差 (~13s) はTauri固有要因。**
+
+主因の見立て: Tauri K-1b 測定時は MFT が OS page cache にない（cold cache）状態。
+cold cache 時の read_mft は warm 4.8s の約3〜4倍（≈15〜18s）と推定され、
+22.8s ≈ cold read_mft(15-18s) + その他フェーズ(5s) と整合する。
+
+**検証方法**: 再起動直後の cold state で `--perf-model` を実行し、read_mft が 15-18s になれば確定。
+
+**children_map の位置付け:**
+- children_map 3.1s は total 9.5s の 33%
+- CLI `--perf` (9.4s) と `--perf-model` (9.5s) がほぼ同じ → children_map は既に両方に含まれていた
+- children_map はボトルネックではあるが、主因は read_mft (I/O)
+
 ### K-2: Scan progress visibility design
 
 scan 中の進捗表示の設計。
