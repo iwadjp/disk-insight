@@ -1,0 +1,10 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for disk-insight",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:allow-listen",
+    "core:event:allow-emit"
+  ]
+}

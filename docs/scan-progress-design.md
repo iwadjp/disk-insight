@@ -305,11 +305,28 @@ Fixes applied:
   starts ("Starting scan · 0.0s"), updating to actual phase when events arrive.
 - Stale event filtering logic simplified (log and skip, rather than silent drop).
 
+**K-2b follow-up 2 (2026-05-26) — capabilities permission fix:**
+
+Rust emit worked. UI `listen()` failed with:
+```
+Uncaught (in promise) event.listen not allowed.
+Permissions associated with this command: core:event:allow-listen, core:event:default
+```
+
+Root cause: `src-tauri/capabilities/` directory did not exist. In Tauri v2, built-in APIs
+(`@tauri-apps/api/event` `listen`) require an explicit capability. Developer-defined `invoke`
+commands work without capabilities; built-in APIs do not.
+
+Fix: created `src-tauri/capabilities/default.json` with:
+- `core:default` — baseline built-in API permissions
+- `core:event:allow-listen` — explicit listen permission
+- `core:event:allow-emit` — explicit emit-from-frontend permission (belt-and-suspenders)
+
 **Diagnosis procedure** (if banner still shows nothing):
 1. Check terminal for `[progress-tauri] emit phase=...` — confirms Rust is emitting.
 2. Check DevTools console for `[progress-ui] received` — confirms JS listener is working.
-3. If (1) present but not (2): event routing issue (Tauri version, window target).
-4. If both absent: emit is failing silently (check `let _ = app_cb.emit(...)` error).
+3. If (1) present but not (2): check capabilities / Tauri version.
+4. If both absent: emit is failing silently.
 5. If both present but banner still blank: React state update / render issue.
 
 ### K-2c: UI progress strip
