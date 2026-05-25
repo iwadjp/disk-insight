@@ -135,9 +135,17 @@ function phaseLabel(phase: string): string {
     case "building_tree":     return "Building directory tree";
     case "aggregating_sizes": return "Aggregating sizes";
     case "building_ui_model": return "Preparing UI model";
-    case "done":              return "Done";
+    case "done":              return "Finalizing";
     default:                  return "Scanning";
   }
+}
+
+function formatElapsed(ms: number): string {
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(1)}s`;
+  const m = Math.floor(s / 60);
+  const rem = Math.floor(s % 60);
+  return `${m}m ${rem}s`;
 }
 
 function isDriveRoot(path: string): boolean {
@@ -1279,6 +1287,9 @@ function App() {
   }, []);
 
   const driveLabel = parseDriveLetter(driveInput) ?? driveInput.slice(0, 1).toUpperCase();
+  const scanPhaseText = scanProgress ? phaseLabel(scanProgress.phase) : "Starting scan";
+  const scanElapsedMs = scanProgress ? scanProgress.elapsed_ms : localElapsedMs;
+  const scanDriveLabel = scanProgress?.drive ?? `${driveLabel}:`;
 
   return (
     <main className="app">
@@ -1347,17 +1358,22 @@ function App() {
         </div>
       </header>
 
-      {/* Scanning banner: shown on top of existing data while a new scan is running */}
+      {/* Scanning strip: shown on top of existing data while a new scan is running */}
       {isLoading && data !== null && (
-        <div className="scanning-banner">
-          <span className="scanning-spinner" aria-hidden="true" />
-          <span>{loadingMsg}</span>
+        <div className="scanning-strip" role="status" aria-live="polite">
+          <div className="scanning-strip-row">
+            <span className="scanning-spinner" aria-hidden="true" />
+            <span className="scanning-strip-drive">Scanning {scanDriveLabel}</span>
+            {scanStartMsRef.current !== null && (
+              <>
+                <span className="scanning-strip-sep" aria-hidden="true">—</span>
+                <span className="scanning-strip-phase">{scanPhaseText}</span>
+                <span className="scanning-strip-elapsed">{formatElapsed(scanElapsedMs)}</span>
+              </>
+            )}
+          </div>
           {scanStartMsRef.current !== null && (
-            <span className="scanning-phase">
-              {(scanProgress && scanProgress.phase !== "done")
-                ? `${phaseLabel(scanProgress.phase)} · ${(scanProgress.elapsed_ms / 1000).toFixed(1)}s`
-                : `Starting scan · ${(localElapsedMs / 1000).toFixed(1)}s`}
-            </span>
+            <div className="scanning-strip-bar" aria-hidden="true" />
           )}
         </div>
       )}

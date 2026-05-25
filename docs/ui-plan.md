@@ -1666,7 +1666,7 @@ cold cache が主因なら、scan progress visibility (K-2) が体感改善の�
 | ステップ | 内容 |
 |---------|------|
 | K-2b | Rust + Tauri: `ScanProgressEvent` 型・emit hook を追加 | **DONE 2026-05-26** |
-| K-2c | UI: progress strip コンポーネント + Tauri event listener | (K-2b で scanning banner に phase 表示を統合、別 strip は後回し) |
+| K-2c | UI: progress strip コンポーネント + Tauri event listener | **DONE 2026-05-26** |
 | K-2d | `read_mft` percentage（MFT bytes ベース、オプション） |
 | K-2e | cold scan で体感確認 |
 

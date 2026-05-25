@@ -334,11 +334,17 @@ Fix: created `src-tauri/capabilities/default.json` with:
 4. If both absent: emit is failing silently.
 5. If both present but banner still blank: React state update / render issue.
 
-### K-2c: UI progress strip
+### K-2c: UI progress strip — DONE (2026-05-26)
 
-- K-2b integrated phase + elapsed directly into the existing scanning banner.
-- Separate progress strip (Option A from §8) is deferred — not needed for initial rollout.
-- If K-2e confirms phase label is helpful, a dedicated strip with indeterminate bar can be added later.
+Replaced `.scanning-banner` with a slim `.scanning-strip` two-row component:
+
+- **Row layout**: spinner · bold drive label · "—" separator · phase label (flex-grow, ellipsis) · elapsed (right-aligned, tabular-nums)
+- **Indeterminate shimmer bar**: 3 px amber track below the text row; golden blob sweeps left→right via CSS `@keyframes shimmer`
+- **`formatElapsed(ms)`**: returns "14.2s" for < 60 s, "1m 12s" for ≥ 60 s
+- **`phaseLabel("done")`** → "Finalizing" (was "Done")
+- **Computed vars** added before `return` in App: `scanPhaseText`, `scanElapsedMs`, `scanDriveLabel`
+- Phase/elapsed/bar are gated on `scanStartMsRef.current !== null` — hidden during sample-reload
+- Fallback timer (500 ms interval) and `[progress-ui]` debug logs from K-2b retained
 
 ### K-2d: read_mft percentage (optional, later)
 
