@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import "./styles.css";
 
 type Summary = {
@@ -70,6 +71,14 @@ type DriveInfo = {
   drive_type: string;
 };
 
+type ScanProgress = {
+  scan_id:    string;
+  drive:      string;
+  phase:      string;
+  message:    string;
+  elapsed_ms: number;
+};
+
 type TauriWindow = Window & {
   __TAURI__?: unknown;
   __TAURI_INTERNALS__?: unknown;
@@ -116,6 +125,19 @@ function parseDriveLetter(input: string): string | null {
   const s = input.trim().replace(/:$/, "");
   if (s.length === 1 && /^[A-Za-z]$/.test(s)) return s.toUpperCase();
   return null;
+}
+
+function phaseLabel(phase: string): string {
+  switch (phase) {
+    case "opening_volume":    return "Opening volume";
+    case "reading_mft":       return "Reading MFT (I/O)";
+    case "parsing_records":   return "Parsing records";
+    case "building_tree":     return "Building directory tree";
+    case "aggregating_sizes": return "Aggregating sizes";
+    case "building_ui_model": return "Preparing UI model";
+    case "done":              return "Done";
+    default:                  return "Scanning";
+  }
 }
 
 function isDriveRoot(path: string): boolean {
@@ -872,10 +894,12 @@ function DirectChildrenPanel({
 
 function App() {
   const scanTimingRef = useRef<{ start: number; invokeStart: number } | null>(null);
+  const currentScanIdRef = useRef<string | null>(null);
 
   const [data, setData] = useState<DiskInsightOutput | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingMsg, setLoadingMsg] = useState("Loading sample data...");
+  const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isScanError, setIsScanError] = useState(false);
   const [sourceKind, setSourceKind] = useState<SourceKind | null>(null);
@@ -989,6 +1013,7 @@ function App() {
       scanTimingRef.current = { start: t0, invokeStart };
       console.log(`[perf-ui] invoke start  t+${(invokeStart - t0).toFixed(0)} ms`);
     }
+    if (isScan) setScanProgress(null);
     setIsLoading(true);
     setLoadingMsg(msg);
     setError(null);
@@ -1143,6 +1168,7 @@ function App() {
   function handleScan() {
     const t0 = performance.now();
     scanTimingRef.current = { start: t0, invokeStart: t0 };
+    currentScanIdRef.current = null;
     console.log(`[perf-ui] scan click  drive=${driveInput} policy=${storagePolicy}`);
     const drive = parseDriveLetter(driveInput);
     if (!drive) {
@@ -1193,6 +1219,20 @@ function App() {
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDir, childrenByParent]);
+
+  // K-2b: listen for scan progress events from the Rust/Tauri backend
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    const unlistenPromise = listen<ScanProgress>("scan_progress", (event) => {
+      const p = event.payload;
+      // Only accept events for the current scan; ignore stale events.
+      if (currentScanIdRef.current !== null && p.scan_id !== currentScanIdRef.current) return;
+      if (currentScanIdRef.current === null) currentScanIdRef.current = p.scan_id;
+      setScanProgress(p);
+    });
+    return () => { unlistenPromise.then((f) => f()); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     runLoad(loadSampleData, "Loading sample data...", false, "sample");
@@ -1291,6 +1331,11 @@ function App() {
         <div className="scanning-banner">
           <span className="scanning-spinner" aria-hidden="true" />
           <span>{loadingMsg}</span>
+          {scanProgress && scanProgress.phase !== "done" && (
+            <span className="scanning-phase">
+              {phaseLabel(scanProgress.phase)} · {(scanProgress.elapsed_ms / 1000).toFixed(1)}s
+            </span>
+          )}
         </div>
       )}
 

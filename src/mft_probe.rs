@@ -2494,6 +2494,18 @@ pub fn build_mft_tree_model_with_policy(
     top_n: usize,
     storage_policy: StoragePolicy,
 ) -> Result<MftTreeModel> {
+    build_mft_tree_model_with_policy_progress(drive, top_n, storage_policy, |_, _| {})
+}
+
+pub fn build_mft_tree_model_with_policy_progress<F>(
+    drive: char,
+    top_n: usize,
+    storage_policy: StoragePolicy,
+    mut progress: F,
+) -> Result<MftTreeModel>
+where
+    F: FnMut(&str, u64),
+{
     use rayon::prelude::*;
     use std::collections::HashMap;
     use windows::Win32::Storage::FileSystem::{ReadFile, SetFilePointerEx, FILE_BEGIN};
@@ -2501,10 +2513,12 @@ pub fn build_mft_tree_model_with_policy(
     let total_start = std::time::Instant::now();
     let info = get_mft_info(drive)?;
     let open_vol_elapsed = total_start.elapsed();
+    progress("opening_volume", open_vol_elapsed.as_millis() as u64);
     eprintln!("mft_tree_compute: drive={}  $MFT {} MB  {} extents  open_vol={} ms",
         drive, info.mft_size / 1_048_576, info.extents.len(), open_vol_elapsed.as_millis());
     let mut mft_buf = vec![0u8; info.mft_size as usize];
 
+    progress("reading_mft", open_vol_elapsed.as_millis() as u64);
     let io_start = std::time::Instant::now();
     for (start_vcn, lcn, length) in &info.extents {
         let disk_offset = lcn  * info.bytes_per_cluster;
@@ -2530,6 +2544,7 @@ pub fn build_mft_tree_model_with_policy(
     let record_size   = info.bytes_per_record as usize;
     let total_records = info.mft_size as usize / record_size;
 
+    progress("parsing_records", total_start.elapsed().as_millis() as u64);
     struct FlatEntry {
         record_idx: usize,
         name:       String,
@@ -2720,6 +2735,7 @@ pub fn build_mft_tree_model_with_policy(
 
     let parse_elapsed = parse_start.elapsed();
 
+    progress("building_tree", total_start.elapsed().as_millis() as u64);
     let tree_start = std::time::Instant::now();
 
     struct BaseGroupC {
@@ -2829,6 +2845,7 @@ pub fn build_mft_tree_model_with_policy(
 
     let tree_build_elapsed = tree_start.elapsed();
 
+    progress("aggregating_sizes", total_start.elapsed().as_millis() as u64);
     let agg_start = std::time::Instant::now();
 
     let mut order: Vec<usize> = Vec::with_capacity(arena.len());
@@ -2875,6 +2892,8 @@ pub fn build_mft_tree_model_with_policy(
     }
 
     let agg_elapsed = agg_start.elapsed();
+
+    progress("building_ui_model", total_start.elapsed().as_millis() as u64);
 
     // Statistics
     let total_file_count: usize = arena.iter().filter(|n| !n.is_dir).count();
@@ -3014,6 +3033,7 @@ pub fn build_mft_tree_model_with_policy(
     };
 
     let output = JsonTreeOutput { summary, top_directories, top_files, root_children };
+    progress("done", total_elapsed.as_millis() as u64);
     Ok(MftTreeModel { output, children_map })
 }
 

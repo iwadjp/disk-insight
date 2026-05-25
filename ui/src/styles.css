@@ -334,6 +334,13 @@ tbody tr:last-child td {
   to { transform: rotate(360deg); }
 }
 
+.scanning-phase {
+  margin-left: auto;
+  font-size: 13px;
+  color: #78350f;
+  opacity: 0.85;
+}
+
 /* ── Toolbar controls ── */
 .toolbar-label {
   display: flex;

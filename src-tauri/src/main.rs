@@ -1,8 +1,8 @@
-use disk_insight::mft_probe::{build_mft_tree_model_with_policy, JsonTreeNode, JsonTreeOutput, StoragePolicy};
+use disk_insight::mft_probe::{build_mft_tree_model_with_policy_progress, JsonTreeNode, JsonTreeOutput, StoragePolicy};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{Emitter, State};
 
 #[derive(serde::Serialize)]
 struct DriveInfo {
@@ -13,6 +13,28 @@ struct DriveInfo {
 }
 
 const SAMPLE_JSON: &str = include_str!("../../public/sample/probe7.sample.json");
+
+#[derive(Clone, serde::Serialize)]
+struct ScanProgressEvent {
+    scan_id:    String,
+    drive:      String,
+    phase:      String,
+    message:    String,
+    elapsed_ms: u64,
+}
+
+fn phase_message(phase: &str) -> &'static str {
+    match phase {
+        "opening_volume"   => "Opening volume",
+        "reading_mft"      => "Reading MFT (I/O)",
+        "parsing_records"  => "Parsing records",
+        "building_tree"    => "Building directory tree",
+        "aggregating_sizes"=> "Aggregating sizes",
+        "building_ui_model"=> "Preparing UI model",
+        "done"             => "Done",
+        _                  => "Scanning",
+    }
+}
 
 // Live scan cache. scan_drive populates this on success; get_children reads
 // from it. None means "no live scan has run in this session" (e.g. only the
@@ -30,6 +52,7 @@ fn load_sample_json() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 async fn scan_drive(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     drive: String,
     top: Option<usize>,
@@ -50,14 +73,36 @@ async fn scan_drive(
         _ => StoragePolicy::Current,
     };
 
-    eprintln!(
-        "[perf-tauri] scan_drive start  drive={} top={} policy={}",
-        drive_char, top_n, policy.as_str()
+    let scan_id = format!(
+        "{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
     );
+
+    eprintln!(
+        "[perf-tauri] scan_drive start  drive={} top={} policy={} scan_id={}",
+        drive_char, top_n, policy.as_str(), scan_id
+    );
+
+    let drive_str = format!("{}:", drive_char);
+    let scan_id_cb = scan_id.clone();
+    let drive_str_cb = drive_str.clone();
+    let app_cb = app.clone();
 
     let spawn_start = std::time::Instant::now();
     let model = tauri::async_runtime::spawn_blocking(move || {
-        build_mft_tree_model_with_policy(drive_char, top_n, policy).map_err(|e| format!("{e:#}"))
+        build_mft_tree_model_with_policy_progress(drive_char, top_n, policy, |phase, elapsed_ms| {
+            let event = ScanProgressEvent {
+                scan_id:    scan_id_cb.clone(),
+                drive:      drive_str_cb.clone(),
+                phase:      phase.to_string(),
+                message:    phase_message(phase).to_string(),
+                elapsed_ms,
+            };
+            let _ = app_cb.emit("scan_progress", &event);
+        }).map_err(|e| format!("{e:#}"))
     })
     .await
     .map_err(|e| format!("scan task failed: {e}"))??;

@@ -272,27 +272,29 @@ Show elapsed time next to the Scan button while scanning. Compact but limited.
 
 ## 9. Implementation roadmap
 
-### K-2b: Minimal phase progress events (Rust + Tauri side)
+### K-2b: Minimal phase progress events (Rust + Tauri side) — DONE 2026-05-26
 
-- Add `ScanProgressEvent` / `ScanPhase` types to `mft_probe.rs`
-- Add `build_mft_tree_model_with_policy_progress` variant taking a `FnMut(ScanProgressEvent)`
-- Emit at each phase boundary: `opening_volume`, `reading_mft`, `parsing_records`,
-  `building_tree`, `aggregating_sizes`, `building_ui_model`, `done`
-- Wire `scan_drive` in `src-tauri/src/main.rs` to pass `app.emit` as the callback
-- No percentage yet — `current` / `total` are `None`
-- Existing `--perf` / `--perf-model` / `--json` / `--diag` paths unchanged
+**Actual implementation:**
 
-Estimated code impact: ~60 lines in `mft_probe.rs`, ~20 lines in `src-tauri/src/main.rs`.
+- Added `build_mft_tree_model_with_policy_progress<F: FnMut(&str, u64)>` to `mft_probe.rs`.
+  Progress callback receives `(phase_key, elapsed_ms_from_total_start)`.
+  Existing `build_mft_tree_model_with_policy` is now a thin wrapper calling it with `|_, _| {}`.
+- Phase calls emitted at: `opening_volume`, `reading_mft`, `parsing_records`,
+  `building_tree`, `aggregating_sizes`, `building_ui_model`, `done`.
+- `ScanProgressEvent { scan_id, drive, phase, message, elapsed_ms }` struct added in
+  `src-tauri/src/main.rs`; `scan_id` generated from `SystemTime::now().as_millis()`.
+- `scan_drive` updated: `app: tauri::AppHandle` added as first param; `tauri::Emitter` imported.
+  Closure captures `app_cb`, `scan_id_cb`, `drive_str_cb` for emit inside `spawn_blocking`.
+- UI: `listen<ScanProgress>("scan_progress", ...)` listener added in `useEffect`.
+  `scanProgress` state + `currentScanIdRef` added.  `phaseLabel()` helper added.
+  Scanning banner now shows `{phaseLabel(phase)} · {elapsed_s}s` as `.scanning-phase` span.
+- Existing `--perf` / `--perf-model` / `--json` / `--diag` / `--wof-adjusted` paths unchanged.
 
 ### K-2c: UI progress strip
 
-- Add `scanProgress` state to `App`
-- Register Tauri `scan_progress` event listener
-- Render progress strip between toolbar and content area
-- Show: phase label + elapsed time (from `elapsed_ms`) + indeterminate bar
-- Hide when `scanProgress?.phase === "done"` or `!isLoading`
-
-Estimated code impact: ~60 lines in `main.tsx`, ~20 lines in `styles.css`.
+- K-2b integrated phase + elapsed directly into the existing scanning banner.
+- Separate progress strip (Option A from §8) is deferred — not needed for initial rollout.
+- If K-2e confirms phase label is helpful, a dedicated strip with indeterminate bar can be added later.
 
 ### K-2d: read_mft percentage (optional, later)
 

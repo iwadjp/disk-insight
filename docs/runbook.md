@@ -267,6 +267,7 @@ Work through these in order after building. Run as Administrator.
 ### Scan UX
 
 - [ ] Scanning banner and spinner appear while scan runs
+- [ ] Scanning banner shows phase label and elapsed time (e.g. "Reading MFT (I/O) · 4.2s") — K-2b
 - [ ] Window is movable and scrollable during scan (not "not responding")
 - [ ] Previous data remains visible during re-scan (no blank page flicker)
 

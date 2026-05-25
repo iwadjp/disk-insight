@@ -628,8 +628,8 @@ scan 完了で即非表示。既存データは下に残す。
 
 | ステップ | 内容 |
 |---------|------|
-| K-2b | Rust + Tauri: `ScanProgressEvent` 型・emit hook |
-| K-2c | UI: progress strip + Tauri event listener |
+| K-2b | Rust + Tauri: `ScanProgressEvent` 型・emit hook | **DONE 2026-05-26** |
+| K-2c | UI: progress strip + Tauri event listener | (K-2b で scanning banner に統合済み) |
 | K-2d | `read_mft` percentage（MFT bytes ベース、オプション） |
 | K-2e | cold scan 体感確認 |
 
