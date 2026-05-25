@@ -1559,6 +1559,36 @@ cold cache 時の read_mft は warm 4.8s の約3〜4倍（≈15〜18s）と推�
 - CLI `--perf` (9.4s) と `--perf-model` (9.5s) がほぼ同じ → children_map は既に両方に含まれていた
 - children_map はボトルネックではあるが、主因は read_mft (I/O)
 
+### K-1d: cold cache validation（計測待ち）
+
+**目的**: K-1c の仮説「Tauri 22.8s = cold read_mft (15-18s) + その他 (5s)」を再起動直後の計測で確認する。
+
+**ソース変更なし。既存 `--perf-model` をそのまま使う。**
+
+**手順:**
+1. Windows 再起動
+2. 他の disk scan を実行しない
+3. 管理者 PowerShell で以下を順に実行（間を置かず）:
+   ```powershell
+   .\target\release\disk-insight.exe --drive C --top 100 --perf-model   # cold 1回目
+   .\target\release\disk-insight.exe --drive C --top 100 --perf-model   # warm 2回目
+   ```
+
+**期待値:**
+
+| 計測 | read_mft | children_map | total |
+|------|----------|--------------|-------|
+| cold 1回目 | 15–18 s | ~3.1 s | ~20–22 s |
+| warm 2回目 | ~4.8 s | ~3.1 s | ~9.5 s |
+
+**判定基準:**
+- cold 1回目 total ≈ Tauri K-1b 22.8s → **cold cache が主因と確定**
+- cold 1回目 total << 22.8s → Tauri 固有の別要因（spawn_blocking スレッド優先度など）
+
+**K-2 との関係:**
+cold cache が主因なら、scan progress visibility (K-2) が体感改善の最重要施策になる。
+何かが動いているように見えれば、実際の待ち時間より短く感じられる。
+
 ### K-2: Scan progress visibility design
 
 scan 中の進捗表示の設計。

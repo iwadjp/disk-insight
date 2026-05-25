@@ -526,8 +526,56 @@ children_map stats: keys=358,622 dirs、total_children=1,756,339
 
 ### 次のアクション
 
-- **K-1d（オプション）**: cold state での `--perf-model` 実測で仮説確定
+- **K-1d**: cold state での `--perf-model` 実測で仮説確定 → 下記 Section 14 参照
 - **K-2**: scan progress visibility design（cold state でも何かが見えるようにする）
+
+---
+
+## 14. K-1d: cold cache validation（計測待ち）
+
+### 仮説
+
+Tauri build_model 22.8s = cold read_mft (~15-18s) + その他 (~5s)
+
+daily-use での体感スキャン時間が遅いのは、起動直後または長時間アイドル後に
+C: の MFT が OS page cache にない（cold state）ためと推定される。
+
+### 計測手順
+
+```powershell
+# 1. Windows 再起動後、他の disk scan を実行しない
+# 2. 管理者 PowerShell で実行（間を置かず連続実行）
+
+.\target\release\disk-insight.exe --drive C --top 100 --perf-model   # cold 1回目
+.\target\release\disk-insight.exe --drive C --top 100 --perf-model   # warm 2回目
+```
+
+### 期待結果
+
+| 計測 | read_mft | children_map | total | 判定 |
+|------|----------|--------------|-------|------|
+| cold 1回目 | 15–18 s | ~3.1 s | ~20–22 s | cold cache が主因 |
+| warm 2回目 | ~4.8 s | ~3.1 s | ~9.5 s | warm = K-1c と一致 |
+
+### 実測値（計測後に記入）
+
+```text
+cold 1回目:
+  read_mft:      _____ ms
+  children_map:  _____ ms
+  total:         _____ ms
+
+warm 2回目:
+  read_mft:      _____ ms
+  children_map:  _____ ms
+  total:         _____ ms
+```
+
+### daily-use への含意
+
+cold scan が ~20s なら scan speed gap（WizTree 15s vs disk-insight 24s）の主因は
+cold I/O であり、アルゴリズム改善より **progress visibility** の体感改善が優先される。
+→ K-2 progress visibility design へ
 
 ### タグ候補
 

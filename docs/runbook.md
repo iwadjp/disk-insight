@@ -73,6 +73,33 @@ cmd /c ".\target\release\disk-insight.exe --json --top 30 --wof-adjusted > .\wor
 # If CLI --perf-model ≈ Tauri build_model: model path is the bottleneck
 # If CLI --perf-model << Tauri: Tauri-specific factor (e.g. cold cache, thread scheduling)
 
+# K-1d: cold vs warm cache measurement
+# Purpose: confirm that Tauri 22.8s vs CLI 9.5s is explained by cold OS page cache
+#
+# Procedure:
+#   1. Reboot Windows
+#   2. Open an admin PowerShell (do NOT run any other disk scan first)
+#   3. Run the first (cold) measurement:
+.\target\release\disk-insight.exe --drive C --top 100 --perf-model
+#   4. Immediately run the second (warm) measurement:
+.\target\release\disk-insight.exe --drive C --top 100 --perf-model
+#   5. If D: timing is also of interest:
+.\target\release\disk-insight.exe --drive D --top 100 --perf-model
+#
+# What to look for:
+#   read_mft cold 1st run  — expected much larger than warm (15–18 s vs 4.8 s)
+#   read_mft warm 2nd run  — expected close to K-1c warm measurement (~4.8 s)
+#   children_map           — expected stable between runs (~3.1 s)
+#   total / build_model    — if cold ~22 s: confirms cold cache as primary cause
+#
+# Expected cold breakdown (estimate):
+#   read_mft:     ~15–18 s   (MFT not in OS page cache)
+#   parse:        ~0.5 s
+#   tree_build:   ~0.5 s
+#   aggregate:    ~0.2 s
+#   children_map: ~3.1 s
+#   total:        ~20–22 s   (matches Tauri K-1b 22.8 s)
+
 # K-1b: Tauri UI end-to-end timing
 # Run as admin, open DevTools (F12) > Console, scan C:
 # [perf-tauri] lines appear in the terminal where tauri dev was launched
