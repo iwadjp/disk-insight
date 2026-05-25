@@ -58,21 +58,22 @@ All values in GB (binary, 1 GB = 1,073,741,824 bytes). TBD = needs measurement.
 | Path | Explorer Size | Explorer Size on disk | WizTree Size | WizTree Allocated | disk-insight current | disk-insight wof_adjusted | Notes |
 |------|-------------:|---------------------:|-------------:|------------------:|---------------------:|--------------------------:|-------|
 | C:\ | TBD | TBD | TBD | ~174.9 | 186.5 | 170.6 | WizTree Allocated from K-1 measurement |
-| Program Files (x86) | ~11.0 ¹ | **TBD** | TBD | 7.8 | 10.1 | 8.3 | ¹ may be logical "Size", not "Size on disk" |
+| Program Files (x86) | 15.2 | 11.0 | ~15.2 | ~7.8 | ~10.1 | ~8.251 | Case 3 + residual deltas; metric mix-up confirmed |
 | Program Files (x86)\Microsoft Office | TBD | TBD | TBD | 3.2 | 4.25 | 3.24 | wof_adjusted ≈ WizTree |
-| Program Files | TBD | TBD | TBD | 24.6 | 29.7 | 24.8 | wof_adjusted ≈ WizTree |
+| Program Files | 19.6 | 19.5 | 30.6 | 24.6 | 29.7 | ~24.8 | Explorer divergence; WizTree aligns with disk-insight |
 | Windows | TBD | TBD | TBD | 16.1 | 27.1 | 18.4 | WinSxS hardlink residual after WOF |
 | Windows\WinSxS | TBD | TBD | TBD | 4.1 | 11.5 | 8.7 | 4.6 GB residual = hardlink (see §5) |
 | Users | TBD | TBD | TBD | 85.2 | 85.0 | 84.8 | All tools agree — no WOF / hardlink issue |
 
-**Critical unknown**: Explorer "Size on disk" for `C:\Program Files (x86)`.
+**M-1 update**: Explorer measurements are now recorded for
+`C:\Program Files (x86)` and `C:\Program Files`.
 
-The "Explorer 11.0 GB" value in prior notes likely refers to Explorer **"Size"**
-(logical), not "Size on disk". These are different metrics.
-
-**Hypothesis**: Explorer "Size on disk" ≈ WizTree Allocated ≈ 7–8 GB for PFx86,
-because both use WOF-compressed sizes. disk-insight current uses projected NTFS
-allocation → 10.1 GB. This hypothesis needs explicit measurement to confirm.
+PFx86 and Program Files are different cases:
+- PFx86: Explorer Size and WizTree Size align around 15.2 GB; the main issue was
+  mixing Size with allocated-style values.
+- Program Files: WizTree Allocated (~24.6 GB) and disk-insight wof_adjusted
+  (~24.8 GB) align, and WizTree Size (30.6 GB) is relatively close to
+  disk-insight current (29.7 GB). Explorer is the outlier at 19.6 / 19.5 GB.
 
 ---
 
@@ -335,7 +336,7 @@ Quick reference: WizTree "Allocated" values from 2026-05-25 are pre-filled in §
 
 ## M-1: Explorer Size on disk manual measurement
 
-**Status**: PFx86 measured; remaining primary paths still TBD.
+**Status**: PFx86 and Program Files measured; Windows / Users still TBD.
 
 **Purpose**: confirm or deny the K-3b WOF Case A hypothesis by recording
 Explorer "Size on disk" (not "Size") explicitly for each key path, then
@@ -357,7 +358,7 @@ All values in GB (binary, 1 GiB = 2³⁰ bytes). Pre-filled values are from
 | Path | Explorer Size | Explorer Size on disk | WizTree Size | WizTree Alloc | di current | di wof_adj | Measured |
 |------|--------------:|---------------------:|-------------:|--------------:|-----------:|-----------:|---------|
 | C:\Program Files (x86) | 15.2 GB / 16,342,637,554 bytes | 11.0 GB / 11,882,143,744 bytes | ~15.2 GB | ~7.8 GB | ~10.1 GB | ~8.251 GB | Exp: 2026-05-26 |
-| C:\Program Files | TBD | TBD | TBD | 24.6 GB | 29.7 GB | 24.8 GB | Exp: — |
+| C:\Program Files | 19.6 GB / 21,124,549,940 bytes | 19.5 GB / 20,973,977,600 bytes | 30.6 GB | 24.6 GB | 29.7 GB | ~24.8 GB | Exp: 2026-05-26 |
 | C:\Windows | TBD | TBD | TBD | 16.1 GB | 27.1 GB | 18.4 GB | Exp: — |
 | C:\Users | TBD | TBD | TBD | 85.2 GB | 85.0 GB | 84.8 GB | Exp: — |
 
@@ -366,7 +367,7 @@ All values in GB (binary, 1 GiB = 2³⁰ bytes). Pre-filled values are from
 | Path | current − Exp SoD | wof_adj − Exp SoD | current − WizTree Alloc | wof_adj − WizTree Alloc | Candidate cause | Confidence | Notes |
 |------|------------------:|------------------:|------------------------:|------------------------:|-----------------|------------|-------|
 | C:\Program Files (x86) | ~-0.9 GB | ~-2.75 GB | ~+2.3 GB | ~+0.45 GB | Case 3: Size vs allocated-style metric comparison mix-up; residual WOF / Explorer Size-on-disk delta remains | Medium-high for metric mix-up; medium/unknown for residual deltas | Explorer Size and WizTree Size align around 15.2 GB; Explorer Size on disk is 11.0 GB, not 7-8 GB; disk-insight current is closer to Explorer Size on disk than Explorer Size; wof_adjusted is closer to WizTree Allocated; remaining deltas require further investigation before claiming accuracy |
-| C:\Program Files | TBD | TBD | +5.1 GB | +0.2 GB | Case A WOF | High | Exp SoD unmeasured |
+| C:\Program Files | ~+10.2 GB | ~+5.3 GB | ~+5.1 GB | ~+0.2 GB | Explorer divergence / special folder accounting difference; possible permission / app package / reparse point / WindowsApps handling | Medium for Explorer divergence; low/unknown for exact cause | WizTree Allocated and disk-insight wof_adjusted are very close; WizTree Size and disk-insight current are also relatively close; Explorer Size / Size on disk are much smaller; not enough evidence for disk-insight aggregation bug |
 | C:\Windows | TBD | TBD | +11.0 GB | +2.3 GB | WOF + hardlink | High | WinSxS residual after WOF |
 | C:\Users | TBD | TBD | −0.2 GB | −0.4 GB | None (control) | High | All tools agree |
 
@@ -380,6 +381,14 @@ All values in GB (binary, 1 GiB = 2³⁰ bytes). Pre-filled values are from
 - WOF Case A is still relevant, but it is not the primary whole-tree classification for `C:\Program Files (x86)`.
 - disk-insight `current` and `wof_adjusted` should be treated as allocation-oriented / WOF-adjusted values, not Explorer "Size".
 - Remaining deltas (`Explorer Size on disk` 11.0 GB vs `current` ~10.1 GB, and `WizTree Allocated` ~7.8 GB vs `wof_adjusted` ~8.251 GB) are unresolved and do not yet prove a disk-insight aggregation bug.
+
+**Program Files interim judgment (2026-05-26)**:
+- Primary classification: **Explorer divergence case**.
+- Explorer Properties reported Size 19.6 GB / 21,124,549,940 bytes and Size on disk 19.5 GB / 20,973,977,600 bytes, with 49,652 files and 6,394 folders.
+- WizTree reported Size 30.6 GB, Allocated 24.6 GB, 86,577 files, and 12,250 folders.
+- disk-insight `current` (~29.7 GB) is relatively close to WizTree Size, and `wof_adjusted` (~24.8 GB) is very close to WizTree Allocated.
+- Explorer is much smaller than both WizTree and disk-insight. Possible causes include Explorer folder Properties excluding special items, permissions, app package handling, reparse points, or WindowsApps-related accounting.
+- This improves confidence in `wof_adjusted` for Program Files, but the Explorer-vs-MFT/WizTree gap remains unexplained.
 
 ---
 
@@ -521,6 +530,21 @@ Explorer Size on disk ≈ WizTree Allocated ≈ disk-insight current ≈ disk-in
 - No WOF or hardlink issue. Normal files dominate.
 - Expected for `C:\Users` — confirms the tool is correct for user data paths.
 
+#### Case 6 — Explorer divergence / special folder accounting
+
+```
+WizTree Allocated ≈ disk-insight wof_adjusted
+WizTree Size ≈ disk-insight current
+Explorer Size and Explorer Size on disk are much smaller
+```
+
+**Interpretation:**
+- disk-insight and WizTree are likely counting a similar MFT-visible set.
+- Explorer Properties appears to use a different folder accounting boundary.
+- Candidates: permissions, app package handling, reparse points, WindowsApps or
+  other special folder behavior.
+- Do not classify this as a disk-insight aggregation bug without more evidence.
+
 ---
 
 ### M-1e: Expected outcomes
@@ -529,11 +553,12 @@ Based on K-3b analysis, the expected result for each primary path:
 
 | Path | Expected case | Reasoning |
 |------|--------------|-----------|
-| C:\Program Files (x86) | Case 1 or Case 3 | WOF-heavy (Edge, Office); Exp SoD likely ≈ 7–8 GB |
-| C:\Program Files | Case 1 | WOF-heavy; wof_adj 24.8 GB ≈ WizTree 24.6 GB already |
+| C:\Program Files (x86) | Case 3 observed + residual deltas | Explorer Size ≈ WizTree Size (~15.2 GB); Explorer Size on disk is 11.0 GB |
+| C:\Program Files | Case 6 observed | WizTree Allocated ≈ wof_adj, WizTree Size ≈ current, Explorer is much smaller |
 | C:\Windows | Case 2 or mixed | WOF + hardlink; wof_adj 18.4 GB > WizTree 16.1 GB |
 | C:\Users | Case 5 | No WOF/hardlink; all tools agree (control) |
 
-If `C:\Program Files (x86)` → Case 1: WOF Case A hypothesis **confirmed**.
-If `C:\Program Files (x86)` → Case 3: the "Explorer 11.0 GB" was "Size" not "Size on disk".
-Either outcome closes the ambiguity and improves trust.
+PFx86 resolved the original ambiguity as a metric-mix-up first, with residual
+deltas still requiring investigation. Program Files added a separate Explorer
+divergence pattern where WizTree and disk-insight align more closely with each
+other than with Explorer Properties.

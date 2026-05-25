@@ -864,7 +864,7 @@ Explorer "Size on disk" の明示的計測なしには「Explorer = WizTree ≠ 
 
 ---
 
-## 19. M-1: Explorer Size on disk manual measurement — IN PROGRESS (2026-05-26)
+## 19. M-1: Explorer Size on disk manual measurement — PARTIAL RECORDED (2026-05-26)
 
 詳細: `docs/size-discrepancy-investigation.md` §M-1
 
@@ -886,14 +886,13 @@ Explorer / WizTree / disk-insight の値を明示的に取り直し、比較す�
 
 | パス | WizTree Alloc | di current | di wof_adj | Explorer SoD |
 |------|-------------:|-----------:|-----------:|------------:|
-| C:\Program Files (x86) | 7.8 GB | 10.1 GB | 8.3 GB | **TBD** ← ここが鍵 |
-| C:\Program Files | 24.6 GB | 29.7 GB | 24.8 GB | TBD |
+| C:\Program Files (x86) | 7.8 GB | 10.1 GB | 8.251 GB | 11.0 GB |
+| C:\Program Files | 24.6 GB | 29.7 GB | 24.8 GB | 19.5 GB |
 | C:\Windows | 16.1 GB | 27.1 GB | 18.4 GB | TBD |
 | C:\Users | 85.2 GB | 85.0 GB | 84.8 GB | TBD |
 
-**PFx86 Explorer SoD = TBD が最重要**。
-もし ≈ 7.8 GB なら Case 1（WOF Case A 確認）。
-もし ≈ 11 GB なら Case 3（比較が Explorer Size だった）。
+**PFx86 Explorer SoD = 11.0 GB**。PFx86 は Case 3 + residual deltas。
+**Program Files Explorer SoD = 19.5 GB**。Program Files は Explorer divergence case。
 
 ### 判定後の含意
 
@@ -911,7 +910,7 @@ Explorer / WizTree / disk-insight の値を明示的に取り直し、比較す�
 
 詳細手順: `docs/size-discrepancy-investigation.md` §M-1c
 
-**v0.3.0-daily-use: HOLD** — M-1 実測完了後に Section 20 として結果を追記する。
+**v0.3.0-daily-use: HOLD** — PFx86 と Program Files は Section 20 / 21 に結果を追記済み。
 
 ---
 
@@ -950,3 +949,45 @@ metric is being compared:
 **v0.3.0-daily-use: HOLD continues.** The next trust improvement should be
 clearer size labels / help text, or continued M-1 measurements for Program
 Files, Windows, and Users.
+
+---
+
+## 21. M-1 Program Files measurement result — RECORDED (2026-05-26)
+
+Details: `docs/size-discrepancy-investigation.md` §M-1
+
+### Measurement
+
+`C:\Program Files`:
+
+| Metric | Value |
+|--------|------:|
+| Explorer Size | 19.6 GB / 21,124,549,940 bytes |
+| Explorer Size on disk | 19.5 GB / 20,973,977,600 bytes |
+| Explorer files / folders | 49,652 / 6,394 |
+| WizTree Size | 30.6 GB |
+| WizTree Allocated | 24.6 GB |
+| WizTree files / folders | 86,577 / 12,250 |
+| disk-insight current | ~29.7 GB |
+| disk-insight wof_adjusted | ~24.8 GB |
+
+### Interpretation
+
+Program Files is not the same pattern as PFx86.
+
+- PFx86 primarily exposed a Size vs allocated-style metric mix-up.
+- Program Files shows WizTree Allocated ≈ disk-insight `wof_adjusted`.
+- Program Files also shows WizTree Size relatively close to disk-insight
+  `current`.
+- Explorer Properties is the outlier: both Size and Size on disk are much
+  smaller.
+
+Classification: **Explorer divergence case**.
+
+Possible causes include Explorer excluding some special items from folder
+Properties, permission boundaries, app package handling, reparse points,
+WindowsApps, or other special Program Files behavior. This is not enough
+evidence for a disk-insight aggregation bug.
+
+**v0.3.0-daily-use: HOLD continues.** The size-trust problem now has at least
+two patterns: PFx86 metric-mix-up and Program Files Explorer divergence.

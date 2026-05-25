@@ -1200,6 +1200,23 @@ Next UI candidate:
 No UI implementation is included in this M-1 follow-up. `delete`, virtual
 scroll, hardlink correction, and WinSxS correction remain unimplemented.
 
+### M-1 Program Files measurement recorded — Explorer divergence (2026-05-26)
+
+`C:\Program Files` measurement adds a second size-trust pattern:
+
+- WizTree Allocated (~24.6 GB) and disk-insight `wof_adjusted` (~24.8 GB) are
+  very close.
+- WizTree Size (30.6 GB) and disk-insight `current` (~29.7 GB) are relatively
+  close.
+- Explorer Properties is much smaller: Size 19.6 GB and Size on disk 19.5 GB.
+
+UI implication: wording must distinguish not only Size vs allocated-style
+metrics, but also Explorer Properties vs MFT/WizTree-style accounting. Candidate
+help text should avoid promising Explorer parity for special folders such as
+Program Files / WindowsApps.
+
+No implementation is included here.
+
 ---
 
 ## v0.3.0-daily-use milestone (candidate)
@@ -1800,7 +1817,7 @@ Explorer / WizTree は WOF-aware API を経由するため、圧縮後サイズ�
 
 **v0.3.0-daily-use: HOLD 継続** — M-1 実測が信頼改善の次ステップ。
 
-### M-1: Explorer Size on disk manual measurement — IN PROGRESS (2026-05-26)
+### M-1: Explorer Size on disk manual measurement — PARTIAL RECORDED (2026-05-26)
 
 詳細: `docs/size-discrepancy-investigation.md` §M-1
 
@@ -1829,8 +1846,8 @@ C:\Users
 
 | パス | 期待 | 理由 |
 |------|------|------|
-| Program Files (x86) | Case 1 または Case 3 | WOF 大（Edge / Office） |
-| Program Files | Case 1 | wof_adj ≈ WizTree は既に確認済み |
+| Program Files (x86) | Case 3 + residual deltas | Explorer Size ≈ WizTree Size、allocated-style 比較混同が主因 |
+| Program Files | Explorer divergence case | WizTree ≈ disk-insight、Explorer Properties が小さい |
 | Windows | Case 2 / mixed | WOF + hardlink 両方 |
 | Users | Case 5 | 全ツール一致（対照群） |
 
