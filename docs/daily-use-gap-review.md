@@ -304,6 +304,13 @@ top-N count, storage policy, and direct-children sort key/direction. The sort
 state was lifted from `DirectChildrenPanel` local state to `App` to enable
 cross-session persistence.
 
+J-5b (2026-05-25) adds a Parent navigation row to the top of the Direct children
+panel. When a non-root folder is selected, a `.. Parent: C:\Users` row appears above
+the children list. Clicking it sets the parent as the selected folder, mirroring
+the J-2b downward navigation. Parent lookup searches `rootChildren` and
+`childrenByParent` cache; if the parent node is not found, the row is omitted.
+Direct children panel から親へ戻れるようになり、右ペインの探索導線が改善した。
+
 J-5 (2026-05-25) adds a name/path filter to the Direct children panel. Typing in
 the filter box performs case-insensitive partial match against `node.name` and
 `node.path`, narrowing a large folder's children list instantly (e.g. `app` →

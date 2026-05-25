@@ -1341,6 +1341,34 @@ Direct children panel に sort control を追加した。
 - virtual scroll 未実装
 - delete 未追加
 
+### J-5b: Parent navigation in direct children panel
+
+**STATUS: COMPLETE — 2026-05-25**
+
+Direct children panel の先頭に Parent navigation row を追加した。
+
+#### 変更内容
+
+- `findNodeByPath(path, rootChildren, childrenByParent)` ヘルパーを追加
+  - `rootChildren` → `childrenByParent` の順でパス一致ノードを探す
+- `App` に `selectedParentNode` useMemo を追加
+  - `isDriveRoot(selectedDir.path)` の場合は `undefined`（root では親行を出さない）
+  - `getParentDir(selectedDir.path)` でパスを計算し `findNodeByPath` で検索
+  - 見つからない場合は `undefined`（Tauri command 追加なし）
+- `DirectChildrenPanel` に `parentNode: TreeNode | undefined` prop を追加
+- `sourceKind === "live" && parentNode` のとき filter input 直後に parent row を表示
+  - `.direct-child-row--parent` スタイル（薄いグレー背景、hover で青色）
+  - badge: `..`、name: `Parent: {parentNode.path}`
+  - クリックで `onNavigate(parentNode)` → `selectedDir` が親フォルダに切り替わる
+  - filter はフォルダ移動時にリセット（既存の `useEffect` が対応）
+
+#### 制約確認
+
+- breadcrumb 全実装・履歴 back/forward・auto expand は未実装
+- Rust core / Tauri command 変更なし
+- virtual scroll 未実装
+- delete 未追加
+
 ### J-5: Direct children name filter
 
 **STATUS: COMPLETE — 2026-05-25**

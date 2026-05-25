@@ -816,6 +816,27 @@ tbody tr:last-child td {
   color: #1a56db;
 }
 
+.direct-child-row--parent {
+  cursor: pointer;
+  background: #f1f5f9;
+  border-bottom: 1px solid #d9e1e8;
+}
+
+.direct-child-row--parent:hover {
+  background: #e2e8f0;
+}
+
+.direct-child-row--parent:hover .direct-child-name {
+  color: #1a56db;
+}
+
+.direct-child-badge--parent {
+  background: #e2e8f0;
+  color: #475569;
+  font-style: normal;
+  letter-spacing: 0;
+}
+
 .direct-child-badge {
   flex-shrink: 0;
   font-size: 10px;

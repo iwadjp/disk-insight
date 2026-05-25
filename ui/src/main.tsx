@@ -183,6 +183,22 @@ function treeNodeToDirEntry(node: TreeNode): DirectoryEntry {
   };
 }
 
+function findNodeByPath(
+  path: string,
+  rootChildren: TreeNode[],
+  childrenByParent: Record<number, TreeNode[]>,
+): TreeNode | undefined {
+  for (const n of rootChildren) {
+    if (n.path === path) return n;
+  }
+  for (const children of Object.values(childrenByParent)) {
+    for (const n of children) {
+      if (n.path === path) return n;
+    }
+  }
+  return undefined;
+}
+
 function buildVisibleRows(
   rootChildren: TreeNode[],
   expandedIds: Set<number>,
@@ -673,6 +689,7 @@ function DirectChildrenPanel({
   sortDir,
   onSortKeyChange,
   onSortDirChange,
+  parentNode,
   onNavigate,
   onOpenExplorer,
   onSelectFile,
@@ -687,6 +704,7 @@ function DirectChildrenPanel({
   sortDir: SortDirection;
   onSortKeyChange: (key: DirectChildrenSortKey) => void;
   onSortDirChange: (dir: SortDirection) => void;
+  parentNode: TreeNode | undefined;
   onNavigate: (node: TreeNode) => void;
   onOpenExplorer: (path: string) => void;
   onSelectFile: (path: string) => void;
@@ -834,6 +852,16 @@ function DirectChildrenPanel({
           </button>
         )}
       </div>
+      {sourceKind === "live" && parentNode && (
+        <div
+          className="direct-child-row direct-child-row--parent"
+          onClick={() => onNavigate(parentNode)}
+          title={`Go to ${parentNode.path}`}
+        >
+          <span className="direct-child-badge direct-child-badge--parent">..</span>
+          <span className="direct-child-name">Parent: {parentNode.path}</span>
+        </div>
+      )}
       {body}
     </div>
   );
@@ -886,6 +914,12 @@ function App() {
     () => buildVisibleRows(data?.root_children ?? [], expandedIds, childrenByParent, childrenErrors),
     [data?.root_children, expandedIds, childrenByParent, childrenErrors],
   );
+
+  const selectedParentNode = useMemo(() => {
+    if (!selectedDir || isDriveRoot(selectedDir.path)) return undefined;
+    const parentPath = getParentDir(selectedDir.path);
+    return findNodeByPath(parentPath, data?.root_children ?? [], childrenByParent);
+  }, [selectedDir, data?.root_children, childrenByParent]);
 
   useEffect(() => {
     if (!selectedDir || sourceKind !== "live") {
@@ -1243,6 +1277,7 @@ function App() {
                   sortDir={directChildrenSortDir}
                   onSortKeyChange={setDirectChildrenSortKey}
                   onSortDirChange={setDirectChildrenSortDir}
+                  parentNode={selectedParentNode}
                   onNavigate={handleSelectTreeNode}
                   onOpenExplorer={handleOpenExplorer}
                   onSelectFile={handleSelectFile}
