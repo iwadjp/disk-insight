@@ -400,6 +400,13 @@ Fix: use `npm run tauri dev` or the built `.exe`.
 Expected for large drives. MFT read time depends on drive speed and fragmentation.
 `spawn_blocking` is used so the UI remains responsive throughout.
 
+Cold-cache scans (first scan after boot or long idle) are slower — C: can reach
+20–22 s, D: 60–80 s. This is normal. See `docs/scan-progress-design.md` for the
+K-2 plan to add progress visibility.
+
+**Note**: scan progress display is not yet implemented (K-2b/K-2c). The UI shows
+a spinner and banner only. Phase-level feedback is planned.
+
 ### UI "not responding" during scan
 
 `spawn_blocking` should prevent this. If it recurs:

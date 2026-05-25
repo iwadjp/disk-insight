@@ -577,9 +577,73 @@ cold scan が ~20s なら scan speed gap（WizTree 15s vs disk-insight 24s）の
 cold I/O であり、アルゴリズム改善より **progress visibility** の体感改善が優先される。
 → K-2 progress visibility design へ
 
+### daily-use との関係
+
+J-6 HOLD の主要不満のひとつが「scan 中に進捗が見えない」。
+cold scan で 20 秒以上かかる場合、blank spinner だけでは hang と区別できない。
+K-2 progress visibility はこの不満に直接対応する。
+
+---
+
+## 15. K-2: Scan progress visibility design（2026-05-26 設計完了、実装未）
+
+設計文書: `docs/scan-progress-design.md`
+
+### 現状の不満（J-6 HOLD 理由より）
+
+- disk-insight scan 中: "Scanning…" spinner のみ
+- cold C: scan: ~20–22 s（推定）、warm: ~9.5 s
+- cold D: scan: ~60–65 s（推定）
+- 何も動かないように見えるため、hang との区別がつかない
+
+### 設計方針
+
+**最初は percentage なし。phase label + elapsed time のみ。**
+
+| phase | 表示ラベル | cold C: 目安 |
+|-------|-----------|-------------|
+| `open_vol` | Opening volume | 即座 |
+| `read_mft` | Reading MFT (I/O) | ~15–18 s |
+| `parse` | Parsing records | ~0.5 s |
+| `tree_build` | Building directory tree | ~0.5 s |
+| `aggregate` | Aggregating sizes | ~0.2 s |
+| `children_map` | Preparing UI model | ~3.1 s |
+| `done` | Rendering results | 即座 |
+
+「Reading MFT (I/O)  14.2 s」が表示されれば hang ではないと分かる。
+
+### UI: progress strip
+
+toolbar と content の間に slim strip。phase + elapsed + indeterminate bar。
+scan 完了で即非表示。既存データは下に残す。
+
+### Tauri event 設計
+
+- `scan_drive` に `app: AppHandle` を追加
+- `spawn_blocking` クロージャ内から phase 遷移ごとに `app.emit("scan_progress", ...)`
+- 1 scan あたり最大 7 events（per-record emit なし）
+- JSON / CLI / `--perf` / `--diag` には影響なし
+
+### 実装候補
+
+| ステップ | 内容 |
+|---------|------|
+| K-2b | Rust + Tauri: `ScanProgressEvent` 型・emit hook |
+| K-2c | UI: progress strip + Tauri event listener |
+| K-2d | `read_mft` percentage（MFT bytes ベース、オプション） |
+| K-2e | cold scan 体感確認 |
+
+### やらないこと
+
+- 速度最適化
+- scan cancellation
+- per-record 進捗
+- delete
+- WOF / hardlink / WinSxS 補正
+
 ### タグ候補
 
-`v0.3.0-daily-use` — **保留**。K-2 → K-3 → K-4 で再判定する。
+`v0.3.0-daily-use` — **保留**。K-2b/K-2c → K-3 → K-4 で再判定する。
 
 ### GitHub public release
 

@@ -1589,13 +1589,48 @@ cold cache 時の read_mft は warm 4.8s の約3〜4倍（≈15〜18s）と推�
 cold cache が主因なら、scan progress visibility (K-2) が体感改善の最重要施策になる。
 何かが動いているように見えれば、実際の待ち時間より短く感じられる。
 
-### K-2: Scan progress visibility design
+### K-2: Scan progress visibility design（2026-05-26 設計完了、実装未）
 
-scan 中の進捗表示の設計。
+設計文書: `docs/scan-progress-design.md`
 
-- MFT read → parse → aggregate → UI transfer の段階表示
-- 正確な percentage が困難でも、phase 名 + elapsed time は出せる
-- 進捗 API の設計案を作る
+**方針:**
+- scan 中の待ち時間を可視化する（phase label + elapsed time）
+- 正確な percentage は後回し（初期実装はなし）
+- Tauri event emit ベースの進捗イベントを設計
+- 既存の scan result 構造・JSON・CLI には影響させない
+
+**phase 設計:**
+
+| phase key | 表示ラベル | C: warm 目安 |
+|-----------|-----------|-------------|
+| `open_vol` | Opening volume | ~0 ms |
+| `read_mft` | Reading MFT (I/O) | ~4 850 ms |
+| `parse` | Parsing records | ~460 ms |
+| `tree_build` | Building directory tree | ~510 ms |
+| `aggregate` | Aggregating sizes | ~170 ms |
+| `children_map` | Preparing UI model | ~3 150 ms |
+| `done` | Rendering results | — |
+
+**UI: progress strip（推奨）**
+- toolbar と content area の間に slim strip を表示
+- phase label + elapsed time + indeterminate bar
+- scan 完了時に即座に非表示
+- 既存コンテンツはその下に残す（再scan時も blank にしない）
+
+**Tauri event 方針:**
+- `scan_drive` に `app: tauri::AppHandle` を追加
+- `spawn_blocking` に app handle を move してクロージャ内から emit
+- 1 scan あたり最大 7 イベント（phase 遷移ごとに 1 回）
+- per-record emit はしない
+
+**実装候補:**
+
+| ステップ | 内容 |
+|---------|------|
+| K-2b | Rust + Tauri: `ScanProgressEvent` 型・emit hook を追加 |
+| K-2c | UI: progress strip コンポーネント + Tauri event listener |
+| K-2d | `read_mft` percentage（MFT bytes ベース、オプション） |
+| K-2e | cold scan で体感確認 |
 
 ### K-3: Size accuracy review
 
