@@ -701,3 +701,58 @@ scan 完了で即非表示。既存データは下に残す。
 ### Delete action
 
 引き続き後回し。削除なしは機能であり、制約ではない。
+
+---
+
+## 16. K-3: Size accuracy review — DONE (2026-05-26)
+
+詳細ドキュメント: `docs/size-accuracy-review.md`
+
+### 方針
+
+「Explorer / WizTree と完全一致させる」ではなく、
+「**違う理由が説明できる**」状態を目標とした。
+
+### current / wof_adjusted の役割整理
+
+| Policy | 何を見るか | 主な特性 |
+|--------|-----------|---------|
+| `current` | NTFS allocated size（projected view） | シンプル・保守的・通常ファイルで Explorer に一致 |
+| `wof_adjusted` | WOF ファイルは WofCompressedData stream alloc | WizTree に近い。Program Files はほぼ一致 |
+
+C: ドライブ比較（2026-05-25 実測）:
+
+| Policy | C: total | WizTree | 差 |
+|--------|--------:|--------:|---:|
+| current | 186.5 GB | 174.9 GB | +11.6 GB |
+| wof_adjusted | 170.6 GB | 174.9 GB | −4.3 GB |
+
+差の原因:
+- `current` 超過分: WOF 圧縮ファイル（Edge・Office・Windows コンポーネント）
+- `wof_adjusted` 不足分: component-store / hardlink 残差
+
+### WinSxS / hardlink は引き続き既知制約
+
+WinSxS は WOF 補正後も 8.7 GB（WizTree 4.1 GB）— 4.6 GB 残差。
+WinSxS に `link_count > 1` レコードが 70,912 件存在。
+hardlink dedup は未実装のため WinSxS は参考値扱い。
+
+### daily-use 向け信頼性整理
+
+| 用途 | 信頼性 |
+|------|--------|
+| top-N ランキング | 高 — 相対順序は正確 |
+| C:\Users（ユーザーデータ） | 高 — 両 policy で WizTree ±0.4 GB 以内 |
+| C:\Program Files（wof_adjusted） | 高 — WizTree ±0.2 GB 以内 |
+| C:\Windows\WinSxS | 低 — hardlink 未補正・参考値 |
+
+### 判定
+
+**K-3: DONE。** size accuracy の "unexplained" → "explained" 移行完了。
+
+- `current` / `wof_adjusted` の意味が整理された
+- WinSxS は既知制約として文書化された
+- 「なぜ違うか」が説明できる状態になった
+- WOF / hardlink / WinSxS 本番補正は引き続き後回し
+
+**次: K-4 daily-use 再判定。**

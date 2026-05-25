@@ -135,18 +135,30 @@ The app works without admin rights but scan will fail with a permission error.
 
 ---
 
+## Size policy
+
+disk-insight offers two storage policies:
+
+| Policy | Description |
+|--------|-------------|
+| `current` (default) | NTFS allocation-based. Conservative and predictable. Matches Explorer for normal files. WOF-compressed areas (Edge, Office, Windows components) show higher than WizTree. |
+| `wof_adjusted` (experimental) | WOF-compressed files use the compressed backing stream size. Closer to WizTree for Program Files. Does not affect user data or non-WOF files. |
+
+Neither policy produces byte-exact matches with Explorer or WizTree — differences are expected and explainable.
+See `docs/size-accuracy-review.md` for a full breakdown.
+
 ## Known limitations
 
 | Area | Notes |
 |------|-------|
-| WinSxS | Hard-linked files may be counted multiple times |
-| WOF | Compressed files report allocation size, not compressed size |
-| Hard links | Multiple directory entries for the same file clusters |
-| Non-NTFS | FAT32, exFAT, ReFS are not the current target |
-| Accuracy | Size totals may differ from Windows "Properties" or WizTree |
+| WinSxS | Hard-linked files are counted per directory entry; hardlink dedup is not implemented. WinSxS total is a reference value, not an exact figure. |
+| WOF | `current` policy: compressed files report projected (uncompressed) allocation — higher than WizTree. `wof_adjusted`: uses compressed size instead. |
+| Hard links | Files with `link_count > 1` may contribute to multiple parent paths. WinSxS and Windows servicing are most affected. |
+| Non-NTFS | FAT32, exFAT, ReFS are not the current target. |
+| Accuracy | Size totals differ from WizTree/Explorer — differences are bounded and documented, not unknown. |
 
 The goal is to identify large directories and files for manual review —
-not to produce byte-exact matches with the OS disk usage report.
+not to produce byte-exact matches with any other tool.
 
 ---
 

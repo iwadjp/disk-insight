@@ -1670,13 +1670,46 @@ cold cache が主因なら、scan progress visibility (K-2) が体感改善の�
 | K-2d | `read_mft` percentage（MFT bytes ベース、オプション） |
 | K-2e | cold scan で体感確認 |
 
-### K-3: Size accuracy review
+### K-3: Size accuracy review — DONE (2026-05-26)
 
-Explorer / WizTree / disk-insight current / WOF adjusted の比較を整理。
+詳細: `docs/size-accuracy-review.md`
 
-- どのサイズ表示を信用すべきかの説明を改善
-- WinSxS / hardlink / component-store は既知制約として文書化
-- WOF adjusted を標準にするかは引き続き保留
+#### 方針
+
+「完全一致」ではなく「違う理由が説明できる」状態を目標とした。
+
+#### 整理した内容
+
+| Policy | 何を見るか | Explorer 比 | WizTree 比 |
+|--------|-----------|------------|-----------|
+| `current` | NTFS allocation（projected view） | ほぼ一致（通常ファイル） | WOF 圧縮部分で大きめ |
+| `wof_adjusted` | WOF ファイルは圧縮後サイズ | 一部乖離（WOF 差） | Program Files はほぼ一致 |
+
+#### 主な数値（2026-05-25 実測）
+
+| 対象 | current | wof_adjusted | WizTree |
+|------|--------:|-------------:|--------:|
+| C: | 186.5 GB | 170.6 GB | 174.9 GB |
+| Program Files | 29.7 GB | 24.8 GB | 24.6 GB |
+| WinSxS | 11.5 GB | 8.7 GB | 4.1 GB |
+| Users | 85.0 GB | 84.8 GB | 85.2 GB |
+
+#### WinSxS / hardlink
+
+- WinSxS: 70,912 件の link_count>1 レコードあり
+- WOF 補正後も 4.6 GB 残差 → hardlink / component-store 未解決
+- WinSxS は参考値として扱う（既知制約）
+
+#### 判定
+
+| 用途 | 信頼性 |
+|------|--------|
+| top-N ランキング | 高（相対サイズ正確） |
+| C:\Users サブツリー | 高（両 policy で WizTree ±0.4 GB 以内） |
+| Program Files (wof_adjusted) | 高（WizTree ±0.2 GB 以内） |
+| WinSxS 絶対値 | 低（hardlink 未補正） |
+
+**K-3: DONE。** サイズ意味の文書整備完了。次: K-4 daily-use 再判定。
 
 ### K-4: Daily-use verification retry
 
