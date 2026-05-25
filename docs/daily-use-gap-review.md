@@ -357,14 +357,10 @@ from usability and is not on the v0.3.0 critical path.
 
 ## 10. J-6: Daily-use milestone judgment (2026-05-25)
 
-### Verdict: PASS
+### Verdict: HOLD（当初 PASS → ユーザー評価で修正）
 
-v0.3.0-daily-use milestone is considered reached.
-
-The question posed at the start of this review was:
-> "Can disk-insight replace WizTree for at least some daily disk analysis?"
-
-**Answer: Yes**, for the core "find out what is taking space in this folder" workflow.
+UI 導線は J-2〜J-5b で大きく改善した。しかし、WizTree 代替として daily-use PASS とするには
+速度・進捗表示・サイズ精度に不満が残る。
 
 ### What improved vs. the J-1 baseline
 
@@ -375,30 +371,49 @@ The question posed at the start of this review was:
 | Gap D — no session persistence | **Resolved** (J-4) |
 | Gap B — no name filter | **Partially resolved** (J-5: direct children filter) |
 
-### Remaining gaps vs. WizTree
+### HOLD 理由（新規）
 
-| Gap | Severity for daily use |
-|-----|----------------------|
-| TreeView does not auto-scroll/expand when right-pane navigates | Low — workaround: use TreeView manually |
-| No keyboard navigation in TreeView | Low |
-| Global full search / filename search across whole drive | Medium — J-5 covers the folder-scoped case |
-| No column sort in top directories / top files tables | Low |
-| Virtual scroll not implemented | Low — not yet a bottleneck |
+#### 1. Scan speed gap
 
-### GitHub public release
+実測値（2026-05-25）:
 
-Still deferred. The app is now useful for the author's daily use, but:
-- No installer / release artifact workflow is set up
-- Documentation is not polished for public consumption
-- Hardlink / WinSxS accuracy gaps would confuse users unfamiliar with them
-- Revisit after a period of personal daily use confirms the milestone holds
+| ツール | C: | D: |
+|--------|-----|-----|
+| WizTree | 約 15s | 約 51s |
+| disk-insight | 約 24s | 約 81s |
 
-### Delete action
+disk-insight は WizTree より体感で明確に遅い。
 
-Remains out of scope. The delete-free guarantee is a feature, not a gap.
-When delete is eventually designed, it will require confirmation dialog,
-Recycle Bin routing, and undo — a separate design track.
+#### 2. Scan progress visibility
+
+WizTree は scan 中に進捗が見える。disk-insight は何も表示されず、待ち時間の不安につながる。
+遅さがさらに目立つ。
+
+#### 3. Size accuracy
+
+WOF adjusted は改善したが、Explorer / WizTree との差をまだ完全に説明しきれていない。
+WinSxS / hardlink / component-store accounting は未解決の既知制約。
+
+### Remaining gaps vs. WizTree（更新）
+
+| Gap | Severity |
+|-----|----------|
+| Scan speed: disk-insight C: 24s vs WizTree C: 15s | **High** — 日常利用の選択に影響 |
+| No scan progress display | **High** — 遅さの体感増幅 |
+| Size accuracy / Explorer alignment | **Medium** |
+| TreeView does not auto-follow right-pane navigation | Low |
+| No keyboard navigation | Low |
+| Global full search | Medium |
+| Virtual scroll | Low — not yet a bottleneck |
 
 ### tag candidate
 
-`v0.3.0-daily-use` — to be created after a short period of actual daily use confirms the PASS holds.
+`v0.3.0-daily-use` — **保留**。K-1〜K-3 後に K-4 で再判定する。
+
+### GitHub public release
+
+引き続き延期。daily-use PASS が安定してから再判断する。
+
+### Delete action
+
+引き続き後回し。削除なしは機能であり、制約ではない。

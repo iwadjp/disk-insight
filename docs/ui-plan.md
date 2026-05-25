@@ -1184,7 +1184,7 @@ milestone candidate: **v0.2.0-treeview-wof**
 
 ## v0.3.0-daily-use milestone (candidate)
 
-**STATUS: PASS — 2026-05-25**
+**STATUS: HOLD — 2026-05-25**
 
 次ゴール: 著者が自分の用途で毎日使えるレベルに達すること。
 公開判断はその後（daily-use PASS 後に改めて判断する）。
@@ -1415,22 +1415,21 @@ Direct children panel に name/path filter を追加した。
 
 ### J-6: Daily-use milestone verification
 
-**STATUS: PASS — 2026-05-25**
+**STATUS: HOLD — 2026-05-25**（当初 PASS → ユーザー評価で修正）
 
 #### 判定
 
-v0.3.0-daily-use として一区切り可能。
-「自分が WizTree の代わりに、少なくとも一部の日常的な容量調査で disk-insight を使いたいと思えるか」→ **YES**
+**HOLD**。UI 導線は大きく改善したが、WizTree 代替として daily-use PASS とするには以下が残る。
 
-#### 根拠
+| 残課題 | 内容 |
+|--------|------|
+| Scan speed gap | disk-insight C: 24s / D: 81s に対して WizTree C: 15s / D: 51s |
+| Scan progress visibility | scan 中に何も表示されず、遅さがさらに目立つ |
+| Size accuracy | WOF adjusted で改善したが Explorer/WizTree との差をまだ説明しきれていない |
 
-- J-1 で特定した最大ブロッカー（Gap A: 右ペインがフォルダ内容を表示しない）は J-2/J-2b/J-5b で解消
-- 右ペインだけで「潜る・戻る・絞る・ソート」が完結する
-- 設定永続化（J-4）で起動毎の Drive / Top-N / Policy 再入力が不要
-- 削除なし = 調査中の誤操作リスクがない（WizTree に対する明確な利点）
-- MFT 直読みによるスキャン速度は維持
+`v0.3.0-daily-use` tag は保留。
 
-#### 含まれる機能
+#### 達成済み機能（J-2〜J-5b）
 
 | 機能 | 状態 |
 |------|------|
@@ -1445,22 +1444,43 @@ v0.3.0-daily-use として一区切り可能。
 | Open folder / Select file / Copy path | F-1 以降 |
 | TreeView lazy expansion | E-2 以降 |
 
-#### 除外（既知制約・意図的に未実装）
+#### v0.3.0 残タスク（K フェーズ）
 
-| 項目 | 理由 |
-|------|------|
-| Delete action | 安全設計・確認UI が必須。別設計フェーズ |
-| Virtual scroll | 現スケールではボトルネックなし |
-| Global full search | 別フェーズ候補 |
-| TreeView auto-expand/scroll when right-pane navigates | 日常利用では許容可能 |
-| Breadcrumb / back-forward | 後フェーズ候補 |
-| Hardlink / WinSxS dedup | 精度改善トラック（別フェーズ） |
-| WOF adjusted default 化 | 方針判断を保留 |
-| GitHub public release | daily-use PASS 後に改めて判断 |
+### K-1: Scan performance baseline
 
-#### tag 候補
+scan time の内訳を計測・記録する。最適化はまだしない。
 
-`v0.3.0-daily-use`（今回は tag 作成しない）
+- C: / D: の scan time を current / WOF adjusted / CLI / Tauri UI で測定
+- MFT read / parse / aggregate / UI transfer の各フェーズを分解
+- ボトルネックの特定
+
+### K-2: Scan progress visibility design
+
+scan 中の進捗表示の設計。
+
+- MFT read → parse → aggregate → UI transfer の段階表示
+- 正確な percentage が困難でも、phase 名 + elapsed time は出せる
+- 進捗 API の設計案を作る
+
+### K-3: Size accuracy review
+
+Explorer / WizTree / disk-insight current / WOF adjusted の比較を整理。
+
+- どのサイズ表示を信用すべきかの説明を改善
+- WinSxS / hardlink / component-store は既知制約として文書化
+- WOF adjusted を標準にするかは引き続き保留
+
+### K-4: Daily-use verification retry
+
+K-1〜K-3 後に再判定。PASS なら `v0.3.0-daily-use` tag 候補。
+
+#### 後回し（v0.3.0 以降）
+
+- delete action（安全設計・確認UI 必須）
+- GitHub public release
+- virtual scroll 本実装
+- global full search
+- hardlink / component-store 補正本実装
 
 ### 後回し（v0.3.0 より後）
 
