@@ -1,0 +1,298 @@
+# J-1: Daily-use gap review
+
+**Date**: 2026-05-25  
+**Status**: planning document — no source code changes in this phase
+
+---
+
+## Purpose
+
+Compare disk-insight (v0.2.0-treeview-wof) against WizTree as a mental model for
+daily disk analysis. Identify the most important gaps before building anything.
+The goal of this review is to decide what to build first in v0.3.0-daily-use.
+
+---
+
+## 1. Current disk-insight strengths
+
+| Strength | Notes |
+|----------|-------|
+| Delete-free | Impossible to accidentally delete while browsing |
+| MFT scan speed | Direct MFT read; typical C: drive scans in 5–11 s |
+| TreeView navigation | Lazy `get_children` expansion; can drill down to any folder |
+| Explorer integration | Open folder, Select file, Copy path |
+| WOF adjusted | Experimental `--wof-adjusted` CLI/JSON; UI policy selector |
+| Drive selector | Auto-detects logical drives via `GetLogicalDrives` |
+| Safety guards | Large folder warning, per-node errors, duplicate request guard |
+| Flat render | `visibleRows` flat list is already virtual-scroll-ready |
+
+---
+
+## 2. Current daily-use gaps
+
+### Gap A — Right pane is a filtered global top-N slice, not a folder children view (CRITICAL)
+
+**This is the most important gap.**
+
+When the user selects a folder in the TreeView, the right pane shows:
+
+```
+filterByDir(top_directories, selectedDir.path)   ← prefix filter over global top-N
+filterByDir(top_files, selectedDir.path)          ← same
+```
+
+This means: the right pane only shows entries that were already in the global
+top-100 (or top-N) scan and happen to live under the selected folder's path.
+
+**Consequence**: if you select `C:\Users\iwadj\Downloads` and there are 500 MB of
+files there, but none of them made the global top-100, the right pane shows nothing.
+You can see the folder's total size in the TreeView, but you cannot see what is
+inside it from the right pane.
+
+**WizTree comparison**: clicking a folder in WizTree immediately shows all direct
+children (subfolders and files) sorted by size. This is the core browsing workflow
+and it works at any level of nesting.
+
+**Why it matters**: most disk cleanup decisions happen at the "what's big in
+*this specific folder*" level, not the global top-100 level. Without a folder
+children view, disk-insight cannot support the basic cleanup workflow.
+
+### Gap B — No file search or name filter (HIGH)
+
+WizTree has a search box that filters the visible tree and file list by name.
+disk-insight has no search or filter capability.
+
+For users who remember "I think there was a big .iso somewhere in AppData",
+this is a blocker.
+
+### Gap C — No column sort in right pane (MEDIUM)
+
+Top directories and top files are displayed in scan-result order (size descending).
+There is no way to sort by name, extension, or file count. WizTree lets users
+sort any column interactively.
+
+### Gap D — No session persistence (MEDIUM)
+
+Between launches, disk-insight forgets:
+- last selected drive
+- last top-N value
+- last storage policy
+
+WizTree remembers these. For daily use, having to re-enter drive and top-N on
+every launch is friction.
+
+### Gap E — TreeView does not retain expansion state across rescans (MEDIUM)
+
+If you have navigated deep into a folder tree and click "Scan" again to refresh
+data, the TreeView resets to root. WizTree preserves the expansion state and
+scrolls back to the same folder after a rescan.
+
+### Gap F — No keyboard navigation in TreeView (LOW-MEDIUM)
+
+Arrow keys do not expand/collapse/select nodes. For power users who want
+keyboard-driven navigation, this is a gap.
+
+### Gap G — WOF adjusted vs Current difference is not explained in the UI (LOW)
+
+The "WOF adjusted (experimental)" label requires the user to read docs to
+understand what it means. For daily use by the author, this is acceptable; it
+becomes a gap only if the app is shared.
+
+### Gap H — No Treemap (LOW for daily use)
+
+WizTree's treemap gives a proportional overview of disk usage. It is useful
+for a first-glance overview but is not required for the core "drill down and
+identify large files" workflow.
+
+### Gap I — Virtual scroll not implemented (LOW for current scale)
+
+With the `visibleRows` flat render, the TreeView is already more efficient than
+the recursive version. For typical C: drive usage patterns (expand a few
+folders at a time), this is not a blocking concern yet. It becomes important
+when expanding `node_modules` or similar fan-out directories.
+
+### Gap J — delete, WinSxS/hardlink correction, drive NTFS detection (explicitly deferred)
+
+These are known gaps, intentionally not implemented.
+
+---
+
+## 3. Root cause of Gap A: architecture review
+
+From `docs/treeview-performance-plan.md`, Section 1:
+
+> **Right-pane integration**: `selectedDir` filters the existing `top_directories`
+> and `top_files` lists via `filterByDir(items, selectedDir.path)`.
+> **The right pane uses `top_directories` / `top_files`, not `childrenByParent`
+> — they are independent data paths.**
+
+This confirms the structural cause. The data needed for a proper folder children
+view is already in memory — `childrenByParent` (built by `get_children` as the
+user expands the TreeView) contains all children for expanded folders. But the
+right pane does not use it.
+
+Additionally, the Tauri `children_map` (populated once per scan and stored in
+`AppState`) already holds the complete `HashMap<u64, Vec<JsonTreeNode>>` for all
+directories. A `get_folder_detail(record_index)` command to fetch direct children
+for the selected folder would be trivial to add.
+
+**The right pane needs to show direct children of the selected folder, sorted by
+size, rather than a global-top-N prefix filter.**
+
+---
+
+## 4. Recommended v0.3.0 task order
+
+Priority is based on impact on "can replace WizTree for basic disk analysis".
+
+### J-2 (highest priority): Selected folder detail panel
+
+Replace the current global-top-N prefix filter with a direct children view for
+the selected folder.
+
+**What to show when a folder is selected**:
+- Direct subdirectory children, sorted by subtree size desc
+- Direct file children, sorted by allocated size desc
+- Count of children (folders / files)
+- Total size of direct children
+
+**Data source**: `childrenByParent[selectedDir.record_index]` is already available
+for expanded folders. For unexpanded folders, a new Tauri command
+`get_folder_detail(record_index)` can return direct children from `children_map`
+without requiring the user to expand the TreeView first.
+
+**Scope guard**: do not implement pagination in this phase; show all direct children
+(the same approach as `get_children` today).
+
+### J-3: Column sorting in the detail panel
+
+Sort the children view by size (default), name, or file count.
+This is a frontend-only change once J-2 is implemented.
+
+### J-4: Session preferences
+
+Persist last drive, top-N, and storage policy using `localStorage` (Tauri
+exposes `window.localStorage` on WebView2).
+
+On startup, restore the last drive if it is still available in the `list_drives()`
+result.
+
+### J-5: Search / path filter (scoped)
+
+Add a text input that filters the top-files list by filename substring.
+Scope to the currently loaded scan result (no re-scan).
+
+Full tree search is a larger feature; the top-files filter is the minimum
+useful version.
+
+### J-6: Daily-use verification
+
+After J-2 through J-5 are implemented:
+- Use disk-insight exclusively for disk analysis for one week
+- Record any remaining friction points
+- Decide whether v0.3.0 milestone is PASS or needs more work
+
+---
+
+## 5. Must not do yet
+
+| Item | Reason |
+|------|--------|
+| Delete action | Safety design and confirmation UI required — intentionally deferred |
+| GitHub public release | Deferred until daily-use PASS |
+| Hardlink / component-store correction | Separate research track |
+| WinSxS correction | Separate research track |
+| Virtual scroll full implementation | Not yet the bottleneck; J-2 first |
+| Treemap | Low priority for core workflow |
+| WOF adjusted as default | Policy decision deferred |
+
+---
+
+## 6. User checklist (real-device comparison)
+
+Perform the following with both WizTree and disk-insight side by side.
+
+### Setup
+
+- [ ] Open WizTree, scan C:, let it complete
+- [ ] Open disk-insight (as Administrator), scan C: with Current policy, let it complete
+
+### Core workflow: find large files in a specific folder
+
+- [ ] Navigate to `C:\Users\<your-name>\Downloads` in WizTree — note how many items are shown and their sizes
+- [ ] Navigate to `C:\Users\<your-name>\Downloads` in disk-insight — note what the right pane shows
+- [ ] Assess: does disk-insight show you what is taking space in Downloads?
+
+- [ ] Navigate to `C:\Users\<your-name>\AppData` in WizTree — drill down to find the largest child folder
+- [ ] Navigate to `C:\Users\<your-name>\AppData` in disk-insight — attempt the same
+- [ ] Note: how many clicks does each tool require to reach the answer?
+
+### Large folders
+
+- [ ] In WizTree, find the top 5 folders under `C:\Program Files` by size
+- [ ] In disk-insight, select `C:\Program Files` in the TreeView — does the right pane show the top 5 child folders?
+- [ ] Note any discrepancies
+
+### Search
+
+- [ ] In WizTree, search for "*.iso" or a large file you know exists
+- [ ] In disk-insight, attempt the same — note the result
+
+### Sorting
+
+- [ ] In WizTree, sort the file list by name, then by size
+- [ ] In disk-insight, attempt the same
+
+### WOF adjusted (disk-insight only)
+
+- [ ] Scan C: with WOF adjusted policy
+- [ ] Compare the C: total with WizTree's allocated total
+- [ ] Note the delta and whether the WOF explanation makes sense
+
+### Open / select actions
+
+- [ ] In both tools, open a folder in Explorer from the result list
+- [ ] In both tools, select a specific file in Explorer
+- [ ] Note which is faster or more convenient
+
+### Summary questions to answer
+
+- [ ] What was disk-insight better at than WizTree?
+- [ ] What did WizTree do that disk-insight couldn't?
+- [ ] What was the single most frustrating moment with disk-insight?
+- [ ] Did disk-insight's right pane ever show you what you needed when you clicked a folder?
+
+---
+
+## 7. Decision (current assessment)
+
+### v0.3.0 primary focus
+
+**Selected folder detail / right pane usability (J-2) is the highest priority.**
+
+The current right pane is fundamentally limited for daily use because it shows
+filtered slices of global top-N results rather than the folder's actual contents.
+This is the most likely reason disk-insight does not feel usable as a WizTree
+replacement.
+
+The fix is well-defined and the data is already in memory — `children_map` on
+the Rust side and `childrenByParent` on the frontend. J-2 is primarily a UI
+and Tauri command addition, not a new data collection.
+
+### GitHub public release
+
+Deferred until the author can confirm the v0.3.0-daily-use milestone passes.
+The app is functional but not yet at a level of polish that would be useful to
+others without context.
+
+### Delete action
+
+Remains out of scope. Daily-use verification must happen before introducing any
+destructive operation, and even then a full safety design (confirmation dialog,
+recycle bin routing, undo) is required.
+
+### Accuracy work
+
+WOF adjusted experimental mode is available. Further accuracy work (WinSxS,
+hardlink dedup, cluster-level accounting) is deferred — it is a separate track
+from usability and is not on the v0.3.0 critical path.

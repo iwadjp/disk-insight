@@ -955,6 +955,7 @@ is unchanged; all existing behavior is preserved.
 | G-1 | Drive 自動検出（GetLogicalDrives / GetDriveTypeW）、Drive selector 化 |
 | UI-StoragePolicy-1 | Size policy selector（Current / WOF adjusted experimental）、status bar policy badge |
 | I-1 | TreeView polish（active accent bar、hover、ellipsis truncation、toggle hit area、loading color、large-warning bg） |
+| J-1 | Daily-use gap review（docs/daily-use-gap-review.md 作成、最重要ブロッカーを特定） |
 
 ---
 
@@ -1180,7 +1181,7 @@ milestone candidate: **v0.2.0-treeview-wof**
 
 ## v0.3.0-daily-use milestone (candidate)
 
-**STATUS: planning — 2026-05-25**
+**STATUS: in progress — 2026-05-25**
 
 次ゴール: 著者が自分の用途で毎日使えるレベルに達すること。
 公開判断はその後（daily-use PASS 後に改めて判断する）。
@@ -1194,6 +1195,8 @@ v0.3.0 では実際に使ってみて見つかったギャップを埋めるこ�
 
 ### J-1: Daily-use gap review（観察・記録のみ）
 
+**STATUS: COMPLETE — 2026-05-25** (docs/daily-use-gap-review.md 参照)
+
 WizTree と並べて使い、不満点・不足点を洗い出す。
 実装はしない。観察・記録のみ。
 
@@ -1201,6 +1204,11 @@ WizTree と並べて使い、不満点・不足点を洗い出す。
 - WizTree で自然にできて disk-insight でできないこと
 - UI の不満点（操作手数・見にくさ・速度感）
 - 結果: 次に実装する候補の優先順位を決める
+
+主要な発見:
+- 右ペインが global top-N の prefix filter であることが最大のブロッカー
+- selected folder の direct children を表示できないため、フォルダを掘っても中身が見えない
+- J-2 Selected folder detail panel を最優先で実施する
 
 ### J-2: Right pane usability polish（小〜中）
 
