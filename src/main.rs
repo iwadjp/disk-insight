@@ -14,6 +14,7 @@ fn print_help() {
     eprintln!("  --drive <letter>   対象ドライブ (例: C  C:  D  d) [デフォルト: C]");
     eprintln!("  --top <number>     上位件数 [デフォルト: human=30 / json=100]");
     eprintln!("  --json             JSON形式で stdout に出力");
+    eprintln!("  --perf             フェーズ別タイミングを stderr に出力 (計測用)");
     eprintln!("  --wof-adjusted     Experimental WOF-adjusted allocation policy (no hardlink/component-store dedup)");
     eprintln!("  --diag-pfx86       Program Files (x86) 差分診断 (EdgeCore / Office16 / VFS)");
     eprintln!("  --diag-wof-global  WOF adjusted global simulation (diagnostic only)");
@@ -56,6 +57,7 @@ fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
 
     let mut json_mode = false;
+    let mut perf_mode = false;
     let mut diag_pfx86 = false;
     let mut diag_wof_global = false;
     let mut diag_winsxs = false;
@@ -68,6 +70,10 @@ fn main() -> Result<()> {
         match args[i].as_str() {
             "--json" => {
                 json_mode = true;
+                i += 1;
+            }
+            "--perf" => {
+                perf_mode = true;
                 i += 1;
             }
             "--wof-adjusted" => {
@@ -170,9 +176,9 @@ fn main() -> Result<()> {
     let top = top_n.unwrap_or(if json_mode { 100 } else { 30 });
 
     let result = if json_mode {
-        mft_probe::print_probe7_json_top_with_policy(drive, top, storage_policy)
+        mft_probe::print_probe7_json_top_with_policy(drive, top, storage_policy, perf_mode)
     } else {
-        mft_probe::print_probe7_human_with_policy(drive, top, storage_policy)
+        mft_probe::print_probe7_human_with_policy(drive, top, storage_policy, perf_mode)
     };
 
     if let Err(e) = result {

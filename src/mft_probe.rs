@@ -2442,6 +2442,7 @@ pub struct JsonSummary {
     pub total_final_allocated: u64,
     pub allocated_size:        u64,
     pub storage_policy:        &'static str,
+    pub open_vol_time_ms:      u64,
     pub read_time_ms:          u64,
     pub parse_time_ms:         u64,
     pub tree_build_time_ms:    u64,
@@ -2496,11 +2497,11 @@ pub fn build_mft_tree_model_with_policy(
     use std::collections::HashMap;
     use windows::Win32::Storage::FileSystem::{ReadFile, SetFilePointerEx, FILE_BEGIN};
 
-    let info = get_mft_info(drive)?;
-    eprintln!("mft_tree_compute: drive={}  $MFT {} MB  {} extents",
-        drive, info.mft_size / 1_048_576, info.extents.len());
-
     let total_start = std::time::Instant::now();
+    let info = get_mft_info(drive)?;
+    let open_vol_elapsed = total_start.elapsed();
+    eprintln!("mft_tree_compute: drive={}  $MFT {} MB  {} extents  open_vol={} ms",
+        drive, info.mft_size / 1_048_576, info.extents.len(), open_vol_elapsed.as_millis());
     let mut mft_buf = vec![0u8; info.mft_size as usize];
 
     let io_start = std::time::Instant::now();
@@ -2872,8 +2873,7 @@ pub fn build_mft_tree_model_with_policy(
         arena[i].direct_file_size = dfs;
     }
 
-    let agg_elapsed   = agg_start.elapsed();
-    let total_elapsed = total_start.elapsed();
+    let agg_elapsed = agg_start.elapsed();
 
     // Statistics
     let total_file_count: usize = arena.iter().filter(|n| !n.is_dir).count();
@@ -2950,24 +2950,6 @@ pub fn build_mft_tree_model_with_policy(
         }
     }).collect();
 
-    let summary = JsonSummary {
-        drive:                 format!("{}:", drive),
-        total_records,
-        in_use_entries:        arena.len(),
-        files:                 total_file_count,
-        directories:           total_dir_count,
-        orphans:               orphan_count,
-        root_nodes:            root_indices.len(),
-        total_final_allocated: total_final_alloc,
-        allocated_size:        total_final_alloc,
-        storage_policy:        storage_policy.as_str(),
-        read_time_ms:          io_elapsed.as_millis() as u64,
-        parse_time_ms:         parse_elapsed.as_millis() as u64,
-        tree_build_time_ms:    tree_build_elapsed.as_millis() as u64,
-        aggregation_time_ms:   agg_elapsed.as_millis() as u64,
-        total_time_ms:         total_elapsed.as_millis() as u64,
-    };
-
     // Build a JsonTreeNode for an arena index, using the shared path closure.
     let make_node = |ci: usize| -> JsonTreeNode {
         JsonTreeNode {
@@ -3006,6 +2988,27 @@ pub fn build_mft_tree_model_with_policy(
         .map(|v| v.iter().take(200).cloned().collect())
         .unwrap_or_default();
 
+    let total_elapsed = total_start.elapsed();
+
+    let summary = JsonSummary {
+        drive:                 format!("{}:", drive),
+        total_records,
+        in_use_entries:        arena.len(),
+        files:                 total_file_count,
+        directories:           total_dir_count,
+        orphans:               orphan_count,
+        root_nodes:            root_indices.len(),
+        total_final_allocated: total_final_alloc,
+        allocated_size:        total_final_alloc,
+        storage_policy:        storage_policy.as_str(),
+        open_vol_time_ms:      open_vol_elapsed.as_millis() as u64,
+        read_time_ms:          io_elapsed.as_millis() as u64,
+        parse_time_ms:         parse_elapsed.as_millis() as u64,
+        tree_build_time_ms:    tree_build_elapsed.as_millis() as u64,
+        aggregation_time_ms:   agg_elapsed.as_millis() as u64,
+        total_time_ms:         total_elapsed.as_millis() as u64,
+    };
+
     let output = JsonTreeOutput { summary, top_directories, top_files, root_children };
     Ok(MftTreeModel { output, children_map })
 }
@@ -3039,12 +3042,24 @@ pub fn print_probe7_human(drive: char, top_n: usize) -> Result<()> {
     probe7(drive, top_n)
 }
 
+fn print_perf_summary(s: &JsonSummary) {
+    eprintln!("[perf] drive={}  policy={}  total={} ms",
+        s.drive, s.storage_policy, s.total_time_ms);
+    eprintln!("[perf]   open_vol:    {:>6} ms", s.open_vol_time_ms);
+    eprintln!("[perf]   read_mft:    {:>6} ms", s.read_time_ms);
+    eprintln!("[perf]   parse:       {:>6} ms", s.parse_time_ms);
+    eprintln!("[perf]   tree_build:  {:>6} ms", s.tree_build_time_ms);
+    eprintln!("[perf]   aggregate:   {:>6} ms", s.aggregation_time_ms);
+    eprintln!("[perf]   total:       {:>6} ms", s.total_time_ms);
+}
+
 pub fn print_probe7_human_with_policy(
     drive: char,
     top_n: usize,
     storage_policy: StoragePolicy,
+    perf: bool,
 ) -> Result<()> {
-    if storage_policy == StoragePolicy::Current {
+    if storage_policy == StoragePolicy::Current && !perf {
         return print_probe7_human(drive, top_n);
     }
 
@@ -3067,6 +3082,7 @@ pub fn print_probe7_human_with_policy(
         summary.total_final_allocated);
     println!();
     println!("  timing:");
+    println!("    open_vol:    {} ms", summary.open_vol_time_ms);
     println!("    I/O:         {} ms", summary.read_time_ms);
     println!("    parse:       {} ms", summary.parse_time_ms);
     println!("    tree build:  {} ms", summary.tree_build_time_ms);
@@ -3100,6 +3116,7 @@ pub fn print_probe7_human_with_policy(
         );
     }
 
+    if perf { print_perf_summary(&output.summary); }
     Ok(())
 }
 
@@ -3117,9 +3134,11 @@ pub fn print_probe7_json_top_with_policy(
     drive: char,
     top_n: usize,
     storage_policy: StoragePolicy,
+    perf: bool,
 ) -> Result<()> {
     let output = build_mft_tree_output_with_policy(drive, top_n, storage_policy)?;
     println!("{}", serde_json::to_string_pretty(&output)?);
+    if perf { print_perf_summary(&output.summary); }
     Ok(())
 }
 

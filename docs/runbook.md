@@ -44,6 +44,11 @@ cmd /c ".\target\release\disk-insight.exe --json --top 30 > .\work\probe7.json"
 .\target\release\disk-insight.exe --drive C --top 30 --wof-adjusted
 cmd /c ".\target\release\disk-insight.exe --json --top 30 --wof-adjusted > .\work\probe7-wof.json"
 
+# Scan performance timing (K-1) - outputs phase breakdown to stderr
+.\target\release\disk-insight.exe --perf
+.\target\release\disk-insight.exe --json --perf
+.\target\release\disk-insight.exe --drive D --json --perf
+
 # Size accuracy diagnostics
 .\target\release\disk-insight.exe --diag-pfx86
 .\target\release\disk-insight.exe --diag-wof-global

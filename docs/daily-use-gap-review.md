@@ -406,7 +406,41 @@ WinSxS / hardlink / component-store accounting は未解決の既知制約。
 | Global full search | Medium |
 | Virtual scroll | Low — not yet a bottleneck |
 
-### tag candidate
+---
+
+## 11. K-1: Scan performance baseline（2026-05-25）
+
+`--perf` フラグを追加し、フェーズ別タイミングを stderr に出力するよう実装した。
+
+### K-1 計測結果（warm cache, `--json --perf`）
+
+| drive | policy | open_vol | read_mft | parse | tree_build | agg | total |
+|-------|--------|----------|----------|-------|------------|-----|-------|
+| C: | current | 0 ms | 4854 ms | 451 ms | 496 ms | 166 ms | 9444 ms |
+| C: | wof_adjusted | 0 ms | 4815 ms | 457 ms | 493 ms | 162 ms | 9405 ms |
+| D: | current | 0 ms | 47833 ms | 6619 ms | 503 ms | 99 ms | 65210 ms |
+| D: | wof_adjusted | 0 ms | 52620 ms | 3893 ms | 549 ms | 102 ms | 59920 ms |
+
+`total` と phase 合計の差 = path reconstruction + children_map:
+- C: ≈3477ms (37%)
+- D: ≈10156ms (15%)
+
+### ボトルネック分析
+
+| フェーズ | C: 割合 | D: 割合 | 備考 |
+|----------|---------|---------|------|
+| read_mft (I/O) | 51% | 73% | ドライブ規模に比例。cold では支配的 |
+| path reconstruction + children_map | 37% | 15% | 固定コスト的。O(n nodes) の path walk |
+| parse (rayon) | 5% | 10% | 並列化済み |
+| tree_build | 5% | <1% | 小さい |
+| aggregate | 2% | <1% | 小さい |
+
+### J-6 実測 (24s/81s) との差異
+
+J-6 の 24s は Tauri UI での cold cache 計測、K-1 の 9.4s は CLI での warm cache 計測と推定。
+cold cache では read_mft (I/O) が大幅に増加する。同条件での比較は K-2 での Tauri タイミング計測後に実施する。
+
+### タグ候補
 
 `v0.3.0-daily-use` — **保留**。K-1〜K-3 後に K-4 で再判定する。
 

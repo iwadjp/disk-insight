@@ -1446,13 +1446,42 @@ Direct children panel に name/path filter を追加した。
 
 #### v0.3.0 残タスク（K フェーズ）
 
-### K-1: Scan performance baseline
+### K-1: Scan performance baseline（2026-05-25 完了）
 
-scan time の内訳を計測・記録する。最適化はまだしない。
+`--perf` CLI フラグを追加し、スキャンフェーズ別の所要時間を stderr に出力する。
 
-- C: / D: の scan time を current / WOF adjusted / CLI / Tauri UI で測定
-- MFT read / parse / aggregate / UI transfer の各フェーズを分解
-- ボトルネックの特定
+**実装内容:**
+- `--perf` フラグ（`src/main.rs`）
+- `JsonSummary` に `open_vol_time_ms` フィールド追加
+- `build_mft_tree_model_with_policy` の `total_elapsed` を children_map 構築後に移動
+- `print_perf_summary()` ヘルパーで stderr に `[perf]` プレフィックス付き出力
+
+**計測結果（warm cache）:**
+
+| drive | policy | open_vol | read_mft | parse | tree_build | aggregate | total |
+|-------|--------|----------|----------|-------|------------|-----------|-------|
+| C: | current | 0 ms | 4854 ms | 451 ms | 496 ms | 166 ms | 9444 ms |
+| C: | wof_adjusted | 0 ms | 4815 ms | 457 ms | 493 ms | 162 ms | 9405 ms |
+| D: | current | 0 ms | 47833 ms | 6619 ms | 503 ms | 99 ms | 65210 ms |
+| D: | wof_adjusted | 0 ms | 52620 ms | 3893 ms | 549 ms | 102 ms | 59920 ms |
+
+**内訳（残り time = path reconstruction + children_map）:**
+- C: read_mft=4.8s (51%)、path/children_map≈3.5s (37%)、parse=0.45s、tree_build=0.5s
+- D: read_mft=47-52s (73-88%)、path/children_map≈10s (15%)
+
+**ボトルネック特定:**
+1. **MFT read (I/O)**: C: 4.8s、D: 47s。ドライブが大きいほど支配的
+2. **path reconstruction + children_map**: C: ~3.5s (37%)。この部分は `total_time_ms` と phase 合計の差
+3. parse・tree_build・aggregate は合計 ~1s で小さい
+
+**J-6 実測 24s との差異:** CLI `--perf` は warm cache 計測 (≒9.4s)。J-6 の 24s は cold cache での Tauri UI 計測と推定。cold cache では read_mft が支配的にさらに遅くなる。
+
+**CLI 使用例:**
+```
+disk-insight.exe --perf
+disk-insight.exe --json --perf
+disk-insight.exe --drive D --json --perf --wof-adjusted
+```
 
 ### K-2: Scan progress visibility design
 
