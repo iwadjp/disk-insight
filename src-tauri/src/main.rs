@@ -35,6 +35,7 @@ async fn scan_drive(
     top: Option<usize>,
     storage_policy: Option<String>,
 ) -> Result<JsonTreeOutput, String> {
+    let cmd_start = std::time::Instant::now();
     let top_n = top.unwrap_or(100).max(1);
     let drive_char = drive
         .trim_end_matches(':')
@@ -49,19 +50,40 @@ async fn scan_drive(
         _ => StoragePolicy::Current,
     };
 
+    eprintln!(
+        "[perf-tauri] scan_drive start  drive={} top={} policy={}",
+        drive_char, top_n, policy.as_str()
+    );
+
+    let spawn_start = std::time::Instant::now();
     let model = tauri::async_runtime::spawn_blocking(move || {
         build_mft_tree_model_with_policy(drive_char, top_n, policy).map_err(|e| format!("{e:#}"))
     })
     .await
     .map_err(|e| format!("scan task failed: {e}"))??;
 
+    let spawn_ms = spawn_start.elapsed().as_millis();
+    eprintln!(
+        "[perf-tauri] build_model done  {} ms  root_children={} top_dirs={} top_files={}",
+        spawn_ms,
+        model.output.root_children.len(),
+        model.output.top_directories.len(),
+        model.output.top_files.len()
+    );
+
     {
+        let lock_start = std::time::Instant::now();
         let mut guard = state
             .children_map
             .lock()
             .map_err(|e| format!("state lock poisoned: {e}"))?;
         *guard = Some(model.children_map);
+        eprintln!("[perf-tauri] state_lock  {} ms", lock_start.elapsed().as_millis());
     }
+
+    let cmd_ms = cmd_start.elapsed().as_millis();
+    eprintln!("[perf-tauri] scan_drive return  total={} ms", cmd_ms);
+
     Ok(model.output)
 }
 

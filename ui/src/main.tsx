@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
 import "./styles.css";
@@ -14,6 +14,7 @@ type Summary = {
   total_final_allocated: number;
   allocated_size?: number;
   storage_policy?: string;
+  open_vol_time_ms?: number;
   read_time_ms: number;
   parse_time_ms: number;
   tree_build_time_ms: number;
@@ -870,6 +871,8 @@ function DirectChildrenPanel({
 }
 
 function App() {
+  const scanTimingRef = useRef<{ start: number; invokeStart: number } | null>(null);
+
   const [data, setData] = useState<DiskInsightOutput | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingMsg, setLoadingMsg] = useState("Loading sample data...");
@@ -980,6 +983,12 @@ function App() {
     kind: SourceKind,
     usedTopN?: number,
   ) {
+    const invokeStart = performance.now();
+    if (isScan) {
+      const t0 = scanTimingRef.current?.start ?? invokeStart;
+      scanTimingRef.current = { start: t0, invokeStart };
+      console.log(`[perf-ui] invoke start  t+${(invokeStart - t0).toFixed(0)} ms`);
+    }
     setIsLoading(true);
     setLoadingMsg(msg);
     setError(null);
@@ -994,11 +1003,23 @@ function App() {
     setSelectedChildrenError(null);
     loader()
       .then((json) => {
+        if (isScan && scanTimingRef.current) {
+          const t0 = scanTimingRef.current.start;
+          const now = performance.now();
+          console.log(
+            `[perf-ui] invoke resolved  t+${(now - t0).toFixed(0)} ms` +
+            `  invoke_ms=${(now - scanTimingRef.current.invokeStart).toFixed(0)}`,
+          );
+        }
         setData(json);
         setSourceKind(kind);
         setLastUpdated(new Date());
         if (usedTopN !== undefined) setScanTopN(usedTopN);
         setSelectedDir(json.top_directories[0]);
+        if (isScan && scanTimingRef.current) {
+          const t0 = scanTimingRef.current.start;
+          console.log(`[perf-ui] setData called  t+${(performance.now() - t0).toFixed(0)} ms`);
+        }
         setIsLoading(false);
       })
       .catch((err: unknown) => {
@@ -1120,6 +1141,9 @@ function App() {
   }
 
   function handleScan() {
+    const t0 = performance.now();
+    scanTimingRef.current = { start: t0, invokeStart: t0 };
+    console.log(`[perf-ui] scan click  drive=${driveInput} policy=${storagePolicy}`);
     const drive = parseDriveLetter(driveInput);
     if (!drive) {
       setError("Drive must be a single letter (A–Z).");
@@ -1140,6 +1164,35 @@ function App() {
       directChildrenSortDirection: directChildrenSortDir,
     });
   }, [driveInput, topN, storagePolicy, directChildrenSortKey, directChildrenSortDir]);
+
+  // K-1b: log when scan data is first rendered to DOM
+  useEffect(() => {
+    if (!data || sourceKind !== "live" || !scanTimingRef.current) return;
+    const t0 = scanTimingRef.current.start;
+    requestAnimationFrame(() => {
+      const ms = (performance.now() - t0).toFixed(0);
+      console.log(`[perf-ui] data rendered (rAF)  t+${ms} ms  files=${data.summary.files}`);
+      requestAnimationFrame(() => {
+        const ms2 = (performance.now() - t0).toFixed(0);
+        console.log(`[perf-ui] data rendered (rAF+1)  t+${ms2} ms`);
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  // K-1b: log when direct children for the selected folder become available
+  useEffect(() => {
+    if (!selectedDir || sourceKind !== "live" || !scanTimingRef.current) return;
+    const id = selectedDir.record_index;
+    const kids = childrenByParent[id];
+    if (kids === undefined) return;
+    const t0 = scanTimingRef.current.start;
+    const ms = (performance.now() - t0).toFixed(0);
+    console.log(
+      `[perf-ui] direct children ready  t+${ms} ms  path=${selectedDir.path}  count=${kids.length}`,
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDir, childrenByParent]);
 
   useEffect(() => {
     runLoad(loadSampleData, "Loading sample data...", false, "sample");

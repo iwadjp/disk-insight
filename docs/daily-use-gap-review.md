@@ -438,11 +438,57 @@ WinSxS / hardlink / component-store accounting は未解決の既知制約。
 ### J-6 実測 (24s/81s) との差異
 
 J-6 の 24s は Tauri UI での cold cache 計測、K-1 の 9.4s は CLI での warm cache 計測と推定。
-cold cache では read_mft (I/O) が大幅に増加する。同条件での比較は K-2 での Tauri タイミング計測後に実施する。
+cold cache では read_mft (I/O) が大幅に増加する。K-1b でギャップの詳細を計測する。
+
+---
+
+## 12. K-1b: Tauri UI end-to-end timing（2026-05-25 実装済み、実測待ち）
+
+### 目的
+
+CLI warm cache 9.4s と Tauri UI 約25s のギャップ (~15s) の内訳を把握する。
+
+**候補:**
+- cold cache / warm cache 差（read_mft 増加）
+- Tauri invoke 戻り値転送（JSON serialize + IPC）
+- React setState / render
+- visibleRows build
+- direct children 初期取得
+
+### 実装
+
+`[perf-tauri]` ログを `scan_drive` コマンドに追加:
+- `scan_drive start`, `build_model done`, `state_lock`, `scan_drive return`
+
+`[perf-ui]` ログを `main.tsx` に追加:
+- `scan click`, `invoke start`, `invoke resolved (invoke_ms)`, `setData called`
+- `data rendered (rAF)`, `data rendered (rAF+1)`, `direct children ready`
+
+### 測定手順
+
+管理者権限で `npm run tauri dev`、DevTools Console で `[perf-ui]`、terminal で `[perf-tauri]` を確認。
+
+### 期待される出力形式
+
+```text
+[perf-tauri] scan_drive start  drive=C top=100 policy=current
+[perf-tauri] build_model done  XXXX ms  root_children=53 ...
+[perf-tauri] state_lock  X ms
+[perf-tauri] scan_drive return  total=XXXX ms
+
+[perf-ui] scan click  drive=C policy=current
+[perf-ui] invoke start  t+X ms
+[perf-ui] invoke resolved  t+XXXX ms  invoke_ms=XXXX
+[perf-ui] setData called  t+XXXX ms
+[perf-ui] data rendered (rAF)  t+XXXX ms  files=XXXXXXX
+[perf-ui] direct children ready  t+XXXX ms  path=C:  count=53
+```
+
+実機計測後に数値をここに追記する。
 
 ### タグ候補
 
-`v0.3.0-daily-use` — **保留**。K-1〜K-3 後に K-4 で再判定する。
+`v0.3.0-daily-use` — **保留**。K-1b 実測 → K-2 → K-3 → K-4 で再判定する。
 
 ### GitHub public release
 

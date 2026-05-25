@@ -49,6 +49,24 @@ cmd /c ".\target\release\disk-insight.exe --json --top 30 --wof-adjusted > .\wor
 .\target\release\disk-insight.exe --json --perf
 .\target\release\disk-insight.exe --drive D --json --perf
 
+# K-1b: Tauri UI end-to-end timing
+# Run as admin, open DevTools (F12) > Console, scan C:
+# [perf-tauri] lines appear in the terminal where tauri dev was launched
+# [perf-ui] lines appear in the browser DevTools console
+npm run tauri dev
+# Then in DevTools console, look for:
+#   [perf-ui] scan click
+#   [perf-ui] invoke start
+#   [perf-ui] invoke resolved  invoke_ms=XXXX
+#   [perf-ui] setData called
+#   [perf-ui] data rendered (rAF)
+#   [perf-ui] direct children ready
+# And in the terminal, look for:
+#   [perf-tauri] scan_drive start
+#   [perf-tauri] build_model done  XXXX ms
+#   [perf-tauri] state_lock  X ms
+#   [perf-tauri] scan_drive return  total=XXXX ms
+
 # Size accuracy diagnostics
 .\target\release\disk-insight.exe --diag-pfx86
 .\target\release\disk-insight.exe --diag-wof-global

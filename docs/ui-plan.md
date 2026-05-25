@@ -1483,6 +1483,41 @@ disk-insight.exe --json --perf
 disk-insight.exe --drive D --json --perf --wof-adjusted
 ```
 
+### K-1b: Tauri UI end-to-end timing（2026-05-25 実装済み、実測待ち）
+
+**目的**: CLI warm cache 9.4s と Tauri UI 約25s のギャップの内訳を計測する。
+
+**実装内容:**
+- `src-tauri/src/main.rs`: `[perf-tauri]` タイミングログを `scan_drive` に追加
+  - `scan_drive start`, `build_model done`, `state_lock`, `scan_drive return`
+- `ui/src/main.tsx`: `[perf-ui]` タイミングログを追加
+  - `scan click`, `invoke start`, `invoke resolved (invoke_ms=X)`, `setData called`
+  - `data rendered (rAF)`, `data rendered (rAF+1)`
+  - `direct children ready (count=X)`
+
+**測定手順:**
+1. 管理者権限で `npm run tauri dev`
+2. DevTools (F12) > Console を開く
+3. Scan C: を実行
+4. Console で `[perf-ui]` の数値を読む
+5. Terminal で `[perf-tauri]` の数値を読む
+
+**測定すべき区間:**
+
+| 区間 | ログ | 内容 |
+|------|------|------|
+| click → invoke start | rAF | ほぼ 0 ms (set state のみ) |
+| invoke start → invoke resolved | invoke_ms | Rust core + JSON serialize + IPC |
+| [perf-tauri] build_model done | Rust | build_mft_tree_model_with_policy |
+| invoke resolved → setData | - | JS side parsing 済みのため ≈ 0 ms |
+| setData → data rendered | rAF delta | React render |
+| data rendered → direct children | rAF+children | get_children Tauri call |
+
+**注記:**
+- 最適化は未実装
+- progress UI は未実装（K-2 で設計する）
+- React.StrictMode のため dev mode では rAF が 2 回ログされる場合がある
+
 ### K-2: Scan progress visibility design
 
 scan 中の進捗表示の設計。
