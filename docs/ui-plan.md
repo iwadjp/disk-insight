@@ -1189,6 +1189,44 @@ milestone candidate: **v0.2.0-treeview-wof**
 次ゴール: 著者が自分の用途で毎日使えるレベルに達すること。
 公開判断はその後（daily-use PASS 後に改めて判断する）。
 
+### daily-use milestone の意味（2026-05-26 方針修正）
+
+disk-insight は WizTree の劣化コピーを目指さない。
+
+「WizTree より遅いが自作だから我慢して使う」は PASS 条件ではない。
+PASS には「この用途なら disk-insight を選びたい」と思える固有価値が必要。
+
+#### PASS 条件
+
+- 著者本人が、少なくとも一部の容量調査で WizTree ではなく disk-insight を選びたいと思える
+- 速度・進捗・サイズ説明・操作導線の不満が許容範囲に収まっている
+- disk-insight 固有の利点が明確である:
+  - **delete-free 安全性**: 誤削除リスクがない状態で調査できる
+  - **WOF adjusted 比較**: current / WOF adjusted のサイズを切り替えて比較できる
+  - **サイズ差の調査**: WOF / WinSxS / hardlink など、サイズ差の理由を調べるための手がかりがある
+  - **Direct children navigation**: selected folder の直下ファイル・フォルダをフィルタ/ソートして掘れる
+  - **Explorer integration**: Open folder / Select file / Copy path が自然に使える
+
+#### HOLD 条件
+
+- WizTree の方が単純に速く、分かりやすく、信頼できる
+- disk-insight を使う理由が「自作だから」以外にない
+- scan 中に不安になる（進捗が見えない、止まっているように見える）
+- サイズ表示の意味が信頼できない（WizTree と大きく食い違う）
+- 目的のフォルダ・ファイルに素早く辿れない
+
+#### K フェーズとの関係
+
+K フェーズは daily-use HOLD の解消手段として位置づける。
+目標は「WizTree に追いつく」ではなく「disk-insight を選ぶ理由を作る」こと。
+
+| フェーズ | HOLD 解消の対象 |
+|---------|---------------|
+| K-1/K-1b/K-1c/K-1d | speed gap の原因把握 |
+| K-2/K-2b/K-2c | scan 中の不安解消（progress visibility） |
+| K-3 | size accuracy / size meaning の説明改善 |
+| K-4 | daily-use 再判定 |
+
 ### 背景
 
 v0.2.0-treeview-wof は機能的に動作しているが、

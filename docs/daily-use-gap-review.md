@@ -408,6 +408,55 @@ WinSxS / hardlink / component-store accounting は未解決の既知制約。
 
 ---
 
+## 10.5. Daily-use PASS 基準の修正（2026-05-26）
+
+J-6 HOLD 後、daily-use milestone の意味を明確に修正した。
+
+### 修正の背景
+
+J-6 HOLD 理由（speed / progress / size accuracy）を見て、
+「WizTree より遅いが自分で作ったから我慢して使う」では PASS とすべきでない、という判断に至った。
+
+### 修正後の PASS 基準
+
+disk-insight は WizTree の劣化コピーを目指さない。
+
+PASS には「この用途なら disk-insight を選びたい」と思える固有価値が必要。
+
+**現在の固有価値候補:**
+
+| 価値 | 内容 |
+|------|------|
+| delete-free 安全性 | 誤削除リスクがない状態で調査・判断できる |
+| WOF adjusted 比較 | current / WOF adjusted を切り替えてサイズ差を確認できる |
+| Direct children navigation | selected folder の直下を filter / sort / 掘り下げできる |
+| Explorer integration | Open folder / Select file / Copy path が自然に使える |
+| サイズ差の調査 | WOF / WinSxS / hardlink など差の理由を追える診断 CLI がある |
+
+**現在の未達点（K フェーズで対応中）:**
+
+| 未達点 | 対応 |
+|--------|------|
+| scan speed gap | K-1 で原因把握済み。cold cache が主因（改善は後フェーズ） |
+| progress visibility | K-2/K-2b で phase 表示・fallback timer を実装。K-2c で polish |
+| size accuracy / explanation | K-3 で対応予定 |
+
+### K フェーズの位置づけ
+
+K フェーズは「WizTree に追いつくため」ではなく、「disk-insight を選ぶ理由を作るため」の作業。
+
+- K-2c progress strip polish → scan 中の不安を除去する（HOLD 条件の解消）
+- K-3 size accuracy review → サイズ表示の信頼性を上げる（HOLD 条件の解消）
+- K-4 daily-use retry → 固有価値が HOLD 条件を上回っているか再判定
+
+### 判定
+
+**v0.3.0-daily-use: HOLD 継続**
+
+K-2c / K-3 / K-4 を経て再判定する。
+
+---
+
 ## 11. K-1: Scan performance baseline（2026-05-25）
 
 `--perf` フラグを追加し、フェーズ別タイミングを stderr に出力するよう実装した。

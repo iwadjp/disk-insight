@@ -4,6 +4,11 @@ Design document for adding scan progress feedback to disk-insight.
 
 No implementation changes in this document — see K-2b/K-2c for implementation.
 
+**daily-use との関係**: progress visibility は単なる見た目改善ではなく、
+v0.3.0-daily-use PASS の条件の一部。scan が遅い場合でも、進行中であることと
+phase が分かることは「scan 中に不安にならない」ための最低条件。
+ただし progress 表示だけで WizTree 代替になるわけではない。
+
 ---
 
 ## 1. Current state
