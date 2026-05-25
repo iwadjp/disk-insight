@@ -328,24 +328,205 @@ disk-insight differs" may be:
 
 ## Appendix: measurement log
 
-Fill in after real-device measurements.
+Superseded by §M-1 below, which has the full measurement table and procedure.
+Quick reference: WizTree "Allocated" values from 2026-05-25 are pre-filled in §M-1.
 
-### Explorer Properties — "Size on disk"
+---
 
-| Path | Explorer "Size" | Explorer "Size on disk" | Measured |
-|------|---------------:|------------------------:|---------|
-| C:\Program Files (x86) | | | |
-| C:\Program Files | | | |
-| C:\Windows | | | |
-| C:\Windows\WinSxS | | | |
-| C:\Users | | | |
+## M-1: Explorer Size on disk manual measurement
 
-### WizTree — "Allocated" column
+**Status**: table ready — values TBD (fill in from live measurements)
 
-| Path | WizTree "Size" | WizTree "Allocated" | Measured |
-|------|---------------:|--------------------:|---------|
-| C:\Program Files (x86) | | 7.8 GB | 2026-05-25 |
-| C:\Program Files | | 24.6 GB | 2026-05-25 |
-| C:\Windows | | 16.1 GB | 2026-05-25 |
-| C:\Windows\WinSxS | | 4.1 GB | 2026-05-25 |
-| C:\Users | | 85.2 GB | 2026-05-25 |
+**Purpose**: confirm or deny the K-3b WOF Case A hypothesis by recording
+Explorer "Size on disk" (not "Size") explicitly for each key path, then
+comparing it against WizTree "Allocated" and disk-insight policies.
+
+> **Rule**: always record both "Size" and "Size on disk" from Explorer Properties,
+> and both "Size" and "Allocated" from WizTree. Never compare Explorer "Size"
+> against WizTree "Allocated" — they are different metrics.
+
+---
+
+### M-1a: Primary measurement table (required paths)
+
+All values in GB (binary, 1 GiB = 2³⁰ bytes). Pre-filled values are from
+2026-05-25 measurements. TBD = not yet measured.
+
+**Tool measurements:**
+
+| Path | Explorer Size | Explorer Size on disk | WizTree Size | WizTree Alloc | di current | di wof_adj | Measured |
+|------|--------------:|---------------------:|-------------:|--------------:|-----------:|-----------:|---------|
+| C:\Program Files (x86) | TBD | TBD | TBD | 7.8 GB | 10.1 GB | 8.3 GB | Exp: — |
+| C:\Program Files | TBD | TBD | TBD | 24.6 GB | 29.7 GB | 24.8 GB | Exp: — |
+| C:\Windows | TBD | TBD | TBD | 16.1 GB | 27.1 GB | 18.4 GB | Exp: — |
+| C:\Users | TBD | TBD | TBD | 85.2 GB | 85.0 GB | 84.8 GB | Exp: — |
+
+**Computed diffs (fill after measuring):**
+
+| Path | current − Exp SoD | wof_adj − Exp SoD | current − WizTree Alloc | wof_adj − WizTree Alloc | Candidate cause | Confidence | Notes |
+|------|------------------:|------------------:|------------------------:|------------------------:|-----------------|------------|-------|
+| C:\Program Files (x86) | TBD | TBD | +2.3 GB | +0.5 GB | Case A WOF | High | Exp SoD unmeasured |
+| C:\Program Files | TBD | TBD | +5.1 GB | +0.2 GB | Case A WOF | High | Exp SoD unmeasured |
+| C:\Windows | TBD | TBD | +11.0 GB | +2.3 GB | WOF + hardlink | High | WinSxS residual after WOF |
+| C:\Users | TBD | TBD | −0.2 GB | −0.4 GB | None (control) | High | All tools agree |
+
+`di current` = disk-insight current policy `subtree_size`
+`di wof_adj` = disk-insight wof_adjusted policy `subtree_size`
+`Exp SoD` = Explorer "Size on disk"
+
+---
+
+### M-1b: Additional candidates (optional)
+
+| Path | Explorer Size | Explorer Size on disk | WizTree Size | WizTree Alloc | di current | di wof_adj | Measured |
+|------|--------------:|---------------------:|-------------:|--------------:|-----------:|-----------:|---------|
+| C:\Windows\WinSxS | TBD | TBD | TBD | 4.1 GB | 11.5 GB | 8.7 GB | Exp: — |
+| C:\Users\iwadj | TBD | TBD | TBD | TBD | TBD | TBD | — |
+| C:\Program Files (x86)\Microsoft | TBD | TBD | TBD | TBD | TBD | TBD | — |
+| C:\Program Files (x86)\Microsoft Office | TBD | TBD | TBD | 3.2 GB | 4.25 GB | 3.24 GB | Exp: — |
+
+---
+
+### M-1c: Measurement procedure
+
+#### Explorer "Size" and "Size on disk"
+
+1. Right-click the target folder (e.g., `C:\Program Files (x86)`) in Explorer.
+2. Select **Properties** / プロパティ.
+3. Wait for the calculation to complete — do not record intermediate values.
+4. Record both:
+   - **Size** / サイズ (e.g., `10.9 GB (11,738,040,000 bytes)`)
+   - **Size on disk** / ディスク上のサイズ (e.g., `7.82 GB (8,401,920,000 bytes)`)
+5. Record the byte value for precision. The GB display may be truncated.
+6. Fill in the "Explorer Size" and "Explorer Size on disk" columns in §M-1a.
+
+**Cautions:**
+- Properties calculation for large folders (`C:\Windows`) may take 30–90 seconds.
+- The two values ("Size" and "Size on disk") can differ by several GB on WOF-heavy paths.
+- Windows displays GB; disk-insight and WizTree use GiB. For comparison, convert
+  to bytes and divide by 2³⁰ (1,073,741,824).
+
+#### WizTree "Size" and "Allocated"
+
+1. Open WizTree, scan `C:\`.
+2. In the tree or folder list, locate the target path.
+3. Record both:
+   - **Size** column (logical file size total)
+   - **Allocated** column (disk allocation, WOF-aware)
+4. Fill in "WizTree Size" and "WizTree Alloc" columns in §M-1a.
+
+**Cautions:**
+- Use "Allocated" (not "Size") when comparing against Explorer "Size on disk".
+- Use "Size" when comparing against Explorer "Size" (logical).
+- Never mix Size and Allocated across tools.
+
+#### disk-insight (Tauri UI)
+
+1. Launch disk-insight as Administrator (`npm run tauri dev` or the built `.exe`).
+2. Select **Current (default)** policy. Scan `C:`.
+3. Click the target folder in the TreeView or top-directories list.
+4. Record the **subtree_size** shown in the selected folder card.
+5. Switch to **WOF adjusted (experimental)** policy. Scan `C:` again.
+6. Record the same folder's subtree_size.
+
+**Alternative (CLI/JSON):**
+
+```powershell
+# current policy
+cmd /c ".\target\release\disk-insight.exe --json --top 30 > .\work\m1_current.json"
+
+# wof_adjusted policy
+cmd /c ".\target\release\disk-insight.exe --json --top 30 --wof-adjusted > .\work\m1_wof.json"
+```
+
+Search `top_directories` in the JSON for the target path and read `subtree_size`.
+Note: `subtree_size` is in bytes. Divide by 1,073,741,824 for GiB.
+
+For paths not in the top-30 list, use the Tauri UI (folder card) instead.
+
+---
+
+### M-1d: Judgment logic
+
+After filling in the table, apply the following rules to each path.
+
+#### Case 1 — WOF Case A confirmed
+
+```
+Explorer Size on disk ≈ WizTree Allocated ≈ disk-insight wof_adjusted
+disk-insight current is significantly larger
+```
+
+**Interpretation:**
+- WOF Case A is the dominant cause.
+- Explorer and WizTree return the WOF-aware compressed size.
+- `current` returns the projected NTFS $DATA allocation (uncompressed size).
+- `wof_adjusted` is the correct policy for matching Explorer/WizTree on this path.
+
+**Example expected result**: Program Files (x86) — Exp SoD ≈ 7.8 GB ≈ WizTree ≈ wof_adj 8.3 GB; current 10.1 GB is the outlier.
+
+#### Case 2 — WOF explanation insufficient
+
+```
+Explorer Size on disk ≈ WizTree Allocated
+disk-insight current AND wof_adjusted both differ (not just current)
+```
+
+**Interpretation:**
+- WOF adjustment does not close the gap — another cause is active.
+- Candidates: hardlink double-counting, sparse file accounting, ADS not
+  captured, or an aggregation bug (Cause I).
+- Investigate with `--diag-winsxs` or `--diag-pfx86` for that specific path.
+
+#### Case 3 — Metric confusion detected
+
+```
+Explorer Size and Explorer Size on disk differ significantly (several GB)
+WizTree Size and Allocated also differ significantly
+```
+
+**Interpretation:**
+- The path has a large WOF-compressed footprint — Size ≫ Size on disk.
+- All prior comparisons using "Explorer Size" as the baseline were invalid.
+- Re-evaluate using only "Size on disk" and "Allocated" columns.
+- This is Cause A (metric mismatch) confirmed.
+
+#### Case 4 — Hardlink / component-store dominates (WinSxS)
+
+```
+C:\Windows\WinSxS: all three tools (Explorer, WizTree, disk-insight) disagree
+wof_adjusted is still significantly higher than WizTree
+```
+
+**Interpretation:**
+- WOF adjustment alone is insufficient (as expected — see §5 Cause D).
+- 70,912 link_count > 1 records cause multi-attribution of the same clusters.
+- 4.6 GB residual gap after WOF adjustment is consistent with hardlink overcount.
+- WinSxS is a reference value only; do not use it to judge overall tool accuracy.
+
+#### Case 5 — All tools agree (control)
+
+```
+Explorer Size on disk ≈ WizTree Allocated ≈ disk-insight current ≈ disk-insight wof_adjusted
+```
+
+**Interpretation:**
+- No WOF or hardlink issue. Normal files dominate.
+- Expected for `C:\Users` — confirms the tool is correct for user data paths.
+
+---
+
+### M-1e: Expected outcomes
+
+Based on K-3b analysis, the expected result for each primary path:
+
+| Path | Expected case | Reasoning |
+|------|--------------|-----------|
+| C:\Program Files (x86) | Case 1 or Case 3 | WOF-heavy (Edge, Office); Exp SoD likely ≈ 7–8 GB |
+| C:\Program Files | Case 1 | WOF-heavy; wof_adj 24.8 GB ≈ WizTree 24.6 GB already |
+| C:\Windows | Case 2 or mixed | WOF + hardlink; wof_adj 18.4 GB > WizTree 16.1 GB |
+| C:\Users | Case 5 | No WOF/hardlink; all tools agree (control) |
+
+If `C:\Program Files (x86)` → Case 1: WOF Case A hypothesis **confirmed**.
+If `C:\Program Files (x86)` → Case 3: the "Explorer 11.0 GB" was "Size" not "Size on disk".
+Either outcome closes the ambiguity and improves trust.

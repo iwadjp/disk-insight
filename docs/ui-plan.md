@@ -1780,6 +1780,47 @@ Explorer / WizTree は WOF-aware API を経由するため、圧縮後サイズ�
 
 **v0.3.0-daily-use: HOLD 継続** — M-1 実測が信頼改善の次ステップ。
 
+### M-1: Explorer Size on disk manual measurement — IN PROGRESS (2026-05-26)
+
+詳細: `docs/size-discrepancy-investigation.md` §M-1
+
+#### 目的
+
+K-3b の仮説「Explorer = WizTree ≠ disk-insight current の主因は WOF Case A」を
+実測で確認または否定する。実装変更なし。測定表と手順を作成し、ユーザーが手動測定する。
+
+#### やること
+
+1. Explorer フォルダプロパティで "Size on disk" を記録（"Size" と混同しない）
+2. WizTree "Allocated" を記録（"Size" と混同しない）
+3. disk-insight current / wof_adjusted の subtree_size を記録
+4. 差分を計算し、判定ロジック（Case 1〜5）に当てはめる
+
+#### 対象パス（必須 4 件）
+
+```
+C:\Program Files (x86)
+C:\Program Files
+C:\Windows
+C:\Users
+```
+
+#### 期待される判定
+
+| パス | 期待 | 理由 |
+|------|------|------|
+| Program Files (x86) | Case 1 または Case 3 | WOF 大（Edge / Office） |
+| Program Files | Case 1 | wof_adj ≈ WizTree は既に確認済み |
+| Windows | Case 2 / mixed | WOF + hardlink 両方 |
+| Users | Case 5 | 全ツール一致（対照群） |
+
+#### やらないこと
+
+- 補正実装
+- WOF / hardlink / WinSxS 本番補正
+- delete
+- tag 作成
+
 ### 後回し（v0.3.0 より後）
 
 - delete action（安全設計・確認ダイアログ必須）

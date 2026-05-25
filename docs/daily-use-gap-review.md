@@ -861,3 +861,54 @@ Explorer "Size on disk" の明示的計測なしには「Explorer = WizTree ≠ 
 | 集計バグの可能性 | 低確度だが排除できていない（C:\Users 一致で低減） |
 
 **v0.3.0-daily-use: HOLD** — M-1 実測が次ステップ。実測後に信頼度を再評価する。
+
+---
+
+## 19. M-1: Explorer Size on disk manual measurement — IN PROGRESS (2026-05-26)
+
+詳細: `docs/size-discrepancy-investigation.md` §M-1
+
+### 目的
+
+v0.3.0-daily-use HOLD の主因「サイズ信頼性」を解消するため、
+Explorer / WizTree / disk-insight の値を明示的に取り直し、比較する。
+
+特に「Explorer Size」と「Explorer Size on disk」の混同を排除する。
+
+### 混同を避けるためのメトリクス対応表
+
+| 正しい比較ペア | ×NG な比較 |
+|---------------|-----------|
+| Explorer **Size on disk** ↔ WizTree **Allocated** ↔ di subtree_size | Explorer Size ↔ WizTree Allocated |
+| Explorer **Size** ↔ WizTree **Size** | Explorer Size on disk ↔ WizTree Size |
+
+### 現時点の既知値（参照用）
+
+| パス | WizTree Alloc | di current | di wof_adj | Explorer SoD |
+|------|-------------:|-----------:|-----------:|------------:|
+| C:\Program Files (x86) | 7.8 GB | 10.1 GB | 8.3 GB | **TBD** ← ここが鍵 |
+| C:\Program Files | 24.6 GB | 29.7 GB | 24.8 GB | TBD |
+| C:\Windows | 16.1 GB | 27.1 GB | 18.4 GB | TBD |
+| C:\Users | 85.2 GB | 85.0 GB | 84.8 GB | TBD |
+
+**PFx86 Explorer SoD = TBD が最重要**。
+もし ≈ 7.8 GB なら Case 1（WOF Case A 確認）。
+もし ≈ 11 GB なら Case 3（比較が Explorer Size だった）。
+
+### 判定後の含意
+
+| M-1 結果 | サイズ信頼性への影響 |
+|---------|-------------------|
+| Case 1 確認（WOF Case A） | wof_adjusted が Explorer/WizTree に近い根拠が確定。信頼度向上 |
+| Case 3 確認（メトリクス混同） | 「Explorer ≈ WizTree 不一致」の誤認が解消。現状理解が改善 |
+| Case 2（WOF 以外の原因） | 追加調査が必要。HOLD 継続 |
+
+### 測定手順の概要
+
+1. Explorer: 対象フォルダ右クリック → プロパティ → 計算完了後に **Size と Size on disk の両方** を記録
+2. WizTree: **Allocated 列**を記録（Size と間違えない）
+3. disk-insight: current と wof_adjusted それぞれで Scan → 選択フォルダカードの subtree_size を記録
+
+詳細手順: `docs/size-discrepancy-investigation.md` §M-1c
+
+**v0.3.0-daily-use: HOLD** — M-1 実測完了後に Section 20 として結果を追記する。

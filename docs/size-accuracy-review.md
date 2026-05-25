@@ -328,3 +328,37 @@ PFx86, Program Files, Windows, and Users.
 - Explorer "Size on disk" for key paths is unmeasured — re-measurement required
 
 **v0.3.0-daily-use: HOLD** — size accuracy remains a trust issue pending M-1.
+
+---
+
+## 9. M-1: Explorer Size on disk measurement plan
+
+**See**: `docs/size-discrepancy-investigation.md` §M-1
+
+The next concrete step to improve size trust: explicitly record Explorer
+"Size on disk" (not "Size") for the four key paths, then compare against
+WizTree "Allocated" and both disk-insight policies.
+
+### Metric alignment reminder
+
+| Explorer label | WizTree label | disk-insight field | What it measures |
+|---------------|---------------|-------------------|-----------------|
+| Size | Size | — | Logical file size (uncompressed) |
+| **Size on disk** | **Allocated** | **subtree_size** | Disk allocation (WOF-aware or NTFS) |
+
+**Critical**: always compare "Size on disk" with "Allocated", never "Size" with "Allocated".
+The "Explorer 11.0 GB" value from prior notes may be logical "Size" — this is what M-1 resolves.
+
+### What M-1 will determine
+
+| M-1 outcome | Conclusion |
+|-------------|------------|
+| Explorer SoD ≈ WizTree Alloc ≈ wof_adjusted, current is the outlier | WOF Case A confirmed — `wof_adjusted` is the accurate policy for WOF paths |
+| Explorer SoD ≈ WizTree Alloc, but wof_adjusted also differs | WOF is not the full explanation — investigate hardlink or other causes |
+| Explorer Size ≈ 11 GB (not Size on disk) | Cause A (metric mismatch) confirmed — prior comparison was invalid |
+
+### Status
+
+**M-1: measurement table created, values TBD.**
+
+Fill in `docs/size-discrepancy-investigation.md` §M-1a after measuring.
