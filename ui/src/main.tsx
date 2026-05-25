@@ -689,7 +689,8 @@ function DirectChildrenPanel({
   sortDir,
   onSortKeyChange,
   onSortDirChange,
-  parentNode,
+  parentDir,
+  onNavigateToDir,
   onNavigate,
   onOpenExplorer,
   onSelectFile,
@@ -704,7 +705,8 @@ function DirectChildrenPanel({
   sortDir: SortDirection;
   onSortKeyChange: (key: DirectChildrenSortKey) => void;
   onSortDirChange: (dir: SortDirection) => void;
-  parentNode: TreeNode | undefined;
+  parentDir: DirectoryEntry | undefined;
+  onNavigateToDir: (dir: DirectoryEntry) => void;
   onNavigate: (node: TreeNode) => void;
   onOpenExplorer: (path: string) => void;
   onSelectFile: (path: string) => void;
@@ -852,14 +854,14 @@ function DirectChildrenPanel({
           </button>
         )}
       </div>
-      {sourceKind === "live" && parentNode && (
+      {sourceKind === "live" && parentDir && (
         <div
           className="direct-child-row direct-child-row--parent"
-          onClick={() => onNavigate(parentNode)}
-          title={`Go to ${parentNode.path}`}
+          onClick={() => onNavigateToDir(parentDir)}
+          title={`Go to ${parentDir.path}`}
         >
           <span className="direct-child-badge direct-child-badge--parent">..</span>
-          <span className="direct-child-name">Parent: {parentNode.path}</span>
+          <span className="direct-child-name">Parent: {parentDir.path}</span>
         </div>
       )}
       {body}
@@ -915,11 +917,23 @@ function App() {
     [data?.root_children, expandedIds, childrenByParent, childrenErrors],
   );
 
-  const selectedParentNode = useMemo(() => {
-    if (!selectedDir || isDriveRoot(selectedDir.path)) return undefined;
+  const selectedParentDir = useMemo((): DirectoryEntry | undefined => {
+    if (!selectedDir || isDriveRoot(selectedDir.path) || !data) return undefined;
     const parentPath = getParentDir(selectedDir.path);
-    return findNodeByPath(parentPath, data?.root_children ?? [], childrenByParent);
-  }, [selectedDir, data?.root_children, childrenByParent]);
+    if (isDriveRoot(parentPath)) {
+      // C:\ is not a TreeNode in rootChildren — build a synthetic DirectoryEntry
+      const rootRecordIndex = data.root_children?.[0]?.parent_record_index ?? 5;
+      return {
+        path: parentPath,
+        record_index: rootRecordIndex,
+        subtree_size: data.summary.total_final_allocated,
+        direct_file_size: 0,
+        child_count: data.root_children?.length ?? 0,
+      };
+    }
+    const node = findNodeByPath(parentPath, data.root_children ?? [], childrenByParent);
+    return node ? treeNodeToDirEntry(node) : undefined;
+  }, [selectedDir, data, childrenByParent]);
 
   useEffect(() => {
     if (!selectedDir || sourceKind !== "live") {
@@ -929,6 +943,13 @@ function App() {
     }
     const id = selectedDir.record_index;
     if (childrenByParent[id] !== undefined) {
+      setSelectedChildrenLoading(false);
+      setSelectedChildrenError(null);
+      return;
+    }
+    // Drive root: use already-loaded root_children instead of a Tauri call
+    if (isDriveRoot(selectedDir.path) && data?.root_children !== undefined) {
+      setChildrenByParent((prev) => ({ ...prev, [id]: data.root_children! }));
       setSelectedChildrenLoading(false);
       setSelectedChildrenError(null);
       return;
@@ -990,6 +1011,11 @@ function App() {
   function handleSelectTreeNode(node: TreeNode) {
     if (!node.is_directory) return;
     setSelectedDir(treeNodeToDirEntry(node));
+    setTreeError(null);
+  }
+
+  function handleNavigateToDir(dir: DirectoryEntry) {
+    setSelectedDir(dir);
     setTreeError(null);
   }
 
@@ -1277,7 +1303,8 @@ function App() {
                   sortDir={directChildrenSortDir}
                   onSortKeyChange={setDirectChildrenSortKey}
                   onSortDirChange={setDirectChildrenSortDir}
-                  parentNode={selectedParentNode}
+                  parentDir={selectedParentDir}
+                  onNavigateToDir={handleNavigateToDir}
                   onNavigate={handleSelectTreeNode}
                   onOpenExplorer={handleOpenExplorer}
                   onSelectFile={handleSelectFile}

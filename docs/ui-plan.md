@@ -1362,6 +1362,17 @@ Direct children panel の先頭に Parent navigation row を追加した。
   - クリックで `onNavigate(parentNode)` → `selectedDir` が親フォルダに切り替わる
   - filter はフォルダ移動時にリセット（既存の `useEffect` が対応）
 
+#### J-5b follow-up: drive root handling 修正（2026-05-25）
+
+初回実装では `C:\` が `rootChildren` / `childrenByParent` に存在しないため parent navigation が失敗した。
+
+- `selectedParentDir: DirectoryEntry | undefined` を `TreeNode | undefined` から変更
+- parent path が drive root の場合は synthetic `DirectoryEntry` を作成
+  - `record_index` = `data.root_children[0].parent_record_index`（実際の root FRN）
+- root 選択時の children fetch: `data.root_children` を直接使用（`getChildren` Tauri call 不要）
+- `onNavigateToDir: (dir: DirectoryEntry) => void` prop を追加（TreeNode 不要の parent row 用）
+- `handleNavigateToDir` を App に追加
+
 #### 制約確認
 
 - breadcrumb 全実装・履歴 back/forward・auto expand は未実装
