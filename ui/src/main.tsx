@@ -693,9 +693,27 @@ function DirectChildrenPanel({
   onCopyError: (msg: string) => void;
 }) {
 
+  const [filterText, setFilterText] = useState("");
+  const filterTrimmed = filterText.trim();
+
+  useEffect(() => {
+    setFilterText("");
+  }, [dir.record_index]);
+
+  const filtered = useMemo(() => {
+    if (!children) return [];
+    if (!filterTrimmed) return children;
+    const lower = filterTrimmed.toLowerCase();
+    return children.filter(
+      (n) =>
+        n.name.toLowerCase().includes(lower) ||
+        n.path.toLowerCase().includes(lower),
+    );
+  }, [children, filterTrimmed]);
+
   const sorted = useMemo(
-    () => (children ? sortDirectChildren(children, sortKey, sortDir) : []),
-    [children, sortKey, sortDir],
+    () => sortDirectChildren(filtered, sortKey, sortDir),
+    [filtered, sortKey, sortDir],
   );
 
   let body: React.ReactNode;
@@ -713,6 +731,12 @@ function DirectChildrenPanel({
     body = <p className="direct-children-note">Fetching…</p>;
   } else if (children.length === 0) {
     body = <p className="direct-children-note">This folder has no children.</p>;
+  } else if (filterTrimmed && sorted.length === 0) {
+    body = (
+      <p className="direct-children-note">
+        No direct children match &ldquo;{filterTrimmed}&rdquo;.
+      </p>
+    );
   } else {
     body = (
       <div className="direct-children-list">
@@ -765,7 +789,9 @@ function DirectChildrenPanel({
         <div className="direct-children-controls">
           {children !== undefined && (
             <span className="direct-children-count">
-              {formatNumber(children.length)}
+              {filterTrimmed
+                ? `${formatNumber(filtered.length)} of ${formatNumber(children.length)}`
+                : formatNumber(children.length)}
             </span>
           )}
           <label className="sort-label">
@@ -788,6 +814,25 @@ function DirectChildrenPanel({
             {sortDir === "desc" ? "↓" : "↑"}
           </button>
         </div>
+      </div>
+      <div className="direct-children-filter-row">
+        <input
+          className="filter-input"
+          type="text"
+          placeholder="Filter children..."
+          value={filterText}
+          onChange={(e) => setFilterText(e.target.value)}
+        />
+        {filterText && (
+          <button
+            className="filter-clear-btn"
+            onClick={() => setFilterText("")}
+            title="Clear filter"
+            aria-label="Clear filter"
+          >
+            ×
+          </button>
+        )}
       </div>
       {body}
     </div>

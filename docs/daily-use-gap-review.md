@@ -304,6 +304,13 @@ top-N count, storage policy, and direct-children sort key/direction. The sort
 state was lifted from `DirectChildrenPanel` local state to `App` to enable
 cross-session persistence.
 
+J-5 (2026-05-25) adds a name/path filter to the Direct children panel. Typing in
+the filter box performs case-insensitive partial match against `node.name` and
+`node.path`, narrowing a large folder's children list instantly (e.g. `app` →
+AppData, `.gradle` → .gradle). Filter is applied before sort, resets on folder
+navigation, and is not persisted across sessions. Direct children が多いフォルダで
+目的項目を探しやすくなった。v0.3.0 daily-use に向けた軽量検索の第一歩。
+
 ---
 
 ## 9. Decision (current assessment)

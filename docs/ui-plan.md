@@ -1341,11 +1341,32 @@ Direct children panel に sort control を追加した。
 - virtual scroll 未実装
 - delete 未追加
 
-### J-5: Search or filter（小〜大）
+### J-5: Direct children name filter
 
-- パス・名前でのフィルタ
-- 最小実装: 上位リストの絞り込み（フォルダ名 prefix filter）
-- 本格実装: TreeView 内でのハイライト（後フェーズ候補）
+**STATUS: COMPLETE — 2026-05-25**
+
+Direct children panel に name/path filter を追加した。
+
+#### 変更内容
+
+- `DirectChildrenPanel` に `filterText` local state を追加
+- `useEffect` で `dir.record_index` 変化時に `filterText` をクリア（フォルダ移動時リセット）
+- filter → sort のパイプライン: `children → filter(name/path) → sortDirectChildren → render`
+- case-insensitive 部分一致（`node.name` と `node.path` の両方を対象）
+- header の count 表示を `N of M` 形式に対応（フィルタ中のみ）
+- no-result 時: `No direct children match "…".` を表示
+- `.direct-children-filter-row` の filter input row を header 直後に追加
+  - `Filter children...` placeholder
+  - フィルタ中は `×` clear ボタンを表示
+- localStorage 保存なし（フィルタは一時操作のため）
+- 全ファイル検索 / global search は未実装
+
+#### 制約確認
+
+- Rust core / Tauri command 変更なし
+- 全ドライブ横断検索・全ファイル検索は未実装
+- virtual scroll 未実装
+- delete 未追加
 
 ### J-6: Sorting polish（小）
 
