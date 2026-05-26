@@ -2621,6 +2621,12 @@ where
     }
     let io_elapsed = io_start.elapsed();
     unsafe { windows::Win32::Foundation::CloseHandle(info.handle).ok(); }
+    eprintln!(
+        "[perf-front-detail] read_mft={} ms  mft_bytes={}  extents={}",
+        io_elapsed.as_millis(),
+        info.mft_size,
+        info.extents.len(),
+    );
 
     let record_size   = info.bytes_per_record as usize;
     let total_records = info.mft_size as usize / record_size;
@@ -2815,6 +2821,13 @@ where
         });
 
     let parse_elapsed = parse_start.elapsed();
+    eprintln!(
+        "[perf-front-detail] parse={} ms  flat_entries={}  ext_entries={}  total_records={}",
+        parse_elapsed.as_millis(),
+        flat_entries.len(),
+        ext_entries.len(),
+        total_records,
+    );
 
     progress("building_tree", total_start.elapsed().as_millis() as u64);
     let tree_start = std::time::Instant::now();
@@ -2837,6 +2850,7 @@ where
     }
     let base_idx_to_group: HashMap<u64, &BaseGroupC> =
         base_groups.iter().map(|(&k, v)| (k, v)).collect();
+    let base_group_ms = tree_start.elapsed().as_millis();
 
     struct TreeNodeC {
         frn:                       u64,
@@ -2911,6 +2925,7 @@ where
             children: Vec::new(), is_orphan: false,
         });
     }
+    let arena_build_ms = tree_start.elapsed().as_millis() - base_group_ms;
 
     let mut child_parent: Vec<(usize, usize)> = Vec::new();
     let mut orphan_flags: Vec<bool>            = vec![false; arena.len()];
@@ -2935,8 +2950,18 @@ where
     for (ci, pi) in child_parent {
         arena[pi].children.push(ci);
     }
+    let child_link_ms = tree_start.elapsed().as_millis() - base_group_ms - arena_build_ms;
 
     let tree_build_elapsed = tree_start.elapsed();
+    eprintln!(
+        "[perf-front-detail] tree_build={} ms  base_groups={} ms  arena_build={} ms  child_link={} ms  arena_size={}  orphans={}",
+        tree_build_elapsed.as_millis(),
+        base_group_ms,
+        arena_build_ms,
+        child_link_ms,
+        arena.len(),
+        orphan_count,
+    );
 
     progress("aggregating_sizes", total_start.elapsed().as_millis() as u64);
     let agg_start = std::time::Instant::now();
