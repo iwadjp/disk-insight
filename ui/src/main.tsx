@@ -613,13 +613,23 @@ function TreeView({
 
 function SelectedFolderCard({
   dir,
+  reclaimable,
+  reclaimableLoading,
+  reclaimableError,
   onOpenExplorer,
   onCopyError,
 }: {
   dir: DirectoryEntry;
+  reclaimable: ReclaimableSummary | null;
+  reclaimableLoading: boolean;
+  reclaimableError: string | null;
   onOpenExplorer: (path: string) => void;
   onCopyError: (msg: string) => void;
 }) {
+  const confidenceClass = reclaimable
+    ? `confidence-badge confidence-badge--${reclaimable.confidence.toLowerCase()}`
+    : "confidence-badge";
+
   return (
     <div className="selected-folder-card">
       <div className="selected-folder-header">
@@ -643,6 +653,34 @@ function SelectedFolderCard({
         </span>
         <span>Children: <strong>{formatNumber(dir.child_count)}</strong></span>
       </div>
+      {(reclaimableLoading || reclaimable !== null || reclaimableError !== null) && (
+        <div className="reclaimable-section">
+          {reclaimableLoading ? (
+            <div className="reclaimable-loading">Estimated reclaimable: loading…</div>
+          ) : reclaimableError ? (
+            <div className="reclaimable-unavailable">Reclaimable estimate unavailable</div>
+          ) : reclaimable && (
+            <>
+              <div className="reclaimable-header">
+                <span className="reclaimable-title">Estimated reclaimable</span>
+                <span className={confidenceClass}>{reclaimable.confidence}</span>
+              </div>
+              <div className={reclaimable.not_recommended
+                ? "reclaimable-estimate reclaimable-estimate--not-recommended"
+                : "reclaimable-estimate"}>
+                {reclaimable.not_recommended
+                  ? "Not recommended as deletion target"
+                  : formatBytes(reclaimable.wof_adjusted_bytes)}
+              </div>
+              <div className="reclaimable-range">
+                Range: {formatBytes(reclaimable.range_lower)} – {formatBytes(reclaimable.range_upper)}
+              </div>
+              <div className="reclaimable-basis">{reclaimable.basis}</div>
+              <div className="reclaimable-caution">{reclaimable.caution}</div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1511,17 +1549,12 @@ function App() {
               {selectedDir && (
                 <SelectedFolderCard
                   dir={selectedDir}
+                  reclaimable={reclaimable}
+                  reclaimableLoading={reclaimableLoading}
+                  reclaimableError={reclaimableError}
                   onOpenExplorer={handleOpenExplorer}
                   onCopyError={handleCopyError}
                 />
-              )}
-              {/* Step 4 debug: reclaimable state indicator (replaced by real UI in Step 5) */}
-              {sourceKind === "live" && selectedDir && (
-                <div style={{ fontSize: "0.75rem", color: "#888", padding: "2px 8px" }}>
-                  {reclaimableLoading && "reclaimable: loading…"}
-                  {reclaimableError && `reclaimable error: ${reclaimableError}`}
-                  {reclaimable && !reclaimableLoading && `reclaimable: ${reclaimable.confidence} confidence`}
-                </div>
               )}
               {selectedDir && (
                 <DirectChildrenPanel

@@ -732,6 +732,89 @@ tbody tr:last-child td {
   font-style: italic;
 }
 
+.reclaimable-section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #e8edf1;
+}
+
+.reclaimable-loading,
+.reclaimable-unavailable {
+  font-size: 12px;
+  color: #8a97a4;
+  font-style: italic;
+}
+
+.reclaimable-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.reclaimable-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #465563;
+}
+
+.reclaimable-estimate {
+  font-size: 18px;
+  font-weight: 700;
+  color: #17202a;
+  margin-bottom: 3px;
+}
+
+.reclaimable-estimate--not-recommended {
+  font-size: 13px;
+  font-weight: 600;
+  color: #7a4800;
+}
+
+.reclaimable-range {
+  font-size: 12px;
+  color: #5e6b78;
+  margin-bottom: 5px;
+}
+
+.reclaimable-basis {
+  font-size: 12px;
+  color: #5e6b78;
+  margin-bottom: 4px;
+}
+
+.reclaimable-caution {
+  font-size: 11px;
+  color: #7a4800;
+  font-style: italic;
+}
+
+.confidence-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
+.confidence-badge--high {
+  background: #e6f4ea;
+  color: #1a6b30;
+}
+
+.confidence-badge--medium {
+  background: #fef3e2;
+  color: #7a4800;
+}
+
+.confidence-badge--low {
+  background: #fde8e8;
+  color: #8b1c1c;
+}
+
 .empty-note {
   padding: 18px 16px;
   margin: 0;
