@@ -2463,9 +2463,90 @@ pub struct JsonTreeOutput {
 // lookups. `output` is what the UI receives as the scan result; `children_map`
 // indexes every directory's full child list (sorted by subtree_size desc, name
 // asc) so the get_children command can answer without re-scanning the MFT.
+// `wof_size_map` stores (subtree_size, wof_adjusted_subtree_size) per directory
+// record_index so Tauri commands can answer reclaimable queries without re-scanning.
 pub struct MftTreeModel {
     pub output:       JsonTreeOutput,
     pub children_map: std::collections::HashMap<u64, Vec<JsonTreeNode>>,
+    pub wof_size_map: std::collections::HashMap<u64, (u64, u64)>,
+}
+
+/// Path-based reclaimable space estimate. Computed from current and wof_adjusted
+/// subtree sizes plus rule-based path classification. Diagnostic only — no
+/// delete or cleanup operation is implied or performed.
+#[derive(serde::Serialize, Clone, Debug)]
+pub struct ReclaimableSummary {
+    pub current_bytes:      u64,
+    pub wof_adjusted_bytes: u64,
+    pub range_lower:        u64,
+    pub range_upper:        u64,
+    pub confidence:         String,
+    pub basis:              String,
+    pub caution:            String,
+    pub not_recommended:    bool,
+}
+
+/// Compute a reclaimable size estimate for a directory path.
+///
+/// `path` should be the normalized (lowercase) absolute path.
+/// `wof_ratio` = abs(current - wof_adjusted) / current (0.0 when current == 0).
+/// `main_wof_child` is the path of the top WOF-delta contributing child directory,
+/// if available; used to build a specific basis string.
+pub fn compute_reclaimable_summary(
+    path: &str,
+    current: u64,
+    wof_adjusted: u64,
+    wof_ratio: f64,
+    main_wof_child: Option<&str>,
+) -> ReclaimableSummary {
+    let lower_path = path.to_ascii_lowercase();
+    let confidence = if lower_path.contains("\\windows")
+        || lower_path.contains("\\winsxs")
+        || lower_path.contains("\\servicing")
+        || lower_path.contains("\\assembly")
+    {
+        "Low"
+    } else if wof_ratio < 0.02 && !lower_path.contains("program files") {
+        "High"
+    } else {
+        "Medium"
+    };
+    let drive_letter = lower_path.chars().next().unwrap_or('c');
+    let users_prefix = format!("{}:\\users", drive_letter);
+    let is_users = lower_path.starts_with(&users_prefix);
+    let basis = if confidence == "Low" && lower_path.contains("\\windows") {
+        "Windows special accounting; hardlinks, WOF, and component store may affect actual reclaimed space".to_string()
+    } else if is_users && wof_ratio < 0.02 {
+        "current and wof_adjusted are close; ordinary user data subtree".to_string()
+    } else if wof_ratio < 0.02 {
+        "current and wof_adjusted are close; WOF delta is small".to_string()
+    } else if let Some(child_path) = main_wof_child {
+        format!("WOF-adjusted estimate; WOF delta mainly from {}", child_path)
+    } else {
+        "WOF-adjusted estimate; no single child directory dominates the WOF delta".to_string()
+    };
+    let caution = if lower_path.contains("\\windows") {
+        "Use Windows cleanup tools; do not manually delete Windows system folders.".to_string()
+    } else if lower_path.contains("program files") {
+        "Use app uninstall / Windows settings, not manual delete.".to_string()
+    } else if is_users {
+        "Review files carefully; do not delete user profile root blindly.".to_string()
+    } else {
+        "This is an estimate; verify before deleting or moving data.".to_string()
+    };
+    let not_recommended = confidence == "Low" && lower_path.contains("\\windows");
+    let range_lower = wof_adjusted.min(current);
+    let range_upper = wof_adjusted.max(current);
+    ReclaimableSummary {
+        current_bytes:      current,
+        wof_adjusted_bytes: wof_adjusted,
+        range_lower,
+        range_upper,
+        confidence:         confidence.to_string(),
+        basis,
+        caution,
+        not_recommended,
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2758,15 +2839,16 @@ where
         base_groups.iter().map(|(&k, v)| (k, v)).collect();
 
     struct TreeNodeC {
-        frn:              u64,
-        parent_frn:       u64,
-        name:             String,
-        is_dir:           bool,
-        final_alloc:      u64,
-        subtree_size:     u64,
-        direct_file_size: u64,
-        children:         Vec<usize>,
-        is_orphan:        bool,
+        frn:                       u64,
+        parent_frn:                u64,
+        name:                      String,
+        is_dir:                    bool,
+        final_alloc:               u64,
+        subtree_size:              u64,
+        wof_adjusted_subtree_size: u64,
+        direct_file_size:          u64,
+        children:                  Vec<usize>,
+        is_orphan:                 bool,
     }
 
     let mut arena: Vec<TreeNodeC> = Vec::with_capacity(flat_entries.len());
@@ -2809,12 +2891,23 @@ where
             current_final_alloc
         };
 
+        let wof_adjusted_alloc = if !e.is_dir
+            && wof_reparse
+            && combined_has_wof_stream
+            && combined_wof_alloc > 0
+        {
+            combined_wof_alloc
+        } else {
+            current_final_alloc
+        };
         let idx = arena.len();
         frn_to_idx.insert(frn, idx);
         arena.push(TreeNodeC {
             frn, parent_frn: e.parent_frn, name: e.name.clone(),
             is_dir: e.is_dir, final_alloc,
-            subtree_size: final_alloc, direct_file_size: 0,
+            subtree_size: final_alloc,
+            wof_adjusted_subtree_size: wof_adjusted_alloc,
+            direct_file_size: 0,
             children: Vec::new(), is_orphan: false,
         });
     }
@@ -2865,13 +2958,16 @@ where
     }
 
     for &idx in &order {
-        let (subtree, pfn, frn) = {
+        let (subtree, wof_subtree, pfn, frn) = {
             let n = &arena[idx];
-            (n.subtree_size, n.parent_frn, n.frn)
+            (n.subtree_size, n.wof_adjusted_subtree_size, n.parent_frn, n.frn)
         };
         if pfn != frn {
             if let Some(&pi) = frn_to_idx.get(&pfn) {
-                arena[pi].subtree_size = arena[pi].subtree_size.saturating_add(subtree);
+                arena[pi].subtree_size =
+                    arena[pi].subtree_size.saturating_add(subtree);
+                arena[pi].wof_adjusted_subtree_size =
+                    arena[pi].wof_adjusted_subtree_size.saturating_add(wof_subtree);
             }
         }
     }
@@ -3003,6 +3099,12 @@ where
     }
     let children_map_elapsed = children_map_start.elapsed();
 
+    let mut wof_size_map: HashMap<u64, (u64, u64)> = HashMap::with_capacity(dir_count_hint);
+    for i in 0..arena.len() {
+        if !arena[i].is_dir { continue; }
+        wof_size_map.insert(arena[i].frn, (arena[i].subtree_size, arena[i].wof_adjusted_subtree_size));
+    }
+
     // Root children: direct children of the NTFS root directory (FRN 5).
     // Reuses the children_map entry; truncated to 200 for the embedded JSON.
     let root_children: Vec<JsonTreeNode> = children_map
@@ -3034,7 +3136,7 @@ where
 
     let output = JsonTreeOutput { summary, top_directories, top_files, root_children };
     progress("done", total_elapsed.as_millis() as u64);
-    Ok(MftTreeModel { output, children_map })
+    Ok(MftTreeModel { output, children_map, wof_size_map })
 }
 
 pub fn build_mft_tree_model(drive: char, top_n: usize) -> Result<MftTreeModel> {
@@ -3946,59 +4048,25 @@ fn print_diag_with_wof_tree(drive: char, mode: DiagTreeMode) -> Result<()> {
         };
         println!("  Recommended comparison: {}", summary_comparison);
         println!();
-        let confidence = if lower_path.contains("\\windows")
-            || lower_path.contains("\\winsxs")
-            || lower_path.contains("\\servicing")
-            || lower_path.contains("\\assembly")
-        {
-            "Low"
-        } else if wof_ratio < 0.02
-            && !lower_path.contains("program files")
-        {
-            "High"
-        } else {
-            "Medium"
-        };
-        let main_delta_path = top_delta_children.first()
-            .map(|&idx| reconstruct(idx));
-        let reclaim_basis = if confidence == "Low" && lower_path.contains("\\windows") {
-            "Windows special accounting; hardlinks, WOF, and component store may affect actual reclaimed space".to_string()
-        } else if lower_path.starts_with(&format!("{}:\\users", drive.to_ascii_lowercase()))
-            && wof_ratio < 0.02
-        {
-            "current and wof_adjusted are close; ordinary user data subtree".to_string()
-        } else if wof_ratio < 0.02 {
-            "current and wof_adjusted are close; WOF delta is small".to_string()
-        } else if let Some(path) = main_delta_path.as_deref() {
-            format!("WOF-adjusted estimate; WOF delta mainly from {}", path)
-        } else {
-            "WOF-adjusted estimate; no single child directory dominates the WOF delta".to_string()
-        };
-        let reclaim_caution = if lower_path.contains("\\windows") {
-            "Use Windows cleanup tools; do not manually delete Windows system folders."
-        } else if lower_path.contains("program files") {
-            "Use app uninstall / Windows settings, not manual delete."
-        } else if lower_path.starts_with(&format!("{}:\\users", drive.to_ascii_lowercase())) {
-            "Review files carefully; do not delete user profile root blindly."
-        } else {
-            "This is an estimate; verify before deleting or moving data."
-        };
-        let range_lower = adjusted.min(current);
-        let range_upper = adjusted.max(current);
+        let main_delta_path = top_delta_children.first().map(|&idx| reconstruct(idx));
+        let rec = compute_reclaimable_summary(
+            &lower_path, current, adjusted, wof_ratio,
+            main_delta_path.as_deref(),
+        );
         println!("Reclaimable estimate:");
-        if confidence == "Low" && lower_path.contains("\\windows") {
+        if rec.not_recommended {
             println!("  primary estimate: not recommended as a deletion target");
         } else {
-            println!("  primary estimate: {}", fmt_bytes(adjusted));
+            println!("  primary estimate: {}", fmt_bytes(rec.wof_adjusted_bytes));
         }
         println!(
             "  reference range: {} - {}",
-            fmt_bytes(range_lower),
-            fmt_bytes(range_upper)
+            fmt_bytes(rec.range_lower),
+            fmt_bytes(rec.range_upper)
         );
-        println!("  confidence: {}", confidence);
-        println!("  basis: {}", reclaim_basis);
-        println!("  caution: {}", reclaim_caution);
+        println!("  confidence: {}", rec.confidence);
+        println!("  basis: {}", rec.basis);
+        println!("  caution: {}", rec.caution);
         println!("  note: diagnostic estimate only; no delete or cleanup operation is performed.");
         println!();
         println!("Estimates:");
