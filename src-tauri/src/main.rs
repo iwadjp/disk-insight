@@ -1,4 +1,8 @@
-use disk_insight::mft_probe::{build_mft_tree_model_with_policy_progress, JsonTreeNode, JsonTreeOutput, StoragePolicy};
+use disk_insight::mft_probe::{
+    build_mft_tree_model_with_policy_progress,
+    compute_reclaimable_summary,
+    JsonTreeNode, JsonTreeOutput, ReclaimableSummary, StoragePolicy,
+};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
@@ -36,12 +40,13 @@ fn phase_message(phase: &str) -> &'static str {
     }
 }
 
-// Live scan cache. scan_drive populates this on success; get_children reads
-// from it. None means "no live scan has run in this session" (e.g. only the
-// embedded sample has been loaded, or the app just started).
+// Live scan cache. scan_drive populates this on success; get_children and
+// get_reclaimable_summary read from it. None means "no live scan has run in
+// this session" (e.g. only the embedded sample has been loaded).
 #[derive(Default)]
 struct AppState {
     children_map: Mutex<Option<HashMap<u64, Vec<JsonTreeNode>>>>,
+    wof_size_map: Mutex<Option<HashMap<u64, (u64, u64)>>>,
 }
 
 #[tauri::command]
@@ -117,20 +122,33 @@ async fn scan_drive(
         model.output.top_files.len()
     );
 
+    let output       = model.output;
+    let children_map = model.children_map;
+    let wof_size_map = model.wof_size_map;
+
     {
         let lock_start = std::time::Instant::now();
-        let mut guard = state
-            .children_map
-            .lock()
-            .map_err(|e| format!("state lock poisoned: {e}"))?;
-        *guard = Some(model.children_map);
+        {
+            let mut guard = state
+                .children_map
+                .lock()
+                .map_err(|e| format!("state lock poisoned: {e}"))?;
+            *guard = Some(children_map);
+        }
+        {
+            let mut guard = state
+                .wof_size_map
+                .lock()
+                .map_err(|e| format!("state lock poisoned: {e}"))?;
+            *guard = Some(wof_size_map);
+        }
         eprintln!("[perf-tauri] state_lock  {} ms", lock_start.elapsed().as_millis());
     }
 
     let cmd_ms = cmd_start.elapsed().as_millis();
     eprintln!("[perf-tauri] scan_drive return  total={} ms", cmd_ms);
 
-    Ok(model.output)
+    Ok(output)
 }
 
 #[tauri::command]
@@ -146,6 +164,30 @@ fn get_children(
         Some(map) => Ok(map.get(&parent_record_index).cloned().unwrap_or_default()),
         None => Err("No live scan data is loaded. Run Scan first.".to_string()),
     }
+}
+
+#[tauri::command]
+fn get_reclaimable_summary(
+    state: State<'_, AppState>,
+    record_index: u64,
+    path: String,
+    _drive: String,
+) -> Result<ReclaimableSummary, String> {
+    let guard = state
+        .wof_size_map
+        .lock()
+        .map_err(|e| format!("state lock poisoned: {e}"))?;
+    let map = guard.as_ref().ok_or("No live scan data. Run Scan first.")?;
+    let (current, wof_adjusted) = map
+        .get(&record_index)
+        .copied()
+        .ok_or_else(|| format!("record_index {} not found in wof_size_map", record_index))?;
+    let wof_ratio = if current > 0 {
+        (current as f64 - wof_adjusted as f64).abs() / current as f64
+    } else {
+        0.0
+    };
+    Ok(compute_reclaimable_summary(&path, current, wof_adjusted, wof_ratio, None))
 }
 
 #[tauri::command]
@@ -217,6 +259,7 @@ fn main() {
             open_in_explorer,
             select_in_explorer,
             get_children,
+            get_reclaimable_summary,
             list_drives,
         ])
         .run(tauri::generate_context!())

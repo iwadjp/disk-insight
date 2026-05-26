@@ -79,6 +79,17 @@ type ScanProgress = {
   elapsed_ms: number;
 };
 
+type ReclaimableSummary = {
+  current_bytes:      number;
+  wof_adjusted_bytes: number;
+  range_lower:        number;
+  range_upper:        number;
+  confidence:         "High" | "Medium" | "Low" | string;
+  basis:              string;
+  caution:            string;
+  not_recommended:    boolean;
+};
+
 type TauriWindow = Window & {
   __TAURI__?: unknown;
   __TAURI_INTERNALS__?: unknown;
@@ -202,6 +213,17 @@ async function getChildren(parentRecordIndex: number): Promise<TreeNode[]> {
     throw new Error("Children API is available only in the Tauri desktop app.");
   }
   return invoke<TreeNode[]>("get_children", { parentRecordIndex });
+}
+
+async function getReclaimableSummary(
+  recordIndex: number,
+  path: string,
+  drive: string,
+): Promise<ReclaimableSummary> {
+  if (!isTauriRuntime()) {
+    throw new Error("Reclaimable summary is available only in the Tauri desktop app.");
+  }
+  return invoke<ReclaimableSummary>("get_reclaimable_summary", { recordIndex, path, drive });
 }
 
 function treeNodeToDirEntry(node: TreeNode): DirectoryEntry {
@@ -973,6 +995,9 @@ function App() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [selectedChildrenLoading, setSelectedChildrenLoading] = useState(false);
   const [selectedChildrenError, setSelectedChildrenError] = useState<string | null>(null);
+  const [reclaimable, setReclaimable] = useState<ReclaimableSummary | null>(null);
+  const [reclaimableLoading, setReclaimableLoading] = useState(false);
+  const [reclaimableError, setReclaimableError] = useState<string | null>(null);
 
   const visibleRows = useMemo(
     () => buildVisibleRows(data?.root_children ?? [], expandedIds, childrenByParent, childrenErrors),
@@ -1035,6 +1060,34 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDir, sourceKind]);
 
+  useEffect(() => {
+    if (!selectedDir || !data || sourceKind !== "live") {
+      setReclaimable(null);
+      setReclaimableError(null);
+      setReclaimableLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setReclaimableLoading(true);
+    setReclaimableError(null);
+    getReclaimableSummary(selectedDir.record_index, selectedDir.path, data.summary.drive)
+      .then((summary) => {
+        if (cancelled) return;
+        console.log("[reclaimable-ui] received", summary.confidence, summary.basis);
+        setReclaimable(summary);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setReclaimable(null);
+        setReclaimableError(String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setReclaimableLoading(false);
+      });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDir?.record_index, selectedDir?.path, data?.summary.drive, sourceKind]);
+
   function runLoad(
     loader: () => Promise<DiskInsightOutput>,
     msg: string,
@@ -1062,6 +1115,9 @@ function App() {
     setTreeError(null);
     setSelectedChildrenLoading(false);
     setSelectedChildrenError(null);
+    setReclaimable(null);
+    setReclaimableLoading(false);
+    setReclaimableError(null);
     loader()
       .then((json) => {
         if (isScan && scanTimingRef.current) {
@@ -1458,6 +1514,14 @@ function App() {
                   onOpenExplorer={handleOpenExplorer}
                   onCopyError={handleCopyError}
                 />
+              )}
+              {/* Step 4 debug: reclaimable state indicator (replaced by real UI in Step 5) */}
+              {sourceKind === "live" && selectedDir && (
+                <div style={{ fontSize: "0.75rem", color: "#888", padding: "2px 8px" }}>
+                  {reclaimableLoading && "reclaimable: loading…"}
+                  {reclaimableError && `reclaimable error: ${reclaimableError}`}
+                  {reclaimable && !reclaimableLoading && `reclaimable: ${reclaimable.confidence} confidence`}
+                </div>
               )}
               {selectedDir && (
                 <DirectChildrenPanel
