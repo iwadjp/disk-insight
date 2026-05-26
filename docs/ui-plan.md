@@ -1965,3 +1965,16 @@ C:\Users
 - 右クリックメニュー
 - NTFS 判定・容量 / 空き領域表示
 - WinSxS / hardlink / WOF 精度改善
+
+### M-3b: Per-path diagnostic minimal implementation - COMPLETE (2026-05-26)
+
+M-3b adds the CLI-only diagnostic mode `--diag-path <path>`.
+
+The mode reports current vs WOF-adjusted estimates, WOF evidence,
+hardlink/multi-name/reparse/sparse/compressed counts, top child directories, top
+WOF-impact files, and candidate classifications for a specified path.
+
+This is not a UI feature yet. It is a diagnostic backend that can later feed an
+"Explain size" action. Normal UI values, storage policy behavior, JSON field
+names, and Tauri scan behavior remain unchanged. Correction logic is still not
+implemented.

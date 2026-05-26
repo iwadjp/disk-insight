@@ -358,3 +358,51 @@ Proceed to M-3b with a diagnostic-only `--diag-path <path>` implementation.
 Do not implement correction logic yet. The immediate goal is explanation:
 identify the likely path-specific cause of a size difference and show the
 evidence in one command.
+
+---
+
+## 11. M-3b Implementation Result
+
+M-3b added a diagnostic-only CLI mode:
+
+```powershell
+.\target\release\disk-insight.exe --diag-path "C:\Program Files"
+```
+
+`--diag-path` infers the drive from the absolute local path. It also accepts
+`--drive` when the drive matches the path. A mismatch, such as `--drive D` with
+`C:\Windows`, is an error. UNC paths are intentionally unsupported in M-3b.
+
+The minimal implementation reports:
+
+- normalized path and MFT record index
+- subtree `current` estimate
+- subtree `wof_adjusted` estimate
+- current-to-WOF delta and ratio
+- descendant record / file / directory counts
+- WOF file count, current WOF alloc total, and WOF stream alloc total
+- hardlink suspect and multi-name counts with current/adjusted totals
+- reparse point count
+- sparse/compressed record count
+- top 10 child directories by current estimate
+- top 10 child directories by WOF delta
+- top 10 files by WOF delta
+- rule-based classification candidates
+- comparison notes and diagnostic-only caveats
+
+M-3b does not read Explorer or WizTree values. It therefore cannot decide exact
+agreement or disagreement with those tools by itself. The classification output
+is deliberately phrased as candidates.
+
+Not available in M-3b:
+
+- JSON or CSV output for `--diag-path`
+- UI "Explain size" integration
+- manual Explorer/WizTree value input
+- hardlink deduplication
+- component-store accounting correction
+- WinSxS special correction
+- production WOF policy change
+
+The normal CLI, JSON output, UI values, and existing diagnostic modes remain on
+their existing code paths.

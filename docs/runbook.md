@@ -376,6 +376,27 @@ not applied.
 .\target\release\disk-insight.exe --diag-winsxs
 ```
 
+### `--diag-path <path>` - per-path discrepancy diagnostics
+
+```powershell
+.\target\release\disk-insight.exe --diag-path "C:\Program Files"
+.\target\release\disk-insight.exe --diag-path "C:\Program Files (x86)"
+.\target\release\disk-insight.exe --diag-path "C:\Windows"
+.\target\release\disk-insight.exe --diag-path "C:\Users"
+```
+
+M-3b adds `--diag-path` as a diagnostic-only explanation aid for a specific
+local path. It reports current and WOF-adjusted estimates, WOF evidence,
+hardlink and multi-name suspects, reparse/sparse/compressed counts, top child
+directories by current estimate and WOF delta, top WOF-impact files, and
+candidate classifications.
+
+The path must be an absolute local path such as `C:\Windows`; UNC paths are not
+supported in M-3b. If `--drive` is also supplied, it must match the path drive.
+
+Normal output is unchanged. `--diag-path` does not implement hardlink dedup,
+WinSxS/component-store correction, or production WOF correction.
+
 > Redirect with `cmd /c` for UTF-8 output:
 > `cmd /c ".\target\release\disk-insight.exe --diag-pfx86 > .\work\pfx86_diag.txt"`
 

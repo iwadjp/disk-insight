@@ -1131,3 +1131,26 @@ delete behavior.
 
 **v0.3.0-daily-use: HOLD continues.** The next trust improvement is
 explainability for specific paths, not another wording-only change.
+
+---
+
+## 27. M-3b: `--diag-path` minimal implementation - COMPLETE (2026-05-26)
+
+M-3b adds a diagnostic-only CLI mode for a specified path:
+
+```powershell
+.\target\release\disk-insight.exe --diag-path "C:\Program Files"
+```
+
+This moves the size-trust work toward the core requirement: when disk-insight
+differs from Explorer or WizTree, it should provide evidence for why. The mode
+reports current vs WOF-adjusted estimates, WOF impact, hardlink and multi-name
+signals, reparse/sparse/compressed counts, top child directories, top WOF-impact
+files, and candidate classifications.
+
+This is still not a correction feature. It does not implement hardlink dedup,
+WinSxS/component-store correction, WOF production policy changes, delete, or UI
+integration.
+
+**v0.3.0-daily-use: HOLD continues.** The direction is now explanation-first:
+show why a path is suspicious before changing normal output.

@@ -495,3 +495,19 @@ and rule-based classification candidates.
 See `docs/diag-path-design.md`. This is still diagnosis, not correction:
 normal output, JSON, UI values, WOF default policy, hardlink accounting, and
 WinSxS accounting remain unchanged.
+
+### M-3b: `--diag-path` minimal implementation
+
+M-3b implements the first diagnostic-only path explanation command:
+
+```powershell
+.\target\release\disk-insight.exe --diag-path "C:\Windows"
+```
+
+The command reports current and WOF-adjusted subtree estimates, WOF totals,
+hardlink and multi-name signals, reparse/sparse/compressed counts, top child
+directories, top WOF-impact files, and candidate classifications.
+
+This is useful evidence, not a correction. It does not claim exact Explorer or
+WizTree parity, and it does not implement hardlink deduplication,
+WinSxS/component-store accounting, or WOF default policy changes.

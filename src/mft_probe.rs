@@ -3199,11 +3199,16 @@ pub fn print_probe7_json_top_with_policy(
 // investigation. Targets three known-suspect subtrees and reports WOF/reparse,
 // compressed/sparse, hardlink/multi-name signals plus per-file attributes.
 // Size policy is unchanged — this is observation only, no correction is applied.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum DiagTreeMode {
     Pfx86,
     WofGlobal,
     WinSxS,
+    Path {
+        original_path: String,
+        normalized_path: String,
+        segments: Vec<String>,
+    },
 }
 
 fn print_diag_with_wof_tree(drive: char, mode: DiagTreeMode) -> Result<()> {
@@ -3212,10 +3217,11 @@ fn print_diag_with_wof_tree(drive: char, mode: DiagTreeMode) -> Result<()> {
     use windows::Win32::Storage::FileSystem::{ReadFile, SetFilePointerEx, FILE_BEGIN};
 
     let info = get_mft_info(drive)?;
-    let diag_name = match mode {
+    let diag_name = match &mode {
         DiagTreeMode::Pfx86 => "diag-pfx86",
         DiagTreeMode::WofGlobal => "diag-wof-global",
         DiagTreeMode::WinSxS => "diag-winsxs",
+        DiagTreeMode::Path { .. } => "diag-path",
     };
     eprintln!("{}: drive={}  $MFT {} MB  {} extents",
         diag_name,
@@ -3678,6 +3684,22 @@ fn print_diag_with_wof_tree(drive: char, mode: DiagTreeMode) -> Result<()> {
         Some(cur)
     };
 
+    let find_by_string_segments = |segments: &[String]| -> Option<usize> {
+        let root_idx = *frn_to_idx.get(&5)?;
+        let mut cur = root_idx;
+        for seg in segments {
+            let mut found: Option<usize> = None;
+            for &ci in &arena[cur].children {
+                if arena[ci].is_dir && arena[ci].name.eq_ignore_ascii_case(seg) {
+                    found = Some(ci);
+                    break;
+                }
+            }
+            cur = found?;
+        }
+        Some(cur)
+    };
+
     let collect_descendants = |start_idx: usize| -> Vec<usize> {
         let mut out: Vec<usize> = Vec::new();
         let mut stack: Vec<usize> = vec![start_idx];
@@ -3717,6 +3739,233 @@ fn print_diag_with_wof_tree(drive: char, mode: DiagTreeMode) -> Result<()> {
         let abs = bytes.unsigned_abs() as u64;
         format!("{}{}", sign, fmt_bytes(abs))
     };
+
+    if let DiagTreeMode::Path { original_path, normalized_path, segments } = &mode {
+        let target_idx = find_by_string_segments(segments)
+            .with_context(|| format!("--diag-path target not found in MFT tree: {}", normalized_path))?;
+        let target = &arena[target_idx];
+        let descendants = collect_descendants(target_idx);
+
+        let file_adjusted_alloc = |idx: usize| -> u64 {
+            let n = &arena[idx];
+            if !n.is_dir && n.has_wof_stream && n.wof_stream_alloc > 0 {
+                n.wof_stream_alloc
+            } else {
+                n.final_alloc
+            }
+        };
+        let is_reparse = |idx: usize| -> bool {
+            let n = &arena[idx];
+            n.reparse_tag != 0 || (n.file_attrs & 0x0400) != 0
+        };
+        let is_sparse_or_compressed = |idx: usize| -> bool {
+            let n = &arena[idx];
+            (n.file_attrs & 0x0200) != 0
+                || (n.file_attrs & 0x0800) != 0
+                || (n.data_flags & 0x8000) != 0
+                || (n.data_flags & 0x0001) != 0
+        };
+
+        let records = descendants.len();
+        let files = descendants.iter().filter(|&&i| !arena[i].is_dir).count();
+        let directories = descendants.iter().filter(|&&i| arena[i].is_dir).count();
+        let hardlink_suspect_count = descendants.iter()
+            .filter(|&&i| !arena[i].is_dir && arena[i].hard_link_count > 1)
+            .count();
+        let multi_name_count = descendants.iter()
+            .filter(|&&i| !arena[i].is_dir && arena[i].file_name_attr_count > 1)
+            .count();
+        let reparse_count = descendants.iter().filter(|&&i| is_reparse(i)).count();
+        let sparse_compressed_count = descendants.iter()
+            .filter(|&&i| !arena[i].is_dir && is_sparse_or_compressed(i))
+            .count();
+        let hardlink_current_total: u64 = descendants.iter()
+            .filter(|&&i| !arena[i].is_dir && arena[i].hard_link_count > 1)
+            .map(|&i| arena[i].final_alloc)
+            .sum();
+        let hardlink_adjusted_total: u64 = descendants.iter()
+            .filter(|&&i| !arena[i].is_dir && arena[i].hard_link_count > 1)
+            .map(|&i| file_adjusted_alloc(i))
+            .sum();
+        let multi_name_current_total: u64 = descendants.iter()
+            .filter(|&&i| !arena[i].is_dir && arena[i].file_name_attr_count > 1)
+            .map(|&i| arena[i].final_alloc)
+            .sum();
+        let multi_name_adjusted_total: u64 = descendants.iter()
+            .filter(|&&i| !arena[i].is_dir && arena[i].file_name_attr_count > 1)
+            .map(|&i| file_adjusted_alloc(i))
+            .sum();
+        let current = target.subtree_size;
+        let adjusted = target.wof_adjusted_subtree_size;
+        let delta = current as i128 - adjusted as i128;
+        let delta_ratio = if current > 0 {
+            delta as f64 / current as f64 * 100.0
+        } else {
+            0.0
+        };
+        let fmt_short = |bytes: u64| -> String {
+            format!("{:.3} GB", bytes as f64 / 1_073_741_824.0)
+        };
+
+        println!("=== diag-path ===");
+        println!("Path: {}", original_path);
+        println!("Drive: {}", drive);
+        println!("Normalized path: {}", normalized_path);
+        println!("record_index: {}", target.frn);
+        println!();
+        println!("Estimates:");
+        println!("  current:        {}", fmt_bytes(current));
+        println!("  wof_adjusted:   {}", fmt_bytes(adjusted));
+        println!("  delta:          {}", fmt_signed_bytes(delta));
+        println!("  delta ratio:    {:.2}%", delta_ratio);
+        println!();
+        println!("Counts:");
+        println!("  records:                  {}", records);
+        println!("  files:                    {}", files);
+        println!("  directories:              {}", directories);
+        println!("  WOF files:                {}", target.wof_file_count);
+        println!("  WOF current alloc total:  {}", fmt_bytes(target.wof_current_alloc_total));
+        println!("  WOF stream alloc total:   {}", fmt_bytes(target.wof_stream_alloc_total));
+        println!("  hardlink suspects:        {}", hardlink_suspect_count);
+        println!("  hardlink suspect current: {}", fmt_bytes(hardlink_current_total));
+        println!("  hardlink suspect adjusted: {}", fmt_bytes(hardlink_adjusted_total));
+        println!("  multi-name records:       {}", multi_name_count);
+        println!("  multi-name current:       {}", fmt_bytes(multi_name_current_total));
+        println!("  multi-name adjusted:      {}", fmt_bytes(multi_name_adjusted_total));
+        println!("  reparse points:           {}", reparse_count);
+        println!("  sparse/compressed records: {}", sparse_compressed_count);
+        println!();
+
+        let mut child_dirs: Vec<usize> = arena[target_idx].children.iter()
+            .copied()
+            .filter(|&i| arena[i].is_dir)
+            .collect();
+        child_dirs.sort_unstable_by_key(|&i| std::cmp::Reverse(arena[i].subtree_size));
+        println!("Top child directories by current estimate:");
+        if child_dirs.is_empty() {
+            println!("  (none)");
+        } else {
+            for &ci in child_dirs.iter().take(10) {
+                let n = &arena[ci];
+                let child_delta = n.subtree_size as i128 - n.wof_adjusted_subtree_size as i128;
+                println!(
+                    "  current {:>10}  wof_adjusted {:>10}  delta {:>10}  {}",
+                    fmt_short(n.subtree_size),
+                    fmt_short(n.wof_adjusted_subtree_size),
+                    fmt_short(child_delta.unsigned_abs() as u64),
+                    reconstruct(ci)
+                );
+            }
+        }
+        println!();
+
+        child_dirs.sort_unstable_by_key(|&i| {
+            let n = &arena[i];
+            std::cmp::Reverse(n.subtree_size.saturating_sub(n.wof_adjusted_subtree_size))
+        });
+        println!("Top child directories by WOF delta:");
+        if child_dirs.is_empty() {
+            println!("  (none)");
+        } else {
+            for &ci in child_dirs.iter().take(10) {
+                let n = &arena[ci];
+                let child_delta = n.subtree_size as i128 - n.wof_adjusted_subtree_size as i128;
+                println!(
+                    "  delta {:>10}  current {:>10}  wof_adjusted {:>10}  WOF files {:>6}  {}",
+                    fmt_short(child_delta.unsigned_abs() as u64),
+                    fmt_short(n.subtree_size),
+                    fmt_short(n.wof_adjusted_subtree_size),
+                    n.wof_file_count,
+                    reconstruct(ci)
+                );
+            }
+        }
+        println!();
+
+        let mut wof_files: Vec<usize> = descendants.iter()
+            .copied()
+            .filter(|&i| {
+                let n = &arena[i];
+                !n.is_dir && n.has_wof_stream && n.wof_stream_alloc > 0
+            })
+            .collect();
+        wof_files.sort_unstable_by_key(|&i| {
+            let n = &arena[i];
+            std::cmp::Reverse(n.final_alloc.saturating_sub(n.wof_stream_alloc))
+        });
+        println!("Top files by WOF delta:");
+        if wof_files.is_empty() {
+            println!("  (none)");
+        } else {
+            for &fi in wof_files.iter().take(10) {
+                let n = &arena[fi];
+                let file_delta = n.final_alloc as i128 - n.wof_stream_alloc as i128;
+                println!(
+                    "  delta {:>10}  current {:>10}  wof {:>10}  link {:>3}  fn_attrs {:>2}  rec {}",
+                    fmt_short(file_delta.unsigned_abs() as u64),
+                    fmt_short(n.final_alloc),
+                    fmt_short(n.wof_stream_alloc),
+                    n.hard_link_count,
+                    n.file_name_attr_count,
+                    n.frn
+                );
+                println!("    {}", reconstruct(fi));
+            }
+        }
+        println!();
+
+        let lower_path = normalized_path.to_ascii_lowercase();
+        let file_count = files.max(1) as f64;
+        let hardlink_ratio = hardlink_suspect_count as f64 / file_count;
+        let wof_ratio = if current > 0 {
+            (current.abs_diff(adjusted)) as f64 / current as f64
+        } else {
+            0.0
+        };
+        let mut candidates: Vec<&str> = Vec::new();
+        if lower_path.contains("\\windows") {
+            candidates.push("Windows special accounting candidate");
+        }
+        if wof_ratio > 0.20 || target.wof_stream_alloc_total > 1_073_741_824 {
+            candidates.push("WOF-dominated candidate");
+        }
+        if wof_ratio < 0.05 && !lower_path.contains("\\windows") {
+            candidates.push("alignment candidate");
+        }
+        if lower_path.contains("\\windows\\winsxs")
+            || (hardlink_ratio > 0.10 && !lower_path.starts_with(&format!("{}:\\users", drive.to_ascii_lowercase())))
+        {
+            candidates.push("hardlink/component-store candidate");
+        }
+        if lower_path.contains("program files (x86)") && target.wof_file_count > 0 {
+            candidates.push("metric mix-up candidate");
+        }
+        if lower_path == format!("{}:\\program files", drive.to_ascii_lowercase())
+            || (lower_path.starts_with(&format!("{}:\\program files\\", drive.to_ascii_lowercase()))
+                && !lower_path.contains("program files (x86)"))
+        {
+            candidates.push("Explorer divergence candidate");
+        }
+        if candidates.is_empty() {
+            candidates.push("unknown / needs manual comparison");
+        }
+        println!("Classification candidates:");
+        for c in candidates {
+            println!("  - {}", c);
+        }
+        println!();
+        println!("Recommended comparison:");
+        println!("  Compare current with: allocation-oriented tool output for the same policy surface.");
+        println!("  Compare wof_adjusted with: WizTree Allocated for WOF-heavy paths when available.");
+        println!("  Do not compare with: Explorer Size when logical size and allocated-style size diverge.");
+        println!();
+        println!("Notes:");
+        println!("  - This is diagnostic only; normal output and final_alloc policy are unchanged.");
+        println!("  - WOF adjustment is an estimate and does not include hardlink or component-store deduplication.");
+        println!("  - Classification entries are candidates, not exact accuracy claims.");
+        println!("  - Explorer and WizTree reference values are not read by this command in M-3b.");
+        return Ok(());
+    }
 
     let targets: &[DiagTarget] = &[
         DiagTarget {
@@ -4594,6 +4843,45 @@ fn print_diag_with_wof_tree(drive: char, mode: DiagTreeMode) -> Result<()> {
     Ok(())
 }
 
+fn normalize_diag_path(drive: char, path: &str) -> Result<(String, Vec<String>)> {
+    let trimmed = path.trim();
+    if trimmed.starts_with("\\\\") {
+        bail!("UNC paths are not supported by --diag-path");
+    }
+
+    let bytes = trimmed.as_bytes();
+    if bytes.len() < 3
+        || !bytes[0].is_ascii_alphabetic()
+        || bytes[1] != b':'
+        || (bytes[2] != b'\\' && bytes[2] != b'/')
+    {
+        bail!("--diag-path requires an absolute local path like C:\\Windows");
+    }
+
+    let path_drive = (bytes[0] as char).to_ascii_uppercase();
+    let scan_drive = drive.to_ascii_uppercase();
+    if path_drive != scan_drive {
+        bail!(
+            "--diag-path drive {} conflicts with scan drive {}",
+            path_drive,
+            scan_drive
+        );
+    }
+
+    let rest = trimmed[3..].replace('/', "\\");
+    let segments: Vec<String> = rest
+        .split('\\')
+        .filter(|part| !part.is_empty())
+        .map(|part| part.to_string())
+        .collect();
+    let normalized = if segments.is_empty() {
+        format!("{}:\\", scan_drive)
+    } else {
+        format!("{}:\\{}", scan_drive, segments.join("\\"))
+    };
+    Ok((normalized, segments))
+}
+
 pub fn print_diag_pfx86(drive: char) -> Result<()> {
     print_diag_with_wof_tree(drive, DiagTreeMode::Pfx86)
 }
@@ -4604,4 +4892,16 @@ pub fn print_diag_wof_global(drive: char) -> Result<()> {
 
 pub fn print_diag_winsxs(drive: char) -> Result<()> {
     print_diag_with_wof_tree(drive, DiagTreeMode::WinSxS)
+}
+
+pub fn print_diag_path(drive: char, path: &str) -> Result<()> {
+    let (normalized_path, segments) = normalize_diag_path(drive, path)?;
+    print_diag_with_wof_tree(
+        drive.to_ascii_uppercase(),
+        DiagTreeMode::Path {
+            original_path: path.to_string(),
+            normalized_path,
+            segments,
+        },
+    )
 }

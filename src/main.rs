@@ -15,11 +15,14 @@ fn print_help() {
     eprintln!("  --top <number>     上位件数 [デフォルト: human=30 / json=100]");
     eprintln!("  --json             JSON形式で stdout に出力");
     eprintln!("  --perf             フェーズ別タイミングを stderr に出力 (CLI output path)");
-    eprintln!("  --perf-model       Tauri と同じ model path のタイミングを stderr に出力 (K-1c 比較用)");
+    eprintln!(
+        "  --perf-model       Tauri と同じ model path のタイミングを stderr に出力 (K-1c 比較用)"
+    );
     eprintln!("  --wof-adjusted     Experimental WOF-adjusted allocation policy (no hardlink/component-store dedup)");
     eprintln!("  --diag-pfx86       Program Files (x86) 差分診断 (EdgeCore / Office16 / VFS)");
     eprintln!("  --diag-wof-global  WOF adjusted global simulation (diagnostic only)");
     eprintln!("  --diag-winsxs      WinSxS / Windows component store diagnostics");
+    eprintln!("  --diag-path <path> Per-path size discrepancy diagnostics (diagnostic only)");
     eprintln!("  --help             このヘルプを表示");
     eprintln!();
     eprintln!("使用例:");
@@ -33,6 +36,7 @@ fn print_help() {
     eprintln!("  disk-insight.exe --diag-pfx86");
     eprintln!("  disk-insight.exe --diag-wof-global");
     eprintln!("  disk-insight.exe --diag-winsxs");
+    eprintln!("  disk-insight.exe --diag-path \"C:\\Program Files\"");
     eprintln!();
     eprintln!("注意:");
     eprintln!("  管理者権限で実行してください (MFTアクセスに必要)。");
@@ -54,6 +58,24 @@ fn parse_drive(s: &str) -> Option<char> {
     None
 }
 
+fn drive_from_absolute_path(path: &str) -> std::result::Result<char, &'static str> {
+    let path = path.trim();
+    if path.starts_with("\\\\") {
+        return Err("UNC paths are not supported by --diag-path");
+    }
+
+    let bytes = path.as_bytes();
+    if bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'\\' || bytes[2] == b'/')
+    {
+        Ok((bytes[0] as char).to_ascii_uppercase())
+    } else {
+        Err("--diag-path requires an absolute path like C:\\Windows")
+    }
+}
+
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
 
@@ -65,6 +87,8 @@ fn main() -> Result<()> {
     let mut diag_winsxs = false;
     let mut storage_policy = StoragePolicy::Current;
     let mut drive = 'C';
+    let mut drive_explicit = false;
+    let mut diag_path: Option<String> = None;
     let mut top_n: Option<usize> = None;
 
     let mut i = 1usize;
@@ -98,6 +122,15 @@ fn main() -> Result<()> {
                 diag_winsxs = true;
                 i += 1;
             }
+            "--diag-path" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("error: missing value for --diag-path. Example: --diag-path \"C:\\Windows\"");
+                    std::process::exit(1);
+                }
+                diag_path = Some(args[i].clone());
+                i += 1;
+            }
             "--help" | "-h" => {
                 print_help();
                 return Ok(());
@@ -109,7 +142,10 @@ fn main() -> Result<()> {
                     std::process::exit(1);
                 }
                 match parse_drive(&args[i]) {
-                    Some(d) => drive = d,
+                    Some(d) => {
+                        drive = d;
+                        drive_explicit = true;
+                    }
                     None => {
                         eprintln!(
                             "エラー: invalid drive '{}'. 例: --drive C  --drive D:",
@@ -153,6 +189,29 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
         }
+    }
+
+    if let Some(path) = diag_path.as_deref() {
+        let inferred_drive = match drive_from_absolute_path(path) {
+            Ok(d) => d,
+            Err(message) => {
+                eprintln!("error: {}", message);
+                std::process::exit(1);
+            }
+        };
+        if drive_explicit && drive != inferred_drive {
+            eprintln!(
+                "error: --drive {} conflicts with --diag-path drive {}",
+                drive, inferred_drive
+            );
+            std::process::exit(1);
+        }
+        drive = inferred_drive;
+        if let Err(e) = mft_probe::print_diag_path(drive, path) {
+            eprintln!("繧ｨ繝ｩ繝ｼ: {}", e);
+            std::process::exit(1);
+        }
+        return Ok(());
     }
 
     if perf_model_mode {
