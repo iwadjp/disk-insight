@@ -1019,7 +1019,14 @@ function DirectChildrenPanel({
       </div>
       {sourceKind === "live" && ancestorDirs.length > 0 && (
         <div className="parent-breadcrumb">
-          <span className="parent-breadcrumb-label">Up:</span>
+          <button
+            className="parent-breadcrumb-up"
+            onClick={() => onNavigateToDir(ancestorDirs[ancestorDirs.length - 1])}
+            title="Go to parent folder"
+            aria-label="Go to parent folder"
+          >
+            Up:
+          </button>
           {ancestorDirs.map((ancestor, idx) => (
             <React.Fragment key={ancestor.path}>
               {idx > 0 && <span className="parent-breadcrumb-separator">›</span>}

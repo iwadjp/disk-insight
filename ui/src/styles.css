@@ -1101,11 +1101,22 @@ tbody tr:last-child td {
   min-height: 28px;
 }
 
-.parent-breadcrumb-label {
-  color: #5e6b78;
+.parent-breadcrumb-up {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  font-size: 12px;
   font-weight: 600;
+  color: #1a56db;
+  cursor: pointer;
+  border-radius: 3px;
   margin-right: 4px;
   flex-shrink: 0;
+  line-height: 1.4;
+}
+.parent-breadcrumb-up:hover {
+  background: #dbeafe;
+  color: #1e3a8a;
 }
 
 .parent-breadcrumb-item {
