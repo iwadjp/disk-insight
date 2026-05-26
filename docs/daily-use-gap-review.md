@@ -1154,3 +1154,21 @@ integration.
 
 **v0.3.0-daily-use: HOLD continues.** The direction is now explanation-first:
 show why a path is suspicious before changing normal output.
+
+---
+
+## 28. M-3c: diag-path output refinement - COMPLETE (2026-05-26)
+
+M-3c makes `--diag-path` easier to read as an explanation rather than a raw
+developer dump. The new Summary section shows the total WOF delta, main child
+directory contributing to that delta, top contributor percent, classification
+summary, and recommended comparison guidance.
+
+This improves the central size-trust requirement: when a number differs, the
+tool can point to the likely reason and the subtree that explains most of the
+difference. It remains diagnostic-only. It does not read Explorer/WizTree
+values automatically, does not correct hardlinks or WinSxS, and does not change
+normal output.
+
+**v0.3.0-daily-use: HOLD continues**, but this is a major input for improving
+size confidence.

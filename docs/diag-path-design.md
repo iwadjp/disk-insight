@@ -406,3 +406,32 @@ Not available in M-3b:
 
 The normal CLI, JSON output, UI values, and existing diagnostic modes remain on
 their existing code paths.
+
+---
+
+## 12. M-3c Output Refinement
+
+M-3c refines the human-readable `--diag-path` output without changing any
+normal size policy.
+
+The command now starts with a `Summary` section before the detailed counts:
+
+- total current-to-WOF delta and delta ratio
+- main child directory contributing to the WOF delta
+- that child directory's percent of the total WOF delta
+- top WOF delta contributors and combined percent
+- one-line classification summary
+- path-specific recommended comparison guidance
+
+Classification candidates now include short reasons. Example:
+
+```text
+Classification candidates:
+  - WOF-dominated candidate - current vs wof_adjusted delta is 16.52%
+  - Explorer divergence candidate - Program Files and WindowsApps often differ by tool accounting surface
+```
+
+This remains an explanation aid, not a correction. `--diag-path` still does not
+read Explorer or WizTree values automatically, and it does not implement
+hardlink deduplication, WinSxS/component-store correction, or WOF production
+policy changes.

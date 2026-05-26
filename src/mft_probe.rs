@@ -3806,12 +3806,145 @@ fn print_diag_with_wof_tree(drive: char, mode: DiagTreeMode) -> Result<()> {
         let fmt_short = |bytes: u64| -> String {
             format!("{:.3} GB", bytes as f64 / 1_073_741_824.0)
         };
+        let percent_of_delta = |part: u64| -> f64 {
+            let total = delta.unsigned_abs() as u64;
+            if total > 0 { part as f64 / total as f64 * 100.0 } else { 0.0 }
+        };
+        let lower_path = normalized_path.to_ascii_lowercase();
+        let file_count = files.max(1) as f64;
+        let hardlink_ratio = hardlink_suspect_count as f64 / file_count;
+        let wof_ratio = if current > 0 {
+            (current.abs_diff(adjusted)) as f64 / current as f64
+        } else {
+            0.0
+        };
+
+        let child_dirs_base: Vec<usize> = arena[target_idx].children.iter()
+            .copied()
+            .filter(|&i| arena[i].is_dir)
+            .collect();
+        let child_wof_delta = |idx: usize| -> u64 {
+            arena[idx].subtree_size.saturating_sub(arena[idx].wof_adjusted_subtree_size)
+        };
+        let mut child_dirs_by_delta = child_dirs_base.clone();
+        child_dirs_by_delta.sort_unstable_by_key(|&i| std::cmp::Reverse(child_wof_delta(i)));
+        let top_delta_children: Vec<usize> = child_dirs_by_delta.iter()
+            .copied()
+            .filter(|&i| child_wof_delta(i) > 0)
+            .take(3)
+            .collect();
+        let top_delta_total: u64 = top_delta_children.iter()
+            .map(|&i| child_wof_delta(i))
+            .sum();
+
+        let mut candidates: Vec<(&str, String)> = Vec::new();
+        if lower_path.contains("\\windows") {
+            candidates.push((
+                "Windows special accounting candidate",
+                "path is under Windows; WinSxS, WOF, hardlinks, and component-store accounting can overlap".to_string(),
+            ));
+        }
+        if wof_ratio > 0.20 || target.wof_stream_alloc_total > 1_073_741_824 {
+            candidates.push((
+                "WOF-dominated candidate",
+                format!("current vs wof_adjusted delta is {:.2}%", delta_ratio),
+            ));
+        }
+        if wof_ratio < 0.05 && !lower_path.contains("\\windows") {
+            candidates.push((
+                "alignment candidate",
+                format!("current and wof_adjusted differ by only {:.2}%", delta_ratio.abs()),
+            ));
+        }
+        if lower_path.contains("\\windows\\winsxs")
+            || (hardlink_ratio > 0.10 && !lower_path.starts_with(&format!("{}:\\users", drive.to_ascii_lowercase())))
+        {
+            candidates.push((
+                "hardlink/component-store candidate",
+                format!("{} hardlink-suspect records; {} multi-name records", hardlink_suspect_count, multi_name_count),
+            ));
+        }
+        if lower_path.contains("program files (x86)") && target.wof_file_count > 0 {
+            candidates.push((
+                "metric mix-up candidate",
+                "Program Files (x86) has known Size vs allocated-style comparison risk".to_string(),
+            ));
+        }
+        if lower_path == format!("{}:\\program files", drive.to_ascii_lowercase())
+            || (lower_path.starts_with(&format!("{}:\\program files\\", drive.to_ascii_lowercase()))
+                && !lower_path.contains("program files (x86)"))
+        {
+            candidates.push((
+                "Explorer divergence candidate",
+                "Program Files and WindowsApps often differ by tool accounting surface".to_string(),
+            ));
+        }
+        if candidates.is_empty() {
+            candidates.push((
+                "unknown / needs manual comparison",
+                "local WOF, hardlink, and path rules do not strongly identify one cause".to_string(),
+            ));
+        }
 
         println!("=== diag-path ===");
         println!("Path: {}", original_path);
         println!("Drive: {}", drive);
         println!("Normalized path: {}", normalized_path);
         println!("record_index: {}", target.frn);
+        println!();
+        println!("Summary:");
+        println!(
+            "  WOF delta: {} ({:.2}% of current estimate)",
+            fmt_bytes(delta.unsigned_abs() as u64),
+            delta_ratio.abs()
+        );
+        if wof_ratio < 0.01 {
+            println!("  Main delta source: none; current and wof_adjusted are close");
+        } else if let Some(&main_child) = top_delta_children.first() {
+            let main_delta = child_wof_delta(main_child);
+            println!("  Main delta source: {}", reconstruct(main_child));
+            println!(
+                "    delta {}, {:.1}% of total WOF delta",
+                fmt_bytes(main_delta),
+                percent_of_delta(main_delta)
+            );
+        } else {
+            println!("  Main delta source: none; no child directory has a positive WOF delta");
+        }
+        if top_delta_children.is_empty() {
+            println!("  Top WOF delta contributors: none");
+        } else {
+            println!("  Top WOF delta contributors:");
+            for (rank, &ci) in top_delta_children.iter().enumerate() {
+                println!(
+                    "    {}. {}  {}",
+                    rank + 1,
+                    reconstruct(ci),
+                    fmt_bytes(child_wof_delta(ci))
+                );
+            }
+            println!(
+                "    Combined top {}: {}, {:.1}% of total WOF delta",
+                top_delta_children.len(),
+                fmt_bytes(top_delta_total),
+                percent_of_delta(top_delta_total)
+            );
+        }
+        let candidate_summary = candidates.iter()
+            .map(|(label, _)| *label)
+            .collect::<Vec<_>>()
+            .join("; ");
+        println!("  Classification: {}", candidate_summary);
+        let summary_comparison = if lower_path.contains("\\windows") {
+            "Windows paths may require special accounting interpretation because of WinSxS, hardlinks, WOF, and component-store behavior."
+        } else if candidates.iter().any(|(label, _)| *label == "WOF-dominated candidate") {
+            "Compare wof_adjusted with WizTree Allocated for WOF-heavy paths. Do not compare current or wof_adjusted with Explorer Size directly."
+        } else if candidates.iter().any(|(label, _)| *label == "alignment candidate") {
+            "current and wof_adjusted are close; current may be comparable to ordinary folder size/allocated views, but verify manually."
+        } else {
+            "Use manual Explorer Size on disk and WizTree Allocated values to choose the right comparison surface."
+        };
+        println!("  Recommended comparison: {}", summary_comparison);
         println!();
         println!("Estimates:");
         println!("  current:        {}", fmt_bytes(current));
@@ -3836,10 +3969,7 @@ fn print_diag_with_wof_tree(drive: char, mode: DiagTreeMode) -> Result<()> {
         println!("  sparse/compressed records: {}", sparse_compressed_count);
         println!();
 
-        let mut child_dirs: Vec<usize> = arena[target_idx].children.iter()
-            .copied()
-            .filter(|&i| arena[i].is_dir)
-            .collect();
+        let mut child_dirs = child_dirs_base.clone();
         child_dirs.sort_unstable_by_key(|&i| std::cmp::Reverse(arena[i].subtree_size));
         println!("Top child directories by current estimate:");
         if child_dirs.is_empty() {
@@ -3859,10 +3989,7 @@ fn print_diag_with_wof_tree(drive: char, mode: DiagTreeMode) -> Result<()> {
         }
         println!();
 
-        child_dirs.sort_unstable_by_key(|&i| {
-            let n = &arena[i];
-            std::cmp::Reverse(n.subtree_size.saturating_sub(n.wof_adjusted_subtree_size))
-        });
+        child_dirs = child_dirs_by_delta.clone();
         println!("Top child directories by WOF delta:");
         if child_dirs.is_empty() {
             println!("  (none)");
@@ -3914,44 +4041,9 @@ fn print_diag_with_wof_tree(drive: char, mode: DiagTreeMode) -> Result<()> {
         }
         println!();
 
-        let lower_path = normalized_path.to_ascii_lowercase();
-        let file_count = files.max(1) as f64;
-        let hardlink_ratio = hardlink_suspect_count as f64 / file_count;
-        let wof_ratio = if current > 0 {
-            (current.abs_diff(adjusted)) as f64 / current as f64
-        } else {
-            0.0
-        };
-        let mut candidates: Vec<&str> = Vec::new();
-        if lower_path.contains("\\windows") {
-            candidates.push("Windows special accounting candidate");
-        }
-        if wof_ratio > 0.20 || target.wof_stream_alloc_total > 1_073_741_824 {
-            candidates.push("WOF-dominated candidate");
-        }
-        if wof_ratio < 0.05 && !lower_path.contains("\\windows") {
-            candidates.push("alignment candidate");
-        }
-        if lower_path.contains("\\windows\\winsxs")
-            || (hardlink_ratio > 0.10 && !lower_path.starts_with(&format!("{}:\\users", drive.to_ascii_lowercase())))
-        {
-            candidates.push("hardlink/component-store candidate");
-        }
-        if lower_path.contains("program files (x86)") && target.wof_file_count > 0 {
-            candidates.push("metric mix-up candidate");
-        }
-        if lower_path == format!("{}:\\program files", drive.to_ascii_lowercase())
-            || (lower_path.starts_with(&format!("{}:\\program files\\", drive.to_ascii_lowercase()))
-                && !lower_path.contains("program files (x86)"))
-        {
-            candidates.push("Explorer divergence candidate");
-        }
-        if candidates.is_empty() {
-            candidates.push("unknown / needs manual comparison");
-        }
         println!("Classification candidates:");
-        for c in candidates {
-            println!("  - {}", c);
+        for (label, reason) in &candidates {
+            println!("  - {} - {}", label, reason);
         }
         println!();
         println!("Recommended comparison:");

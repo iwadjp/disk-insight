@@ -1978,3 +1978,13 @@ This is not a UI feature yet. It is a diagnostic backend that can later feed an
 "Explain size" action. Normal UI values, storage policy behavior, JSON field
 names, and Tauri scan behavior remain unchanged. Correction logic is still not
 implemented.
+
+### M-3c: diag-path output refinement - COMPLETE (2026-05-26)
+
+M-3c improves `--diag-path` readability by adding a Summary section with the
+main WOF delta source, top contributor percent, classification summary, and
+path-specific comparison guidance.
+
+This makes path-level explanation more useful for a future "Explain size"
+button, but no UI integration exists yet. Normal UI values and storage policy
+behavior are unchanged.
