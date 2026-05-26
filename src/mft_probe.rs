@@ -2990,11 +2990,13 @@ where
     let agg_elapsed = agg_start.elapsed();
 
     progress("building_ui_model", total_start.elapsed().as_millis() as u64);
+    let ui_model_t = std::time::Instant::now();
 
     // Statistics
     let total_file_count: usize = arena.iter().filter(|n| !n.is_dir).count();
     let total_dir_count:  usize = arena.iter().filter(|n|  n.is_dir).count();
     let total_final_alloc: u64  = arena.iter().filter(|n| !n.is_dir).map(|n| n.final_alloc).sum();
+    let stats_ms = ui_model_t.elapsed().as_millis();
 
     // Path reconstruction (depth-limited, same policy as probe7)
     let reconstruct_path = |start_idx: usize| -> String {
@@ -3031,6 +3033,7 @@ where
         path
     };
 
+    let top_t = std::time::Instant::now();
     // Top-N dirs
     let mut top_dir_idx: Vec<usize> = arena.iter().enumerate()
         .filter(|(_, n)| n.is_dir && n.subtree_size > 0)
@@ -3066,6 +3069,8 @@ where
         }
     }).collect();
 
+    let top_ms = top_t.elapsed().as_millis();
+
     // Build a JsonTreeNode for an arena index, using the shared path closure.
     let make_node = |ci: usize| -> JsonTreeNode {
         JsonTreeNode {
@@ -3099,11 +3104,13 @@ where
     }
     let children_map_elapsed = children_map_start.elapsed();
 
+    let wof_map_t = std::time::Instant::now();
     let mut wof_size_map: HashMap<u64, (u64, u64)> = HashMap::with_capacity(dir_count_hint);
     for i in 0..arena.len() {
         if !arena[i].is_dir { continue; }
         wof_size_map.insert(arena[i].frn, (arena[i].subtree_size, arena[i].wof_adjusted_subtree_size));
     }
+    let wof_map_ms = wof_map_t.elapsed().as_millis();
 
     // Root children: direct children of the NTFS root directory (FRN 5).
     // Reuses the children_map entry; truncated to 200 for the embedded JSON.
@@ -3135,6 +3142,14 @@ where
     };
 
     let output = JsonTreeOutput { summary, top_directories, top_files, root_children };
+    eprintln!(
+        "[perf-model-detail] stats={} ms  top_build={} ms  children_map={} ms  wof_map={} ms  ui_total={} ms",
+        stats_ms,
+        top_ms,
+        children_map_elapsed.as_millis(),
+        wof_map_ms,
+        ui_model_t.elapsed().as_millis(),
+    );
     progress("done", total_elapsed.as_millis() as u64);
     Ok(MftTreeModel { output, children_map, wof_size_map })
 }

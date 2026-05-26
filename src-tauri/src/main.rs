@@ -115,11 +115,12 @@ async fn scan_drive(
 
     let spawn_ms = spawn_start.elapsed().as_millis();
     eprintln!(
-        "[perf-tauri] build_model done  {} ms  root_children={} top_dirs={} top_files={}",
+        "[perf-tauri] build_model done  {} ms  root_children={} top_dirs={} top_files={}  children_map_ms={} ms",
         spawn_ms,
         model.output.root_children.len(),
         model.output.top_directories.len(),
-        model.output.top_files.len()
+        model.output.top_files.len(),
+        model.output.summary.children_map_time_ms,
     );
 
     let output       = model.output;
@@ -127,7 +128,7 @@ async fn scan_drive(
     let wof_size_map = model.wof_size_map;
 
     {
-        let lock_start = std::time::Instant::now();
+        let cmap_lock_start = std::time::Instant::now();
         {
             let mut guard = state
                 .children_map
@@ -135,6 +136,9 @@ async fn scan_drive(
                 .map_err(|e| format!("state lock poisoned: {e}"))?;
             *guard = Some(children_map);
         }
+        let cmap_lock_ms = cmap_lock_start.elapsed().as_millis();
+
+        let wof_lock_start = std::time::Instant::now();
         {
             let mut guard = state
                 .wof_size_map
@@ -142,7 +146,12 @@ async fn scan_drive(
                 .map_err(|e| format!("state lock poisoned: {e}"))?;
             *guard = Some(wof_size_map);
         }
-        eprintln!("[perf-tauri] state_lock  {} ms", lock_start.elapsed().as_millis());
+        let wof_lock_ms = wof_lock_start.elapsed().as_millis();
+
+        eprintln!(
+            "[perf-tauri] state_lock  children_map={} ms  wof_size_map={} ms",
+            cmap_lock_ms, wof_lock_ms
+        );
     }
 
     let cmd_ms = cmd_start.elapsed().as_millis();
