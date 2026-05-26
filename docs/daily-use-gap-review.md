@@ -1172,3 +1172,24 @@ normal output.
 
 **v0.3.0-daily-use: HOLD continues**, but this is a major input for improving
 size confidence.
+
+---
+
+## 29. N-1: Reclaimable size model design - COMPLETE (2026-05-26)
+
+The daily-use goal is not exact agreement with Explorer or WizTree for its own
+sake. The practical goal is deciding where to inspect when trying to free disk
+space.
+
+N-1 therefore reframes the size-trust problem around `Estimated reclaimable`:
+how much free space might increase if a selected folder is removed or moved.
+The design proposes `wof_adjusted` as the primary estimate, `current` as an
+upper/reference bound, and a confidence level based on WOF impact, hardlink and
+component-store signals, and path type.
+
+This does not add deletion, correction logic, or UI behavior. It is a design
+step toward making disk-insight explain which number is useful for cleanup
+decisions, not just why tools disagree.
+
+**v0.3.0-daily-use: HOLD continues.** The next practical step is N-1b: add a
+diagnostic-only reclaimable estimate section to `--diag-path`.

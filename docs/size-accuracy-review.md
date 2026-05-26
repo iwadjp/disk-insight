@@ -511,3 +511,16 @@ directories, top WOF-impact files, and candidate classifications.
 This is useful evidence, not a correction. It does not claim exact Explorer or
 WizTree parity, and it does not implement hardlink deduplication,
 WinSxS/component-store accounting, or WOF default policy changes.
+
+### N-1: Reclaimable size model direction
+
+For daily cleanup use, exact size comparison is not the final goal. The more
+useful question is how much free space may be reclaimed if a subtree is removed
+or moved.
+
+N-1 designs an `Estimated reclaimable` model in
+`docs/reclaimable-size-model.md`. The initial proposal uses `wof_adjusted` as
+the primary estimate, `current` as an upper/reference bound, and path-sensitive
+confidence. It deliberately avoids exact free-space claims and does not add
+delete behavior, hardlink correction, WinSxS correction, or WOF default policy
+changes.

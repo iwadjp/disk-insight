@@ -435,3 +435,26 @@ This remains an explanation aid, not a correction. `--diag-path` still does not
 read Explorer or WizTree values automatically, and it does not implement
 hardlink deduplication, WinSxS/component-store correction, or WOF production
 policy changes.
+
+---
+
+## 13. N-1 Reclaimable Size Model
+
+N-1 adds a design layer above the M-3c explanation summary. The practical
+cleanup question is not only why a path differs from Explorer or WizTree. It is
+which number should guide a decision about how much free space might be gained
+by removing or moving that subtree.
+
+See `docs/reclaimable-size-model.md`.
+
+Planned direction for a future `--diag-path` refinement:
+
+- add a `Reclaimable estimate` section
+- use `wof_adjusted` as the primary estimate
+- show `current` as an upper/reference bound
+- include a confidence value: High, Medium, or Low
+- include path-specific cautions, such as app uninstall for Program Files and
+  Windows cleanup tools for Windows system folders
+
+This is not implemented in N-1. M-3c Summary remains the evidence layer; the
+reclaimable estimate would be a higher-level interpretation of that evidence.

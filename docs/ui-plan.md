@@ -1988,3 +1988,15 @@ path-specific comparison guidance.
 This makes path-level explanation more useful for a future "Explain size"
 button, but no UI integration exists yet. Normal UI values and storage policy
 behavior are unchanged.
+
+### N-1: Reclaimable size model design - COMPLETE (2026-05-26)
+
+N-1 shifts the size-trust line from explaining discrepancies toward the
+practical cleanup question: if a folder is removed or moved, how much free space
+is likely to increase?
+
+The new `docs/reclaimable-size-model.md` proposes `Estimated reclaimable` as a
+future diagnostic/UI concept. The initial model uses `wof_adjusted` as the
+primary estimate, `current` as an upper/reference bound, and a path-sensitive
+confidence level. This remains design-only. No UI field, Rust policy, hardlink
+dedup, WinSxS correction, WOF default change, or delete feature was added.

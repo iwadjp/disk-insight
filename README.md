@@ -131,6 +131,7 @@ The app works without admin rights but scan will fail with a permission error.
 | `docs/runbook.md` | Developer verification steps and minimal UI checklist |
 | `docs/json-output-schema.md` | JSON output field reference and API boundary notes |
 | `docs/ui-plan.md` | UI implementation history and remaining task list |
+| `docs/reclaimable-size-model.md` | Design notes for future estimated reclaimable size diagnostics |
 | `CLAUDE.md` | Project conventions and AI usage guidelines |
 
 ---
@@ -163,6 +164,10 @@ path:
 `--diag-path` reports current vs WOF-adjusted estimates plus WOF, hardlink,
 multi-name, reparse-point, sparse/compressed, and child-directory evidence. It
 is an explanation aid, not a normal-output correction.
+
+Future diagnostic work is aimed at estimating reclaimable space: how much free
+space might increase if a subtree is removed or moved. This is not a delete
+feature, and exact reclaimed bytes are not guaranteed.
 
 ## Known limitations
 
