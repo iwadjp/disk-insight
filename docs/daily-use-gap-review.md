@@ -1193,3 +1193,24 @@ decisions, not just why tools disagree.
 
 **v0.3.0-daily-use: HOLD continues.** The next practical step is N-1b: add a
 diagnostic-only reclaimable estimate section to `--diag-path`.
+
+---
+
+## 30. N-1b: Reclaimable estimate in diag-path - COMPLETE (2026-05-26)
+
+N-1b adds the cleanup-oriented estimate to the CLI diagnostic path:
+
+```powershell
+.\target\release\disk-insight.exe --diag-path "C:\Program Files"
+```
+
+The new `Reclaimable estimate` section reports a primary estimate, reference
+range, confidence, basis, and caution. This is a more direct daily-use signal
+than raw size discrepancy explanation because it addresses the question: which
+number should guide a decision about where to inspect for reclaimable space?
+
+It remains diagnostic-only. It does not delete, move, clean, guarantee exact
+free-space delta, or implement hardlink / WinSxS / WOF production correction.
+
+**v0.3.0-daily-use: HOLD continues**, but this is a core improvement toward
+making size output actionable without pretending it is exact.

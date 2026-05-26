@@ -458,3 +458,36 @@ Planned direction for a future `--diag-path` refinement:
 
 This is not implemented in N-1. M-3c Summary remains the evidence layer; the
 reclaimable estimate would be a higher-level interpretation of that evidence.
+
+---
+
+## 14. N-1b Reclaimable Estimate Output
+
+N-1b implements the planned `Reclaimable estimate` section in `--diag-path`.
+
+The section appears after `Summary` and before the detailed `Estimates` block.
+It reports:
+
+- primary estimate
+- reference range
+- confidence
+- basis
+- caution
+
+Confidence is intentionally rule-based:
+
+- `High`: current and WOF-adjusted are close on a non-system, non-Program Files
+  path. This is expected for ordinary user-data paths such as `C:\Users`.
+- `Medium`: WOF delta exists, but the path is an application area and the main
+  contributor is visible. This is expected for `C:\Program Files` and
+  `C:\Program Files (x86)`.
+- `Low`: Windows / WinSxS / servicing / assembly style paths where hardlinks,
+  WOF, protected folders, and component-store accounting make manual reclaim
+  interpretation unsafe.
+
+For Windows special-accounting paths, the command still prints the numeric
+reference range, but the primary estimate is `not recommended as a deletion
+target`.
+
+This is diagnostic output only. It does not implement delete, move, cleanup,
+hardlink deduplication, WinSxS correction, or WOF production policy changes.

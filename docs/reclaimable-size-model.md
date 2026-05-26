@@ -268,3 +268,44 @@ warnings.
 
 Run a real-device evaluation against the practical question: "Can this help
 decide where to inspect when freeing disk space?"
+
+---
+
+## 11. N-1b Implementation Result
+
+N-1b adds a diagnostic-only `Reclaimable estimate` section to `--diag-path`.
+
+The section reports:
+
+- `primary estimate`
+- `reference range`
+- `confidence`
+- `basis`
+- `caution`
+
+The initial implementation follows the N-1 model:
+
+```text
+primary estimate = wof_adjusted
+reference range = wof_adjusted - current
+```
+
+For Windows special-accounting paths, the range is still shown, but the primary
+estimate is intentionally printed as:
+
+```text
+not recommended as a deletion target
+```
+
+Confidence is rule-based:
+
+- `High` when current and WOF-adjusted are close on non-system, non-Program
+  Files paths.
+- `Medium` for Program Files style paths or WOF-heavy paths with visible
+  contributors.
+- `Low` for Windows / WinSxS / servicing / assembly style paths.
+
+This is still not a delete feature. It does not perform deletion, move files,
+run cleanup, or claim exact free-space delta. It also does not add hardlink
+deduplication, WinSxS/component-store correction, or a WOF production policy
+change.

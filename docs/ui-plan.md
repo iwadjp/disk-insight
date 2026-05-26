@@ -2000,3 +2000,15 @@ future diagnostic/UI concept. The initial model uses `wof_adjusted` as the
 primary estimate, `current` as an upper/reference bound, and a path-sensitive
 confidence level. This remains design-only. No UI field, Rust policy, hardlink
 dedup, WinSxS correction, WOF default change, or delete feature was added.
+
+### N-1b: Reclaimable estimate in diag-path - COMPLETE (2026-05-26)
+
+N-1b adds a CLI-only `Reclaimable estimate` section to `--diag-path`.
+
+The section reports a primary estimate, reference range, confidence, basis, and
+caution. It is meant to connect path diagnostics to the practical cleanup
+question: which number is useful when deciding where to inspect for free space?
+
+No UI surface was added. A future selected-folder card or "Explain size" action
+could reuse the same model, but the current UI remains unchanged. This is not a
+delete feature and does not add correction logic.

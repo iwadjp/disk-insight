@@ -3946,6 +3946,61 @@ fn print_diag_with_wof_tree(drive: char, mode: DiagTreeMode) -> Result<()> {
         };
         println!("  Recommended comparison: {}", summary_comparison);
         println!();
+        let confidence = if lower_path.contains("\\windows")
+            || lower_path.contains("\\winsxs")
+            || lower_path.contains("\\servicing")
+            || lower_path.contains("\\assembly")
+        {
+            "Low"
+        } else if wof_ratio < 0.02
+            && !lower_path.contains("program files")
+        {
+            "High"
+        } else {
+            "Medium"
+        };
+        let main_delta_path = top_delta_children.first()
+            .map(|&idx| reconstruct(idx));
+        let reclaim_basis = if confidence == "Low" && lower_path.contains("\\windows") {
+            "Windows special accounting; hardlinks, WOF, and component store may affect actual reclaimed space".to_string()
+        } else if lower_path.starts_with(&format!("{}:\\users", drive.to_ascii_lowercase()))
+            && wof_ratio < 0.02
+        {
+            "current and wof_adjusted are close; ordinary user data subtree".to_string()
+        } else if wof_ratio < 0.02 {
+            "current and wof_adjusted are close; WOF delta is small".to_string()
+        } else if let Some(path) = main_delta_path.as_deref() {
+            format!("WOF-adjusted estimate; WOF delta mainly from {}", path)
+        } else {
+            "WOF-adjusted estimate; no single child directory dominates the WOF delta".to_string()
+        };
+        let reclaim_caution = if lower_path.contains("\\windows") {
+            "Use Windows cleanup tools; do not manually delete Windows system folders."
+        } else if lower_path.contains("program files") {
+            "Use app uninstall / Windows settings, not manual delete."
+        } else if lower_path.starts_with(&format!("{}:\\users", drive.to_ascii_lowercase())) {
+            "Review files carefully; do not delete user profile root blindly."
+        } else {
+            "This is an estimate; verify before deleting or moving data."
+        };
+        let range_lower = adjusted.min(current);
+        let range_upper = adjusted.max(current);
+        println!("Reclaimable estimate:");
+        if confidence == "Low" && lower_path.contains("\\windows") {
+            println!("  primary estimate: not recommended as a deletion target");
+        } else {
+            println!("  primary estimate: {}", fmt_bytes(adjusted));
+        }
+        println!(
+            "  reference range: {} - {}",
+            fmt_bytes(range_lower),
+            fmt_bytes(range_upper)
+        );
+        println!("  confidence: {}", confidence);
+        println!("  basis: {}", reclaim_basis);
+        println!("  caution: {}", reclaim_caution);
+        println!("  note: diagnostic estimate only; no delete or cleanup operation is performed.");
+        println!();
         println!("Estimates:");
         println!("  current:        {}", fmt_bytes(current));
         println!("  wof_adjusted:   {}", fmt_bytes(adjusted));

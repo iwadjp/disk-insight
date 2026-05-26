@@ -165,7 +165,8 @@ path:
 multi-name, reparse-point, sparse/compressed, and child-directory evidence. It
 is an explanation aid, not a normal-output correction.
 
-Future diagnostic work is aimed at estimating reclaimable space: how much free
+`--diag-path` also reports a diagnostic `Reclaimable estimate`: a primary
+estimate, reference range, confidence, basis, and caution for how much free
 space might increase if a subtree is removed or moved. This is not a delete
 feature, and exact reclaimed bytes are not guaranteed.
 

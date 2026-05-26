@@ -396,11 +396,16 @@ How to read the output:
 1. Read `Summary` first.
 2. Check `Main delta source` to see which child directory explains most of the
    current-to-WOF delta.
-3. Check `Top WOF delta contributors` for the cumulative percent explained by
+3. Read `Reclaimable estimate`.
+   - `primary estimate` is the diagnostic estimate to consider first.
+   - `reference range` shows WOF-adjusted through current.
+   - `confidence` says how cautious to be.
+   - `caution` is part of the result and should be read before acting.
+4. Check `Top WOF delta contributors` for the cumulative percent explained by
    the largest child directories.
-4. Use `Top child directories by WOF delta` and `Top files by WOF delta` for
+5. Use `Top child directories by WOF delta` and `Top files by WOF delta` for
    detail.
-5. Treat `Classification candidates` as evidence-based candidates, not verdicts.
+6. Treat `Classification candidates` as evidence-based candidates, not verdicts.
 
 The path must be an absolute local path such as `C:\Windows`; UNC paths are not
 supported in M-3b. If `--drive` is also supplied, it must match the path drive.
@@ -408,6 +413,12 @@ supported in M-3b. If `--drive` is also supplied, it must match the path drive.
 Normal output is unchanged. `--diag-path` does not implement hardlink dedup,
 WinSxS/component-store correction, or production WOF correction.
 Explorer and WizTree values are not read automatically.
+
+`Reclaimable estimate` is diagnostic only. It does not delete, move, or clean
+files. It does not guarantee an exact free-space delta. For Program Files style
+paths, use app uninstall / Windows settings rather than manual deletion. For
+Windows system paths, use Windows cleanup tools and do not manually delete
+system folders.
 
 > Redirect with `cmd /c` for UTF-8 output:
 > `cmd /c ".\target\release\disk-insight.exe --diag-pfx86 > .\work\pfx86_diag.txt"`
