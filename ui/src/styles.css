@@ -767,8 +767,8 @@ tbody tr:last-child td {
 }
 
 .reclaimable-estimate--not-recommended {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   color: #7a4800;
 }
 

@@ -672,9 +672,14 @@ function SelectedFolderCard({
                   ? "Not recommended as deletion target"
                   : formatBytes(reclaimable.wof_adjusted_bytes)}
               </div>
-              <div className="reclaimable-range">
-                Range: {formatBytes(reclaimable.range_lower)} – {formatBytes(reclaimable.range_upper)}
-              </div>
+              {!reclaimable.not_recommended && (
+                <div className="reclaimable-range">
+                  {reclaimable.confidence === "High" &&
+                   (reclaimable.range_upper - reclaimable.range_lower) < reclaimable.range_upper * 0.01
+                    ? "Range: tight (within 1%)"
+                    : `Range: ${formatBytes(reclaimable.range_lower)} – ${formatBytes(reclaimable.range_upper)}`}
+                </div>
+              )}
               <div className="reclaimable-basis">{reclaimable.basis}</div>
               <div className="reclaimable-caution">{reclaimable.caution}</div>
             </>
