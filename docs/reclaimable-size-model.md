@@ -309,3 +309,17 @@ This is still not a delete feature. It does not perform deletion, move files,
 run cleanup, or claim exact free-space delta. It also does not add hardlink
 deduplication, WinSxS/component-store correction, or a WOF production policy
 change.
+
+---
+
+## 12. N-2 UI Reclaimable Estimate Design
+
+N-2 outlines the user interface design plan (`docs/ui-reclaimable-estimate-plan.md`) to bring this diagnostic model directly into the desktop UI.
+
+Planned layout:
+- Display Estimated reclaimable size, range, confidence ratings, and warnings strictly inside the folder detail card on the right (**Selected Folder Card**).
+- Avoid subfolder/child-level estimates in this phase to prevent UI clutter and ensure performance is not compromised.
+- Strictly adhere to safety-oriented wording: using "Estimated reclaimable" and uninstallation/cleanup guidance, avoiding terms like "safe to delete" or "will reclaim."
+
+This remains a design-only phase. No deletion feature is planned or implemented.
+

@@ -1214,3 +1214,17 @@ free-space delta, or implement hardlink / WinSxS / WOF production correction.
 
 **v0.3.0-daily-use: HOLD continues**, but this is a core improvement toward
 making size output actionable without pretending it is exact.
+
+---
+
+## 31. N-2: UI reclaimable estimate design - COMPLETE (2026-05-26)
+
+N-2 adds a comprehensive UI design plan (`docs/ui-reclaimable-estimate-plan.md`) to integrate estimated reclaimable size, confidence ratings, and warnings into the Tauri desktop UI.
+
+Key Design Decisions:
+- **Selected Folder Card Integration**: Display estimated reclaimable size, range, confidence badge, basis, and caution text strictly inside the folder detail card on the right.
+- **Tauri command integration**: Propose a new Rust-centric backend command: `get_reclaimable_summary(path) -> ReclaimableSummary` to keep layouts thin and ensure identical CLI/UI rules.
+- **Daily-use status**: **v0.3.0-daily-use remains HOLD**. The UI has not been modified yet. This design serves as the crucial bridge from CLI-only diagnostics to everyday usability.
+
+It remains design-only. No deletion, WOF production changes, or hardlink/WinSxS correction is included.
+

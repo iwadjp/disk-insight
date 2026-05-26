@@ -2012,3 +2012,18 @@ question: which number is useful when deciding where to inspect for free space?
 No UI surface was added. A future selected-folder card or "Explain size" action
 could reuse the same model, but the current UI remains unchanged. This is not a
 delete feature and does not add correction logic.
+
+### N-2: UI reclaimable estimate design - COMPLETE (2026-05-26)
+
+N-2 adds a comprehensive UI design plan to integrate reclaimable size estimates into the desktop UI.
+
+See `docs/ui-reclaimable-estimate-plan.md`.
+
+Planned direction:
+- Display estimated reclaimable size, range, confidence badges, basis, and caution text strictly inside the **Selected Folder Card**.
+- Keep subfolder/child-level estimates deferred to avoid UI clutter and performance regression.
+- Guide users with a strict vocabulary policy (avoiding "will reclaim" or "safe to delete" in favor of "estimated reclaimable" and "cautions/uninstall advice").
+- Propose a Rust-centric backend approach: frontend asks for `get_reclaimable_summary(path)` and Rust does the rule-based heavy lifting.
+
+No implementation changes were made. Deletion, WOF default change, hardlink deduplication, and WinSxS corrections remain unimplemented.
+
