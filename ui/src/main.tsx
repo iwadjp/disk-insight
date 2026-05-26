@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -98,6 +99,7 @@ type TauriWindow = Window & {
 type SourceKind = "sample" | "live";
 type DirectChildrenSortKey = "size" | "name" | "type";
 type SortDirection = "asc" | "desc";
+type ContextMenuState = { node: TreeNode; x: number; y: number };
 
 const TOP_OPTIONS = [10, 30, 50, 100, 200, 500];
 const LARGE_FOLDER_THRESHOLD = 200;
@@ -878,6 +880,43 @@ function DirectChildrenPanel({
     setFilterText("");
   }, [dir.record_index]);
 
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setContextMenu(null);
+  }, [dir.record_index]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    function handleMouseDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    }
+    window.addEventListener("mousedown", handleMouseDown);
+    return () => window.removeEventListener("mousedown", handleMouseDown);
+  }, [contextMenu]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setContextMenu(null);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [contextMenu]);
+
+  function handleContextMenu(e: React.MouseEvent<HTMLDivElement>, node: TreeNode) {
+    e.preventDefault();
+    e.stopPropagation();
+    const menuWidth = 160;
+    const menuHeight = 68;
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 4);
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 4);
+    setContextMenu({ node, x, y });
+  }
+
   const filtered = useMemo(() => {
     if (!children) return [];
     if (!filterTrimmed) return children;
@@ -921,8 +960,9 @@ function DirectChildrenPanel({
         {sorted.map((node) => (
           <div
             key={node.record_index}
-            className={`direct-child-row${node.is_directory ? " direct-child-row--dir" : ""}`}
+            className={`direct-child-row${node.is_directory ? " direct-child-row--dir" : ""}${contextMenu?.node.record_index === node.record_index ? " direct-child-row--context" : ""}`}
             onClick={node.is_directory ? () => onNavigate(node) : undefined}
+            onContextMenu={(e) => handleContextMenu(e, node)}
             title={node.is_directory ? `Open ${node.path}` : undefined}
           >
             <span
@@ -1042,6 +1082,44 @@ function DirectChildrenPanel({
         </div>
       )}
       {body}
+      {contextMenu && createPortal(
+        <div
+          ref={menuRef}
+          className="context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <button
+            className="context-menu-item"
+            onClick={() => {
+              onOpenExplorer(
+                contextMenu.node.is_directory
+                  ? contextMenu.node.path
+                  : getParentDir(contextMenu.node.path),
+              );
+              setContextMenu(null);
+            }}
+          >
+            {contextMenu.node.is_directory ? "Open folder" : "Open containing folder"}
+          </button>
+          <button
+            className="context-menu-item"
+            onClick={() => {
+              if (navigator.clipboard) {
+                navigator.clipboard.writeText(contextMenu.node.path).catch((err: unknown) => {
+                  onCopyError(err instanceof Error ? err.message : "Failed to copy path.");
+                });
+              } else {
+                onCopyError("Clipboard is not available.");
+              }
+              setContextMenu(null);
+            }}
+          >
+            Copy path
+          </button>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
