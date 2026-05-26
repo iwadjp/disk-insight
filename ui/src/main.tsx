@@ -724,8 +724,8 @@ function SelectedFolderCard({
                     : `Range: ${formatBytes(reclaimable.range_lower)} – ${formatBytes(reclaimable.range_upper)}`}
                 </div>
               )}
-              <div className="reclaimable-basis">{reclaimable.basis}</div>
-              <div className="reclaimable-caution">{reclaimable.caution}</div>
+              <div className="reclaimable-basis" title={reclaimable.basis}>{reclaimable.basis}</div>
+              <div className="reclaimable-caution" title={reclaimable.caution}>{reclaimable.caution}</div>
             </>
           )}
         </div>
