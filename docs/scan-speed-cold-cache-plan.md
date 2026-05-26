@@ -211,15 +211,86 @@ Goals:
 
 Deliverable: updated measurement table in this document, PROGRESS.md entry.
 
-### K-5c: Optimization selection (after K-5b)
+### K-5c: Optimization candidate selection (2026-05-27)
 
-Based on K-5b results:
+**Status: Analysis complete — implementation deferred pending K-5d measurement**
 
-- If cold read_mft ≈ 15–18 s confirmed → consider read_mft I/O improvement or accept with progress strip
-- If wof_size_map added > 1 s → make it lazy
-- If children_map is still 33% of total → evaluate lazy children_map
+#### K-5b results (updated)
 
-Select **one** candidate, implement it, and re-measure before and after.
+| Measurement | Value | Notes |
+|-------------|-------|-------|
+| CLI warm C: (run 1) | 9 885 ms total / build_model 10 201 ms | |
+| CLI warm C: (run 2) | 9 684 ms total / build_model 9 994 ms | |
+| CLI warm D: (run 1) | 63 470 ms total | read_mft=51 341 ms |
+| CLI warm D: (run 2) | 59 139 ms total | read_mft=53 377 ms |
+| Tauri UI C: | **23 320 ms** | almost certainly cold — see analysis below |
+
+#### Critical finding: K-5b Tauri measurement was cold cache
+
+CLI warm C: build_model ≈ 10 000 ms.
+Tauri UI C: ≈ 23 320 ms.
+Gap ≈ 13 300 ms.
+
+Cold read_mft hypothesis (K-1c, never verified): warm=4 800 ms, cold≈15 000–18 000 ms → delta ≈10 000–13 000 ms.
+
+The 13 300 ms gap matches cold read_mft exactly.
+The K-5b Tauri scan was run after two D: CLI scans (which loaded 5 564 MB MFT into
+page cache twice), likely evicting C: MFT from RAM. This makes a cold C: MFT scan plausible.
+
+**Warm Tauri UI estimate:**
+warm build_model (~10 000 ms) + state_lock (~10 ms) + IPC serialization (~200–500 ms)
+≈ **10 200–10 500 ms**
+
+If this estimate holds, warm disk-insight UI ≈ 10–11 s vs WizTree ≈ 15 s.
+**disk-insight would be faster than WizTree when cache is warm.**
+
+The HOLD condition "1.55× WizTree" may be entirely a cold-cache phenomenon,
+not a structural speed deficit.
+
+#### Candidate comparison
+
+| Candidate | Est. saving (cold) | Est. saving (warm) | Risk | Verdict |
+|-----------|-------------------|-------------------|------|---------|
+| A: children_map lazy build | ~3.3 s (cold: 23→20 s) | ~3.3 s (warm: 10→7 s) | Medium | Viable, but only worth doing if warm Tauri is also slow |
+| B: wof_size_map lazy build | ~0.3 s | ~0.3 s | Low | Negligible gain (~300 ms per build_model) |
+| C: read_mft parallel I/O | ~10–13 s cold | ~0 s warm | High | High risk, correct target only if cold is primary cause |
+| D: warm Tauri measurement (K-5d) | — | — | None | **Needed before any implementation** |
+| E: progress percentage | 0 | 0 | Low | UX only; actual speed unchanged |
+
+#### Recommendation: K-5d before implementation
+
+**Do not implement any optimization yet.**
+
+The key unknown is: **what is warm Tauri UI scan time?**
+
+How to measure (K-5d):
+1. Run CLI warm C: scan: `.\target\release\disk-insight.exe --drive C --top 100 --perf-model`
+2. Immediately (within 30 s, while C: MFT is in page cache): `npm run tauri dev`, scan C:
+3. Record `[perf-ui] invoke_ms` or total perceived scan time
+
+Decision tree:
+- **Warm Tauri ≈ 10–12 s**: cold read_mft is the only real problem.
+  - Option 1: Accept cold + progress strip (already done). No further optimization.
+  - Option 2: children_map lazy build (saves 3 s cold: 23→20 s, still 1.33× WizTree).
+- **Warm Tauri ≈ 15–18 s**: Tauri-specific overhead exists.
+  - Investigate: IPC JSON size, state_lock, React render time.
+- **Warm Tauri > 20 s**: Something unexpected. Full breakdown needed.
+
+#### Why not children_map lazy build immediately?
+
+children_map lazy build saves ~3.3 s at scan time.
+But `root_children` (the top-level folder list) is built from `children_map.get(&5)`
+at line 3110 of `mft_probe.rs` and included in `JsonTreeOutput`.
+The root FRN 5 entry must be available immediately.
+
+A lazy build would require either:
+- Keep the full arena in AppState (memory: ~500 MB for C:) and build on-demand
+- Background thread build after returning scan result (first `get_children` call may race)
+- Build root only (FRN 5) during scan, defer the rest
+
+This complexity is only justified if K-5d confirms warm Tauri is slow.
+If warm Tauri is already 10–11 s, lazy children_map would make warm even faster
+(~7 s), which is nice but not a HOLD-breaking change.
 
 ---
 
