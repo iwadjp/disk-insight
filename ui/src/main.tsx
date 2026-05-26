@@ -1010,6 +1010,23 @@ function DirectChildrenPanel({
           <span className="heading-path">{dir.path}</span>
         </span>
         <div className="direct-children-controls">
+          <input
+            className="filter-input"
+            type="text"
+            placeholder="Filter…"
+            value={filterText}
+            onChange={(e) => setFilterText(e.target.value)}
+          />
+          {filterText && (
+            <button
+              className="filter-clear-btn"
+              onClick={() => setFilterText("")}
+              title="Clear filter"
+              aria-label="Clear filter"
+            >
+              ×
+            </button>
+          )}
           {children !== undefined && (
             <span className="direct-children-count">
               {filterTrimmed
@@ -1037,25 +1054,6 @@ function DirectChildrenPanel({
             {sortDir === "desc" ? "↓" : "↑"}
           </button>
         </div>
-      </div>
-      <div className="direct-children-filter-row">
-        <input
-          className="filter-input"
-          type="text"
-          placeholder="Filter children..."
-          value={filterText}
-          onChange={(e) => setFilterText(e.target.value)}
-        />
-        {filterText && (
-          <button
-            className="filter-clear-btn"
-            onClick={() => setFilterText("")}
-            title="Clear filter"
-            aria-label="Clear filter"
-          >
-            ×
-          </button>
-        )}
       </div>
       {sourceKind === "live" && ancestorDirs.length > 0 && (
         <div className="parent-breadcrumb">
