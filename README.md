@@ -153,6 +153,11 @@ change JSON field names or CLI output labels.
 Neither policy produces byte-exact matches with Explorer or WizTree — differences are expected and explainable.
 See `docs/size-accuracy-review.md` for a full breakdown.
 
+Size differences are path-specific. Planned diagnostic work will add a per-path
+explanation mode so a selected folder can be checked for WOF, hardlink,
+reparse-point, sparse/compressed, or Windows component-store signals. This is a
+planned diagnostic direction, not an implemented normal-output correction.
+
 ## Known limitations
 
 | Area | Notes |

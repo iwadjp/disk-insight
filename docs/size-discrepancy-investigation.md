@@ -631,3 +631,21 @@ and should usually be compared with Explorer "Size on disk" or WizTree
 
 See `docs/size-label-wording-plan.md` for the proposed label, tooltip, and
 help-text plan.
+
+## M-3: Per-path size discrepancy diagnostic design
+
+M-2b made the UI labels clearer, but the daily-use trust issue is broader than
+wording. disk-insight is meant to help the user decide where to inspect when
+freeing disk space. If a path differs from Explorer or WizTree, the tool should
+be able to explain the likely reason.
+
+The M-1 classifications are therefore being mapped into a planned
+`--diag-path <path>` diagnostic:
+
+- PFx86: metric mix-up candidate plus residual deltas.
+- Program Files: Explorer divergence candidate.
+- Users: alignment candidate.
+- Windows: Windows special accounting candidate.
+
+See `docs/diag-path-design.md` for the proposed command, output, data sources,
+classification candidates, and minimal M-3b implementation plan.

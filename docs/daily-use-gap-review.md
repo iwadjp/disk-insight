@@ -1112,3 +1112,22 @@ resolve residual deltas, does not implement correction logic, and does not make
 exact Explorer / WizTree parity claims.
 
 **v0.3.0-daily-use: HOLD continues.**
+
+## 26. M-3: Per-path size discrepancy diagnostic design — PLANNED (2026-05-26)
+
+M-2b improves the labels, but the user's latest daily-use framing is stricter:
+disk-insight should help decide where to inspect when freeing disk space.
+
+For that purpose, size trust is not just label clarity. If disk-insight differs
+from Explorer or WizTree, the tool needs to explain the likely reason. A path may
+be WOF-heavy, hardlink-heavy, affected by WinSxS/component-store accounting, or
+show Explorer Properties divergence.
+
+M-3 designs a diagnostic-only `--diag-path <path>` mode that maps the M-1
+patterns into path-level evidence and candidate classifications. The planned
+M-3b implementation should be minimal and must not change normal output,
+correction policy, JSON, UI values, hardlink accounting, WinSxS accounting, or
+delete behavior.
+
+**v0.3.0-daily-use: HOLD continues.** The next trust improvement is
+explainability for specific paths, not another wording-only change.

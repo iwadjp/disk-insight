@@ -480,3 +480,18 @@ make the metric clear:
 
 See `docs/size-label-wording-plan.md`. The recommended next step is M-2b:
 minimal UI label and tooltip changes before any further correction work.
+
+### M-3: Path-level discrepancy diagnostics
+
+M-2b label changes are useful but insufficient. For disk cleanup use, the
+important trust question is whether disk-insight can explain why a specific path
+differs from Explorer or WizTree.
+
+The next accuracy step should be a diagnostic-only `--diag-path <path>` mode
+that reports current vs WOF-adjusted estimates, WOF evidence, hardlink and
+multi-name evidence, reparse/sparse/compressed signals, top child directories,
+and rule-based classification candidates.
+
+See `docs/diag-path-design.md`. This is still diagnosis, not correction:
+normal output, JSON, UI values, WOF default policy, hardlink accounting, and
+WinSxS accounting remain unchanged.

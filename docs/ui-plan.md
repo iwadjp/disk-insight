@@ -1298,6 +1298,24 @@ This is part of improving daily-use size trust by making the metric visible.
 No size correction, WOF default promotion, hardlink dedup, WinSxS correction,
 JSON/CLI schema change, or delete feature is included.
 
+### M-3: Per-path size discrepancy diagnostic design — DESIGN (2026-05-26)
+
+M-2b improves wording, but the core daily-use requirement is stronger:
+disk-insight should help the user decide where to inspect when freeing disk
+space. That requires either values close to Explorer/WizTree for the relevant
+metric, or a clear explanation when they differ.
+
+M-3 designs a diagnostic-only `--diag-path <path>` command. The planned command
+would report current vs WOF-adjusted estimates, WOF evidence, hardlink and
+multi-name evidence, reparse/sparse/compressed signals, top child directories,
+top WOF-impact files, and rule-based classification candidates.
+
+M-3b should be a minimal CLI diagnostic implementation. It should not change UI
+behavior, normal CLI/JSON values, storage policy defaults, WOF production
+policy, hardlink accounting, WinSxS accounting, or delete behavior.
+
+See `docs/diag-path-design.md`.
+
 ---
 
 ## v0.3.0-daily-use milestone (candidate)
