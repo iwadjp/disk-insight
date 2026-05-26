@@ -1362,6 +1362,7 @@ K フェーズは daily-use HOLD の解消手段として位置づける。
 | K-2/K-2b/K-2c | scan 中の不安解消（progress visibility） |
 | K-3 | size accuracy / size meaning の説明改善 |
 | K-4 | daily-use 再判定 |
+| K-5 | scan speed / cold cache 再調査（N-2 完了後、HOLD 主因が移行） |
 
 ### 背景
 
@@ -2026,4 +2027,34 @@ Planned direction:
 - Propose a Rust-centric backend approach: frontend asks for `get_reclaimable_summary(path)` and Rust does the rule-based heavy lifting.
 
 No implementation changes were made. Deletion, WOF default change, hardlink deduplication, and WinSxS corrections remain unimplemented.
+
+### N-2b–N-2e: Reclaimable estimate implementation and evaluation - COMPLETE (2026-05-27)
+
+N-2b implemented the full reclaimable estimate pipeline: Rust logic extraction, `wof_size_map`
+in `MftTreeModel`, `get_reclaimable_summary` Tauri command, UI state wiring, and
+`SelectedFolderCard` display with CSS.
+
+N-2c evaluated the N-2b UI (overall: △). N-2d polished three △ issues:
+- Hide Range row when `not_recommended=true`
+- Show "Range: tight (within 1%)" when confidence=High and spread < 1%
+- Bump Not recommended text to 15 px / 700 weight
+
+N-2e re-evaluated after N-2d. Overall: **○ (practical daily-use level)**.
+
+The N-2 phase is complete. **v0.3.0-daily-use HOLD main cause has shifted from
+size trustworthiness to scan speed / cold cache.**
+
+### K-5: Scan speed / cold cache investigation - PLANNING (2026-05-27)
+
+N-2e confirmed reclaimable UI is at ○ level. The remaining v0.3.0-daily-use
+HOLD cause is scan speed and cold cache latency.
+
+See `docs/scan-speed-cold-cache-plan.md` for the full investigation plan.
+
+Key open questions:
+- Cold CLI `--perf-model` actual read_mft (K-1d was planned but never executed)
+- Whether N-2b `wof_size_map` addition degraded scan time
+- Tauri IPC overhead vs CLI model build time
+
+Next step: **K-5b** — re-measure warm/cold CLI + Tauri UI without source changes.
 

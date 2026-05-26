@@ -1228,3 +1228,47 @@ Key Design Decisions:
 
 It remains design-only. No deletion, WOF production changes, or hardlink/WinSxS correction is included.
 
+---
+
+## 32. N-2b–N-2e: Reclaimable estimate UI — COMPLETE (2026-05-27)
+
+N-2b–N-2e implemented and evaluated the reclaimable estimate feature in the Tauri UI.
+
+### Implementation (N-2b)
+
+- `compute_reclaimable_summary` extracted as reusable Rust function
+- `wof_size_map: HashMap<u64, (u64, u64)>` added to `MftTreeModel`
+- `get_reclaimable_summary` Tauri command added
+- `SelectedFolderCard` extended: Estimated reclaimable, Range, Confidence badge, Basis, Caution
+
+### Evaluation and polish (N-2c → N-2e)
+
+N-2c found three △ issues. N-2d resolved all three:
+
+| Issue | Fix |
+|-------|-----|
+| Range shown when not_recommended=true | Range row hidden for not_recommended paths |
+| High confidence range redundant (C:\Users spread < 1%) | "Range: tight (within 1%)" label |
+| "Not recommended" text weak (13 px/600) | Upgraded to 15 px/700 |
+
+N-2e re-evaluation: **○ (practical daily-use level)**.
+
+Paths and verdicts:
+- C:\Users: High / 85 GB / tight range → reliable cleanup candidate
+- C:\Program Files: Medium / 24 GB / WindowsApps cited → uninstall-guided decision
+- C:\Program Files (x86): Medium / 8 GB / Office cited → specific and actionable
+- C:\Windows: Low / Not recommended (bold) / Range hidden → "do not touch" is clear
+
+**Size trustworthiness is no longer a v0.3.0-daily-use HOLD condition.**
+
+### Updated HOLD status
+
+**v0.3.0-daily-use: HOLD continues**, but the main cause has shifted:
+
+| Factor | Previous | Now |
+|--------|----------|-----|
+| Size trustworthiness | HOLD cause | ○ resolved |
+| Scan speed / cold cache | Secondary | **Primary HOLD cause** |
+
+Next: K-5 scan speed / cold cache investigation. See `docs/scan-speed-cold-cache-plan.md`.
+
