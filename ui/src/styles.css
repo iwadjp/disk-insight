@@ -1088,6 +1088,49 @@ tbody tr:last-child td {
   color: #465563;
 }
 
+/* ── Parent breadcrumb navigation ── */
+.parent-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1px;
+  padding: 5px 12px;
+  background: #f1f5f9;
+  border-bottom: 1px solid #d9e1e8;
+  font-size: 12px;
+  min-height: 28px;
+}
+
+.parent-breadcrumb-label {
+  color: #5e6b78;
+  font-weight: 600;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.parent-breadcrumb-item {
+  background: none;
+  border: none;
+  padding: 2px 5px;
+  font-size: 12px;
+  color: #1a56db;
+  cursor: pointer;
+  border-radius: 3px;
+  line-height: 1.4;
+}
+
+.parent-breadcrumb-item:hover {
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+.parent-breadcrumb-separator {
+  color: #9eacba;
+  font-size: 11px;
+  padding: 0 1px;
+  user-select: none;
+}
+
 @media (max-width: 560px) {
   .app {
     width: min(100% - 20px, 1280px);

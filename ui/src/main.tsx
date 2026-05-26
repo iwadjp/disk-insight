@@ -252,6 +252,48 @@ function findNodeByPath(
   return undefined;
 }
 
+// Returns DirectoryEntry[] for every ancestor of selectedPath, from drive root
+// down to (but not including) selectedPath itself. Drive root = synthetic entry.
+function buildAncestorEntries(
+  selectedPath: string,
+  data: DiskInsightOutput,
+  childrenByParent: Record<number, TreeNode[]>,
+): DirectoryEntry[] {
+  if (isDriveRoot(selectedPath)) return [];
+  const parts = selectedPath.split("\\").filter(Boolean);
+  const drive = parts[0];
+  const driveRoot = drive + "\\";
+  const rootRecordIndex = data.root_children?.[0]?.parent_record_index ?? 5;
+
+  const paths: string[] = [];
+  for (let i = 0; i < parts.length - 1; i++) {
+    paths.push(
+      i === 0 ? driveRoot : drive + "\\" + parts.slice(1, i + 1).join("\\"),
+    );
+  }
+
+  return paths
+    .map((p): DirectoryEntry | undefined => {
+      if (isDriveRoot(p)) {
+        return {
+          path: p,
+          record_index: rootRecordIndex,
+          subtree_size: 0,
+          direct_file_size: 0,
+          child_count: data.root_children?.length ?? 0,
+        };
+      }
+      const node = findNodeByPath(p, data.root_children ?? [], childrenByParent);
+      return node ? treeNodeToDirEntry(node) : undefined;
+    })
+    .filter((e): e is DirectoryEntry => e !== undefined);
+}
+
+function breadcrumbLabel(path: string): string {
+  if (isDriveRoot(path)) return path;
+  return path.slice(path.lastIndexOf("\\") + 1);
+}
+
 function buildVisibleRows(
   rootChildren: TreeNode[],
   expandedIds: Set<number>,
@@ -805,7 +847,7 @@ function DirectChildrenPanel({
   sortDir,
   onSortKeyChange,
   onSortDirChange,
-  parentDir,
+  ancestorDirs,
   onNavigateToDir,
   onNavigate,
   onOpenExplorer,
@@ -821,7 +863,7 @@ function DirectChildrenPanel({
   sortDir: SortDirection;
   onSortKeyChange: (key: DirectChildrenSortKey) => void;
   onSortDirChange: (dir: SortDirection) => void;
-  parentDir: DirectoryEntry | undefined;
+  ancestorDirs: DirectoryEntry[];
   onNavigateToDir: (dir: DirectoryEntry) => void;
   onNavigate: (node: TreeNode) => void;
   onOpenExplorer: (path: string) => void;
@@ -975,14 +1017,21 @@ function DirectChildrenPanel({
           </button>
         )}
       </div>
-      {sourceKind === "live" && parentDir && (
-        <div
-          className="direct-child-row direct-child-row--parent"
-          onClick={() => onNavigateToDir(parentDir)}
-          title={`Go to ${parentDir.path}`}
-        >
-          <span className="direct-child-badge direct-child-badge--parent">..</span>
-          <span className="direct-child-name">Parent: {parentDir.path}</span>
+      {sourceKind === "live" && ancestorDirs.length > 0 && (
+        <div className="parent-breadcrumb">
+          <span className="parent-breadcrumb-label">Up:</span>
+          {ancestorDirs.map((ancestor, idx) => (
+            <React.Fragment key={ancestor.path}>
+              {idx > 0 && <span className="parent-breadcrumb-separator">›</span>}
+              <button
+                className="parent-breadcrumb-item"
+                onClick={() => onNavigateToDir(ancestor)}
+                title={ancestor.path}
+              >
+                {breadcrumbLabel(ancestor.path)}
+              </button>
+            </React.Fragment>
+          ))}
         </div>
       )}
       {body}
@@ -1047,23 +1096,13 @@ function App() {
     [data?.root_children, expandedIds, childrenByParent, childrenErrors],
   );
 
-  const selectedParentDir = useMemo((): DirectoryEntry | undefined => {
-    if (!selectedDir || isDriveRoot(selectedDir.path) || !data) return undefined;
-    const parentPath = getParentDir(selectedDir.path);
-    if (isDriveRoot(parentPath)) {
-      // C:\ is not a TreeNode in rootChildren — build a synthetic DirectoryEntry
-      const rootRecordIndex = data.root_children?.[0]?.parent_record_index ?? 5;
-      return {
-        path: parentPath,
-        record_index: rootRecordIndex,
-        subtree_size: data.summary.total_final_allocated,
-        direct_file_size: 0,
-        child_count: data.root_children?.length ?? 0,
-      };
-    }
-    const node = findNodeByPath(parentPath, data.root_children ?? [], childrenByParent);
-    return node ? treeNodeToDirEntry(node) : undefined;
-  }, [selectedDir, data, childrenByParent]);
+  const selectedAncestorDirs = useMemo(
+    (): DirectoryEntry[] =>
+      selectedDir && data
+        ? buildAncestorEntries(selectedDir.path, data, childrenByParent)
+        : [],
+    [selectedDir, data, childrenByParent],
+  );
 
   useEffect(() => {
     if (!selectedDir || sourceKind !== "live") {
@@ -1572,7 +1611,7 @@ function App() {
                   sortDir={directChildrenSortDir}
                   onSortKeyChange={setDirectChildrenSortKey}
                   onSortDirChange={setDirectChildrenSortDir}
-                  parentDir={selectedParentDir}
+                  ancestorDirs={selectedAncestorDirs}
                   onNavigateToDir={handleNavigateToDir}
                   onNavigate={handleSelectTreeNode}
                   onOpenExplorer={handleOpenExplorer}
