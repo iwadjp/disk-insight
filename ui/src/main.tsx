@@ -1573,7 +1573,7 @@ function App() {
           <label className="toolbar-label">
             Size metric
             <select
-              className="top-select"
+              className="top-select size-metric-select"
               value={storagePolicy}
               onChange={(e) => setStoragePolicy(e.target.value)}
               disabled={isLoading}

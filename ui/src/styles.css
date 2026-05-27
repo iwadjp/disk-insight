@@ -465,6 +465,10 @@ tbody tr:last-child td {
   flex-shrink: 0;
 }
 
+.size-metric-select {
+  max-width: 190px;
+}
+
 /* ── Two-pane content layout ── */
 .content-pane {
   display: flex;
