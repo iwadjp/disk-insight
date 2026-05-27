@@ -1128,7 +1128,7 @@ function App() {
   const scanStartMsRef = useRef<number | null>(null);
 
   const [data, setData] = useState<DiskInsightOutput | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(import.meta.env.DEV);
   const [loadingMsg, setLoadingMsg] = useState("Loading sample data...");
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
   const [localElapsedMs, setLocalElapsedMs] = useState(0);
@@ -1510,7 +1510,9 @@ function App() {
   }, [isLoading]);
 
   useEffect(() => {
-    runLoad(loadSampleData, "Loading sample data...", false, "sample");
+    if (import.meta.env.DEV) {
+      runLoad(loadSampleData, "Loading sample data...", false, "sample");
+    }
     if (isTauriRuntime()) {
       invoke<DriveInfo[]>("list_drives")
         .then((detected) => {
@@ -1634,6 +1636,11 @@ function App() {
       {/* Full-page placeholder only when there is no data yet */}
       {isLoading && data === null && (
         <div className="loading">{loadingMsg}</div>
+      )}
+      {!isLoading && data === null && (
+        <div className="empty-state">
+          Select a drive and click <strong>Scan</strong> to analyze disk usage.
+        </div>
       )}
 
       {error && (

@@ -830,6 +830,14 @@ tbody tr:last-child td {
   color: #5e6b78;
 }
 
+.empty-state {
+  padding: 64px 24px;
+  text-align: center;
+  color: #5e6b78;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
 @media (max-width: 900px) {
   .app-header {
     align-items: flex-start;
