@@ -3,8 +3,9 @@
 NTFS disk usage viewer for Windows. Reads the Master File Table (MFT) directly
 for fast, allocation-oriented size analysis and folder-level cleanup decision support.
 
-**Current status: v0.3.0-daily-use candidate (release build, no delete action).**  
-The tool is safe to use for disk analysis. Destructive operations are not implemented.
+**Current status: v0.3.0-safe-viewer milestone (release build, no delete action).**  
+This milestone marks disk-insight as a safe, read-only disk usage viewer.  
+It is not a full WizTree replacement yet. WizTree alternative remains a future goal (v0.4.0+).
 
 ---
 
@@ -222,7 +223,17 @@ byte-exact matches with any other tool.
 
 **Next-phase milestone: Explorer-style TreeView — PASS (2026-05-25).** Tag candidate: `v0.2.0-treeview-wof`.
 
-**v0.3.0-daily-use candidate — in preparation.**
+**v0.3.0-safe-viewer milestone — in preparation.**
+
+Focus: safe read-only disk usage inspection, delete-free, reclaimable estimate aid.  
+This is not a full WizTree replacement. WizTree alternative remains a goal for v0.4.0+.
+
+Primary value at this milestone:
+- Delete-free safety (no accidental destructive operations)
+- Reclaimable estimate with confidence / caution — aids inspection decisions without claiming exactness
+- Direct children navigation, filter, sort, breadcrumb
+- Context menu, Explorer integration
+- Useful as a license-safe read-only fallback in work environments where WizTree is not available
 
 - [x] K-2b/K-2c Scan progress strip (phase label, elapsed time, shimmer bar)
 - [x] N-2b–N-2e Reclaimable estimate UI in selected folder card
@@ -232,17 +243,29 @@ byte-exact matches with any other tool.
 - [x] P-1a/P-1b/P-1c UI polish (hover actions, reclaimable clamp, compact header)
 - [x] P-2/P-2b/P-2c Release UI: no sample demo, empty state startup, progress strip regression fix
 - [x] G-2 Toolbar polish (size metric select width)
-- [x] H-3 Milestone judgment: proceed to tag prep (conditions: H-2 + real-device verification)
-- [x] H-2 README / runbook update ← current
-- [ ] Real-device verification (release build, all flows)
-- [ ] V-2 Tag preparation
+- [x] H-2/H-3 Docs update and milestone judgment
+- [x] V-2 Tag name and positioning ← current
+- [ ] V-3 Final pre-tag check (release build verification)
+- [ ] Tag: `v0.3.0-safe-viewer`
+
+---
+
+## Future direction
+
+v0.4.0 target: move closer to a WizTree alternative candidate.
+
+- Faster scan / virtual scroll for large drives
+- Tighter size accuracy (hardlink dedup, WinSxS correction)
+- Broader daily-use navigation (keyboard shortcuts, expand-to-path)
+
+v0.3.0 is a safe-viewer milestone, not a WizTree replacement — that goal is explicitly deferred but not abandoned.
 
 ---
 
 ## Publication status
 
-Public release is deferred until the app reaches the author's own daily-use threshold.
-Current state is usable for personal disk analysis. No delete action is implemented.
+Public release is deferred. Current state is usable for personal disk analysis.
+No delete action is implemented.
 
 ---
 

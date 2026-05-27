@@ -1306,3 +1306,43 @@ H-3 判定（2026-05-27）で全 HOLD 主因が解消済みと確認:
 
 条件: H-2 README/runbook 更新（現在） → ユーザー実機確認 → V-2 tag preparation
 
+---
+
+## 20. Milestone naming decision (2026-05-27) — v0.3.0-safe-viewer
+
+### 経緯
+
+H-3 では `v0.3.0-daily-use` として tag 準備へ進む判定をした。  
+V-2 準備時に、ユーザー評価を踏まえてタグ名・位置づけを整理した。
+
+### ユーザー評価の結論
+
+- 基本機能テスト: OK
+- 速度・reclaimable estimate・deleteなし安全性・右ペイン操作: かなり整った
+- **ただし、WizTree の代わりに積極的に選ぶ段階ではまだない**
+- WizTree 代替を諦めたわけではない
+
+### タグ名の変更
+
+`v0.3.0-daily-use` → **`v0.3.0-safe-viewer`**
+
+理由:
+- "daily-use complete" を主張するタグ名にすると、実態とずれる
+- 現時点の主価値は安全な read-only viewer としての使いやすさ
+- WizTree alternative は v0.4.0 以降の継続目標として残す
+
+### v0.3.0-safe-viewer の主価値
+
+- delete-free 安全性（誤削除リスクゼロ）
+- reclaimable estimate（confidence / caution 付き、exact 主張なし）
+- Direct children navigation / filter / sort / breadcrumb
+- 右クリック context menu
+- 仕事用途での license-safe read-only fallback（WizTree ライセンスが使えない場面）
+
+### v0.4.0 継続目標
+
+- WizTree alternative candidate として積極的に選べる速度・UX
+- virtual scroll
+- より正確なサイズ値
+- 広いナビゲーション（キーボード操作など）
+

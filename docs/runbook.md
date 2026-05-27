@@ -483,7 +483,10 @@ expected behavior. See `docs/scan-progress-design.md` for implementation details
 
 ---
 
-## 12. v0.3.0 pre-tag verification checklist
+## 12. v0.3.0-safe-viewer pre-tag verification checklist
+
+Tag candidate: `v0.3.0-safe-viewer`  
+Purpose: safe read-only disk usage viewer milestone (not a full WizTree replacement).
 
 Use the **release build** (`npm run tauri build`). Run as Administrator.
 Do **not** use dev build timing for performance evaluation.

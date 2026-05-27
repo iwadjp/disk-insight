@@ -1343,12 +1343,25 @@ See `docs/diag-path-design.md`.
 
 ---
 
-## v0.3.0-daily-use milestone (candidate)
+## v0.3.0-safe-viewer milestone
 
 **STATUS: tag preparation in progress — 2026-05-27**  
-(HOLD → proceed decision made at H-3, 2026-05-27)
+(tag candidate: `v0.3.0-safe-viewer`)
 
-次ゴール: 著者が自分の用途で毎日使えるレベルに達すること。
+当初は `v0.3.0-daily-use` として検討してきたが、V-2 準備時にユーザー評価を経て
+**safe-viewer milestone** として位置づけを整理した。
+
+- WizTree の完全代替完成ではない
+- 安全な read-only disk usage viewer として一区切り
+- WizTree alternative は v0.4.0 以降の継続目標
+
+主な価値:
+- delete-free 安全性（誤削除リスクゼロ）
+- reclaimable estimate（confidence / caution 付き判断支援）
+- Direct children navigation / breadcrumb / context menu
+- 仕事用途での license-safe read-only fallback
+
+次ゴール（もともとは）: 著者が自分の用途で毎日使えるレベルに達すること。
 公開判断はその後（daily-use PASS 後に改めて判断する）。
 
 ### daily-use milestone の意味（2026-05-26 方針修正）
