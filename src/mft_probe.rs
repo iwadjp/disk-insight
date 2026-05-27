@@ -17,6 +17,7 @@ use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 use windows::core::PCWSTR;
 
 const FSCTL_GET_NTFS_FILE_RECORD: u32 = 0x00090068;
+const FILE_FLAG_SEQUENTIAL_SCAN_RAW: u32 = 0x08000000;
 
 #[repr(C)]
 struct NtfsFileRecordInputBuffer {
@@ -173,7 +174,7 @@ fn get_mft_info(drive: char) -> Result<MftInfo> {
             0x80000000u32,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
             None, OPEN_EXISTING,
-            FILE_FLAGS_AND_ATTRIBUTES(0), None,
+            FILE_FLAGS_AND_ATTRIBUTES(FILE_FLAG_SEQUENTIAL_SCAN_RAW), None,
         )
     }.context("ドライブオープン失敗")?;
 
