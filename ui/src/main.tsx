@@ -1613,8 +1613,8 @@ function App() {
         </div>
       </header>
 
-      {/* Scanning strip: shown on top of existing data while a new scan is running */}
-      {isLoading && data !== null && (
+      {/* Scanning strip: shown when a real scan is in progress (data may still be null on first scan) */}
+      {isLoading && scanStartMsRef.current !== null && (
         <div className="scanning-strip" role="status" aria-live="polite">
           <div className="scanning-strip-row">
             <span className="scanning-spinner" aria-hidden="true" />
@@ -1633,8 +1633,8 @@ function App() {
         </div>
       )}
 
-      {/* Full-page placeholder only when there is no data yet */}
-      {isLoading && data === null && (
+      {/* Full-page placeholder only when there is no data yet and no real scan running */}
+      {isLoading && data === null && scanStartMsRef.current === null && (
         <div className="loading">{loadingMsg}</div>
       )}
       {!isLoading && data === null && (
