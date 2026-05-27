@@ -437,6 +437,13 @@ function formatBytes(bytes: number): string {
     : `${value.toFixed(1)} ${units[unitIndex]}`;
 }
 
+function formatRecords(records: number): string {
+  if (records < 1000) return records.toLocaleString();
+  if (records < 1_000_000) return `${(records / 1000).toFixed(1)}K`;
+  if (records < 1_000_000_000) return `${(records / 1_000_000).toFixed(1)}M`;
+  return `${(records / 1_000_000_000).toFixed(1)}B`;
+}
+
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
 }
@@ -1733,7 +1740,9 @@ function App() {
   const scanProgressText = scanHasProgress
     ? scanProgress.unit === "bytes"
       ? `${formatBytes(scanProgress.current!)} / ${formatBytes(scanProgress.total!)}`
-      : `${scanProgress.current!.toLocaleString()} / ${scanProgress.total!.toLocaleString()} ${scanProgress.unit ?? ""}`.trim()
+      : scanProgress.unit === "records"
+        ? `${formatRecords(scanProgress.current!)} / ${formatRecords(scanProgress.total!)} records`
+        : `${scanProgress.current!.toLocaleString()} / ${scanProgress.total!.toLocaleString()} ${scanProgress.unit ?? ""}`.trim()
     : null;
   const scanSegmentText =
     scanProgress?.phase === "reading_mft" &&

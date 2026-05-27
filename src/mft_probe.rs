@@ -2688,6 +2688,18 @@ impl MftProgress {
             segment_total: Some(segment_total),
         }
     }
+
+    fn records(phase: &'static str, elapsed_ms: u64, current: u64, total: u64) -> Self {
+        Self {
+            phase,
+            elapsed_ms,
+            current: Some(current),
+            total: Some(total),
+            unit: Some("records"),
+            segment_current: None,
+            segment_total: None,
+        }
+    }
 }
 
 // Core API boundary:
@@ -2783,7 +2795,12 @@ where
     let record_size   = info.bytes_per_record as usize;
     let total_records = info.mft_size as usize / record_size;
 
-    progress(MftProgress::phase("parsing_records", total_start.elapsed().as_millis() as u64));
+    progress(MftProgress::records(
+        "parsing_records",
+        total_start.elapsed().as_millis() as u64,
+        0,
+        total_records as u64,
+    ));
     struct FlatEntry {
         record_idx: usize,
         name:       String,
@@ -2980,6 +2997,13 @@ where
         ext_entries.len(),
         total_records,
     );
+
+    progress(MftProgress::records(
+        "parsing_records",
+        total_start.elapsed().as_millis() as u64,
+        total_records as u64,
+        total_records as u64,
+    ));
 
     progress(MftProgress::phase("building_tree", total_start.elapsed().as_millis() as u64));
     let tree_start = std::time::Instant::now();
