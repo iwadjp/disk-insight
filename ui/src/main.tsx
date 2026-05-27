@@ -1590,15 +1590,17 @@ function App() {
             </span>
           )}
           <div className="toolbar-separator" />
-          <button
-            className="btn"
-            onClick={() =>
-              runLoad(loadSampleData, "Loading sample data...", false, "sample")
-            }
-            disabled={isLoading}
-          >
-            Load sample
-          </button>
+          {import.meta.env.DEV && (
+            <button
+              className="btn"
+              onClick={() =>
+                runLoad(loadSampleData, "Loading sample data...", false, "sample")
+              }
+              disabled={isLoading}
+            >
+              Load sample
+            </button>
+          )}
           <button
             className="btn btn-primary"
             onClick={handleScan}
