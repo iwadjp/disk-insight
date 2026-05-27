@@ -1,7 +1,7 @@
 use disk_insight::mft_probe::{
     build_mft_tree_model_with_policy_progress,
     compute_reclaimable_summary,
-    JsonTreeNode, JsonTreeOutput, ReclaimableSummary, StoragePolicy,
+    ArenaCache, JsonTreeNode, JsonTreeOutput, ReclaimableSummary, StoragePolicy,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -45,8 +45,9 @@ fn phase_message(phase: &str) -> &'static str {
 // this session" (e.g. only the embedded sample has been loaded).
 #[derive(Default)]
 struct AppState {
-    children_map: Mutex<Option<HashMap<u64, Vec<JsonTreeNode>>>>,
-    wof_size_map: Mutex<Option<HashMap<u64, (u64, u64)>>>,
+    arena_cache:   Mutex<Option<ArenaCache>>,
+    lazy_children: Mutex<Option<HashMap<u64, Vec<JsonTreeNode>>>>,
+    wof_size_map:  Mutex<Option<HashMap<u64, (u64, u64)>>>,
 }
 
 #[tauri::command]
@@ -115,7 +116,7 @@ async fn scan_drive(
 
     let spawn_ms = spawn_start.elapsed().as_millis();
     eprintln!(
-        "[perf-tauri] build_model done  {} ms  root_children={} top_dirs={} top_files={}  children_map_ms={} ms",
+        "[perf-tauri] build_model done  {} ms  root_children={} top_dirs={} top_files={}  arena_cache_ms={} ms",
         spawn_ms,
         model.output.root_children.len(),
         model.output.top_directories.len(),
@@ -123,20 +124,29 @@ async fn scan_drive(
         model.output.summary.children_map_time_ms,
     );
 
-    let output       = model.output;
-    let children_map = model.children_map;
+    let output      = model.output;
+    let arena_cache = model.arena_cache;
     let wof_size_map = model.wof_size_map;
 
     {
-        let cmap_lock_start = std::time::Instant::now();
+        let cache_lock_start = std::time::Instant::now();
         {
             let mut guard = state
-                .children_map
+                .arena_cache
                 .lock()
                 .map_err(|e| format!("state lock poisoned: {e}"))?;
-            *guard = Some(children_map);
+            *guard = Some(arena_cache);
         }
-        let cmap_lock_ms = cmap_lock_start.elapsed().as_millis();
+        let cache_lock_ms = cache_lock_start.elapsed().as_millis();
+
+        // Clear stale lazy_children from any previous scan.
+        {
+            let mut guard = state
+                .lazy_children
+                .lock()
+                .map_err(|e| format!("state lock poisoned: {e}"))?;
+            *guard = None;
+        }
 
         let wof_lock_start = std::time::Instant::now();
         {
@@ -149,8 +159,8 @@ async fn scan_drive(
         let wof_lock_ms = wof_lock_start.elapsed().as_millis();
 
         eprintln!(
-            "[perf-tauri] state_lock  children_map={} ms  wof_size_map={} ms",
-            cmap_lock_ms, wof_lock_ms
+            "[perf-tauri] state_lock  arena_cache={} ms  wof_size_map={} ms",
+            cache_lock_ms, wof_lock_ms
         );
     }
 
@@ -165,14 +175,36 @@ fn get_children(
     state: State<'_, AppState>,
     parent_record_index: u64,
 ) -> Result<Vec<JsonTreeNode>, String> {
-    let guard = state
-        .children_map
-        .lock()
-        .map_err(|e| format!("state lock poisoned: {e}"))?;
-    match guard.as_ref() {
-        Some(map) => Ok(map.get(&parent_record_index).cloned().unwrap_or_default()),
-        None => Err("No live scan data is loaded. Run Scan first.".to_string()),
+    // Fast path: serve from lazy cache if this FRN was already expanded.
+    {
+        let guard = state.lazy_children.lock()
+            .map_err(|e| format!("state lock poisoned: {e}"))?;
+        if let Some(map) = guard.as_ref() {
+            if let Some(children) = map.get(&parent_record_index) {
+                return Ok(children.clone());
+            }
+        }
     }
+
+    // Cache miss: build paths on demand from ArenaCache.
+    let children = {
+        let guard = state.arena_cache.lock()
+            .map_err(|e| format!("state lock poisoned: {e}"))?;
+        guard.as_ref()
+            .ok_or_else(|| "No live scan data. Run Scan first.".to_string())?
+            .get_children_for(parent_record_index)
+    };
+
+    // Store result in lazy cache for future calls to this FRN.
+    {
+        let mut guard = state.lazy_children.lock()
+            .map_err(|e| format!("state lock poisoned: {e}"))?;
+        guard.get_or_insert_with(HashMap::new)
+            .entry(parent_record_index)
+            .or_insert_with(|| children.clone());
+    }
+
+    Ok(children)
 }
 
 #[tauri::command]

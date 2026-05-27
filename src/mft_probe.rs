@@ -2461,15 +2461,94 @@ pub struct JsonTreeOutput {
     pub root_children:   Vec<JsonTreeNode>,
 }
 
-// Richer model returned to callers (Tauri layer) that need lazy children
-// lookups. `output` is what the UI receives as the scan result; `children_map`
-// indexes every directory's full child list (sorted by subtree_size desc, name
-// asc) so the get_children command can answer without re-scanning the MFT.
-// `wof_size_map` stores (subtree_size, wof_adjusted_subtree_size) per directory
-// record_index so Tauri commands can answer reclaimable queries without re-scanning.
+/// Compact per-node data stored in ArenaCache. No path strings — paths are
+/// reconstructed on demand by ArenaCache::reconstruct_path.
+pub struct CacheNode {
+    pub frn:              u64,
+    pub parent_frn:       u64,
+    pub name:             String,
+    pub is_dir:           bool,
+    pub subtree_size:     u64,
+    pub direct_file_size: u64,
+    pub final_alloc:      u64,
+    pub child_count:      usize,
+    pub is_orphan:        bool,
+}
+
+/// Lazy-children backing store. Built once at scan time; replaces the eager
+/// children_map. Paths are reconstructed per get_children call (first access
+/// per FRN) rather than pre-computing all paths for all directories up front.
+pub struct ArenaCache {
+    pub nodes:        Vec<CacheNode>,
+    pub frn_to_idx:   std::collections::HashMap<u64, usize>,
+    /// Per-directory sorted child indices (subtree_size desc, name asc).
+    pub dir_children: std::collections::HashMap<u64, Vec<usize>>,
+    pub drive:        char,
+}
+
+impl ArenaCache {
+    pub fn reconstruct_path(&self, start_idx: usize) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        let mut cur = start_idx;
+        for _ in 0..64 {
+            let (name_opt, pfn, frn, is_orphan) = {
+                let n = &self.nodes[cur];
+                (if n.frn != 5 { Some(n.name.clone()) } else { None },
+                 n.parent_frn, n.frn, n.is_orphan)
+            };
+            if let Some(nm) = name_opt { parts.push(nm); }
+            if pfn == frn {
+                let mut path = format!("{}:", self.drive);
+                for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
+                return path;
+            }
+            if is_orphan {
+                let mut path = String::from("(orphan)");
+                for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
+                return path;
+            }
+            match self.frn_to_idx.get(&pfn) {
+                Some(&pi) => { cur = pi; }
+                None => {
+                    let mut path = String::from("(orphan)");
+                    for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
+                    return path;
+                }
+            }
+        }
+        let mut path = String::from("(deep)");
+        for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
+        path
+    }
+
+    pub fn build_node(&self, ci: usize) -> JsonTreeNode {
+        let n = &self.nodes[ci];
+        JsonTreeNode {
+            name:                n.name.clone(),
+            path:                self.reconstruct_path(ci),
+            record_index:        n.frn as usize,
+            parent_record_index: n.parent_frn as usize,
+            is_directory:        n.is_dir,
+            subtree_size:        n.subtree_size,
+            direct_file_size:    n.direct_file_size,
+            child_count:         n.child_count,
+        }
+    }
+
+    pub fn get_children_for(&self, parent_frn: u64) -> Vec<JsonTreeNode> {
+        self.dir_children
+            .get(&parent_frn)
+            .map(|v| v.iter().map(|&ci| self.build_node(ci)).collect())
+            .unwrap_or_default()
+    }
+}
+
+// Richer model returned to callers (Tauri layer). `output` is what the UI
+// receives as the scan result. `arena_cache` backs lazy get_children calls
+// without re-scanning. `wof_size_map` backs reclaimable queries.
 pub struct MftTreeModel {
-    pub output:       JsonTreeOutput,
-    pub children_map: std::collections::HashMap<u64, Vec<JsonTreeNode>>,
+    pub output:      JsonTreeOutput,
+    pub arena_cache: ArenaCache,
     pub wof_size_map: std::collections::HashMap<u64, (u64, u64)>,
 }
 
@@ -3025,51 +3104,16 @@ where
     let total_final_alloc: u64  = arena.iter().filter(|n| !n.is_dir).map(|n| n.final_alloc).sum();
     let stats_ms = ui_model_t.elapsed().as_millis();
 
-    // Path reconstruction (depth-limited, same policy as probe7)
-    let reconstruct_path = |start_idx: usize| -> String {
-        let mut parts: Vec<String> = Vec::new();
-        let mut cur = start_idx;
-        for _ in 0..64 {
-            let (name_opt, pfn, frn, is_orphan) = {
-                let n = &arena[cur];
-                (if n.frn != 5 { Some(n.name.clone()) } else { None },
-                 n.parent_frn, n.frn, n.is_orphan)
-            };
-            if let Some(nm) = name_opt { parts.push(nm); }
-            if pfn == frn {
-                let mut path = format!("{}:", drive);
-                for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
-                return path;
-            }
-            if is_orphan {
-                let mut path = String::from("(orphan)");
-                for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
-                return path;
-            }
-            match frn_to_idx.get(&pfn) {
-                Some(&pi) => { cur = pi; }
-                None => {
-                    let mut path = String::from("(orphan)");
-                    for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
-                    return path;
-                }
-            }
-        }
-        let mut path = String::from("(deep)");
-        for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
-        path
-    };
-
+    // ── Top entries + path reconstruction ────────────────────────────────────
+    // reconstruct_path borrows arena and frn_to_idx immutably. Scoped in a
+    // block so frn_to_idx can be moved into ArenaCache once the block returns.
     let top_t = std::time::Instant::now();
-    // Top-N dirs
     let mut top_dir_idx: Vec<usize> = arena.iter().enumerate()
         .filter(|(_, n)| n.is_dir && n.subtree_size > 0)
         .map(|(i, _)| i)
         .collect();
     top_dir_idx.sort_unstable_by(|&a, &b| arena[b].subtree_size.cmp(&arena[a].subtree_size));
     top_dir_idx.truncate(top_n);
-
-    // Top-N files
     let mut top_file_idx: Vec<usize> = arena.iter().enumerate()
         .filter(|(_, n)| !n.is_dir && n.final_alloc > 0)
         .map(|(i, _)| i)
@@ -3077,61 +3121,65 @@ where
     top_file_idx.sort_unstable_by(|&a, &b| arena[b].final_alloc.cmp(&arena[a].final_alloc));
     top_file_idx.truncate(top_n);
 
-    let top_directories: Vec<JsonDirEntry> = top_dir_idx.iter().map(|&idx| {
-        JsonDirEntry {
-            path:             reconstruct_path(idx),
-            record_index:     arena[idx].frn as usize,
-            subtree_size:     arena[idx].subtree_size,
-            direct_file_size: arena[idx].direct_file_size,
-            child_count:      arena[idx].children.len(),
-        }
-    }).collect();
-
-    let top_files: Vec<JsonFileEntry> = top_file_idx.iter().map(|&idx| {
-        JsonFileEntry {
-            path:                 reconstruct_path(idx),
-            record_index:         arena[idx].frn as usize,
-            parent_frn:           arena[idx].parent_frn,
-            final_allocated_size: arena[idx].final_alloc,
-        }
-    }).collect();
-
+    let (top_directories, top_files) = {
+        let reconstruct_path = |start_idx: usize| -> String {
+            let mut parts: Vec<String> = Vec::new();
+            let mut cur = start_idx;
+            for _ in 0..64 {
+                let (name_opt, pfn, frn, is_orphan) = {
+                    let n = &arena[cur];
+                    (if n.frn != 5 { Some(n.name.clone()) } else { None },
+                     n.parent_frn, n.frn, n.is_orphan)
+                };
+                if let Some(nm) = name_opt { parts.push(nm); }
+                if pfn == frn {
+                    let mut path = format!("{}:", drive);
+                    for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
+                    return path;
+                }
+                if is_orphan {
+                    let mut path = String::from("(orphan)");
+                    for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
+                    return path;
+                }
+                match frn_to_idx.get(&pfn) {
+                    Some(&pi) => { cur = pi; }
+                    None => {
+                        let mut path = String::from("(orphan)");
+                        for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
+                        return path;
+                    }
+                }
+            }
+            let mut path = String::from("(deep)");
+            for p in parts.iter().rev() { path.push('\\'); path.push_str(p); }
+            path
+        };
+        let top_directories: Vec<JsonDirEntry> = top_dir_idx.iter().map(|&idx| {
+            JsonDirEntry {
+                path:             reconstruct_path(idx),
+                record_index:     arena[idx].frn as usize,
+                subtree_size:     arena[idx].subtree_size,
+                direct_file_size: arena[idx].direct_file_size,
+                child_count:      arena[idx].children.len(),
+            }
+        }).collect();
+        let top_files: Vec<JsonFileEntry> = top_file_idx.iter().map(|&idx| {
+            JsonFileEntry {
+                path:                 reconstruct_path(idx),
+                record_index:         arena[idx].frn as usize,
+                parent_frn:           arena[idx].parent_frn,
+                final_allocated_size: arena[idx].final_alloc,
+            }
+        }).collect();
+        (top_directories, top_files)
+        // reconstruct_path drops here → borrows on arena and frn_to_idx released
+    };
     let top_ms = top_t.elapsed().as_millis();
 
-    // Build a JsonTreeNode for an arena index, using the shared path closure.
-    let make_node = |ci: usize| -> JsonTreeNode {
-        JsonTreeNode {
-            name:                arena[ci].name.clone(),
-            path:                reconstruct_path(ci),
-            record_index:        arena[ci].frn as usize,
-            parent_record_index: arena[ci].parent_frn as usize,
-            is_directory:        arena[ci].is_dir,
-            subtree_size:        arena[ci].subtree_size,
-            direct_file_size:    arena[ci].direct_file_size,
-            child_count:         arena[ci].children.len(),
-        }
-    };
-
-    // children_map: for every directory in the arena, store all its direct
-    // children (files and directories) sorted by subtree_size desc, name asc.
-    // Used by the Tauri get_children command to back lazy TreeView expansion.
-    let children_map_start = std::time::Instant::now();
-    let dir_count_hint = arena.iter().filter(|n| n.is_dir).count();
-    let mut children_map: HashMap<u64, Vec<JsonTreeNode>> =
-        HashMap::with_capacity(dir_count_hint);
-    for i in 0..arena.len() {
-        if !arena[i].is_dir { continue; }
-        let mut children: Vec<JsonTreeNode> = arena[i].children.iter()
-            .map(|&ci| make_node(ci))
-            .collect();
-        children.sort_unstable_by(|a, b| {
-            b.subtree_size.cmp(&a.subtree_size).then_with(|| a.name.cmp(&b.name))
-        });
-        children_map.insert(arena[i].frn, children);
-    }
-    let children_map_elapsed = children_map_start.elapsed();
-
+    // ── wof_size_map (from arena, no path strings needed) ────────────────────
     let wof_map_t = std::time::Instant::now();
+    let dir_count_hint = arena.iter().filter(|n| n.is_dir).count();
     let mut wof_size_map: HashMap<u64, (u64, u64)> = HashMap::with_capacity(dir_count_hint);
     for i in 0..arena.len() {
         if !arena[i].is_dir { continue; }
@@ -3139,11 +3187,37 @@ where
     }
     let wof_map_ms = wof_map_t.elapsed().as_millis();
 
-    // Root children: direct children of the NTFS root directory (FRN 5).
-    // Reuses the children_map entry; truncated to 200 for the embedded JSON.
-    let root_children: Vec<JsonTreeNode> = children_map
+    // ── ArenaCache: compact index for lazy get_children calls ────────────────
+    // frn_to_idx is moved here; reconstruct_path has already dropped above.
+    let children_map_start = std::time::Instant::now();
+    let nodes: Vec<CacheNode> = arena.iter().map(|n| CacheNode {
+        frn:              n.frn,
+        parent_frn:       n.parent_frn,
+        name:             n.name.clone(),
+        is_dir:           n.is_dir,
+        subtree_size:     n.subtree_size,
+        direct_file_size: n.direct_file_size,
+        final_alloc:      n.final_alloc,
+        child_count:      n.children.len(),
+        is_orphan:        n.is_orphan,
+    }).collect();
+    let mut dir_children: HashMap<u64, Vec<usize>> = HashMap::with_capacity(dir_count_hint);
+    for i in 0..arena.len() {
+        if !arena[i].is_dir { continue; }
+        let mut sorted: Vec<usize> = arena[i].children.clone();
+        sorted.sort_unstable_by(|&a, &b| {
+            nodes[b].subtree_size.cmp(&nodes[a].subtree_size)
+                .then_with(|| nodes[a].name.cmp(&nodes[b].name))
+        });
+        dir_children.insert(arena[i].frn, sorted);
+    }
+    let arena_cache = ArenaCache { nodes, frn_to_idx, dir_children, drive };
+    let children_map_elapsed = children_map_start.elapsed();
+
+    // Root children: direct children of NTFS root (FRN 5), up to 200.
+    let root_children: Vec<JsonTreeNode> = arena_cache.dir_children
         .get(&5)
-        .map(|v| v.iter().take(200).cloned().collect())
+        .map(|v| v.iter().take(200).map(|&ci| arena_cache.build_node(ci)).collect())
         .unwrap_or_default();
 
     let total_elapsed = total_start.elapsed();
@@ -3172,7 +3246,7 @@ where
 
     let output = JsonTreeOutput { summary, top_directories, top_files, root_children };
     eprintln!(
-        "[perf-model-detail] stats={} ms  top_build={} ms  children_map={} ms  wof_map={} ms  ui_total={} ms",
+        "[perf-model-detail] stats={} ms  top_build={} ms  arena_cache={} ms  wof_map={} ms  ui_total={} ms",
         stats_ms,
         top_ms,
         children_map_elapsed.as_millis(),
@@ -3180,7 +3254,7 @@ where
         ui_model_t.elapsed().as_millis(),
     );
     progress("done", total_elapsed.as_millis() as u64);
-    Ok(MftTreeModel { output, children_map, wof_size_map })
+    Ok(MftTreeModel { output, arena_cache, wof_size_map })
 }
 
 pub fn build_mft_tree_model(drive: char, top_n: usize) -> Result<MftTreeModel> {
@@ -3237,18 +3311,18 @@ pub fn print_perf_model_with_policy(
     let model = build_mft_tree_model_with_policy(drive, top_n, storage_policy)?;
     let model_ms = model_start.elapsed().as_millis();
 
-    let children_map_keys = model.children_map.len();
-    let children_map_total: usize = model.children_map.values().map(|v| v.len()).sum();
+    let cache_dir_count = model.arena_cache.dir_children.len();
+    let cache_total_children: usize = model.arena_cache.dir_children.values().map(|v| v.len()).sum();
 
     eprintln!(
         "[perf-cli-model] build_model done  {} ms  root_children={} top_dirs={} top_files={} \
-         children_map_keys={} children_map_total_children={}",
+         arena_dirs={} arena_total_children={}",
         model_ms,
         model.output.root_children.len(),
         model.output.top_directories.len(),
         model.output.top_files.len(),
-        children_map_keys,
-        children_map_total,
+        cache_dir_count,
+        cache_total_children,
     );
     print_perf_summary(&model.output.summary);
     Ok(())
