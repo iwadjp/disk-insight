@@ -1235,3 +1235,61 @@ tbody tr:last-child td {
     font-size: 12px;
   }
 }
+
+/* ── Perf breakdown (R-2e measurement aid) ── */
+.perf-breakdown {
+  margin: 0 24px 12px;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  background: #1e1e1e;
+}
+
+.perf-breakdown-summary {
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 11px;
+  color: #888;
+  user-select: none;
+}
+
+.perf-breakdown-summary:hover {
+  color: #ccc;
+}
+
+.perf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.perf-table th {
+  padding: 3px 10px;
+  text-align: left;
+  font-size: 10px;
+  color: #666;
+  font-weight: normal;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.perf-table td {
+  padding: 2px 10px;
+  color: #ccc;
+}
+
+.perf-phase { width: 140px; }
+.perf-ms    { text-align: right; color: #9cdcfe; width: 110px; }
+.perf-pct   { text-align: right; color: #888; width: 60px; }
+.perf-note  { font-size: 10px; color: #666; }
+.perf-other { color: #666; }
+
+.perf-table tfoot tr:first-child td {
+  border-top: 1px solid #3c3c3c;
+  padding-top: 4px;
+  color: #e0e0e0;
+  font-weight: 600;
+}
+
+.perf-table tfoot tr:last-child td {
+  padding-bottom: 6px;
+}

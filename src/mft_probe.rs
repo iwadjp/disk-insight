@@ -2448,6 +2448,8 @@ pub struct JsonSummary {
     pub tree_build_time_ms:    u64,
     pub aggregation_time_ms:   u64,
     pub children_map_time_ms:  u64,
+    pub wof_map_time_ms:       u64,
+    pub top_build_time_ms:     u64,
     pub total_time_ms:         u64,
 }
 
@@ -3163,6 +3165,8 @@ where
         tree_build_time_ms:    tree_build_elapsed.as_millis() as u64,
         aggregation_time_ms:   agg_elapsed.as_millis() as u64,
         children_map_time_ms:  children_map_elapsed.as_millis() as u64,
+        wof_map_time_ms:       wof_map_ms as u64,
+        top_build_time_ms:     top_ms as u64,
         total_time_ms:         total_elapsed.as_millis() as u64,
     };
 
@@ -3217,6 +3221,8 @@ fn print_perf_summary(s: &JsonSummary) {
     eprintln!("[perf]   tree_build:    {:>6} ms", s.tree_build_time_ms);
     eprintln!("[perf]   aggregate:     {:>6} ms", s.aggregation_time_ms);
     eprintln!("[perf]   children_map:  {:>6} ms", s.children_map_time_ms);
+    eprintln!("[perf]   wof_map:       {:>6} ms", s.wof_map_time_ms);
+    eprintln!("[perf]   top_build:     {:>6} ms", s.top_build_time_ms);
     eprintln!("[perf]   total:         {:>6} ms", s.total_time_ms);
 }
 

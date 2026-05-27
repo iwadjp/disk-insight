@@ -21,6 +21,9 @@ type Summary = {
   parse_time_ms: number;
   tree_build_time_ms: number;
   aggregation_time_ms: number;
+  children_map_time_ms?: number;
+  wof_map_time_ms?: number;
+  top_build_time_ms?: number;
   total_time_ms: number;
 };
 
@@ -480,6 +483,79 @@ function StatusBar({
       {durationLabel && <span className="status-meta">{durationLabel}</span>}
       {isLoading && <span className="status-meta status-updating">(updating…)</span>}
     </div>
+  );
+}
+
+function PerfBreakdown({ summary, invokeMs }: { summary: Summary; invokeMs: number | null }) {
+  const s = summary;
+  const phases: Array<[string, number | undefined]> = [
+    ["open_vol",      s.open_vol_time_ms],
+    ["read_mft",      s.read_time_ms],
+    ["parse",         s.parse_time_ms],
+    ["tree_build",    s.tree_build_time_ms],
+    ["aggregate",     s.aggregation_time_ms],
+    ["children_map",  s.children_map_time_ms],
+    ["wof_map",       s.wof_map_time_ms],
+    ["top_build",     s.top_build_time_ms],
+  ];
+  const knownMs = phases.reduce((acc, [, ms]) => acc + (ms ?? 0), 0);
+  const otherMs = Math.max(0, s.total_time_ms - knownMs);
+  const overheadMs = invokeMs !== null ? Math.round(invokeMs) - s.total_time_ms : null;
+
+  function pct(ms: number) {
+    return s.total_time_ms > 0 ? ((ms / s.total_time_ms) * 100).toFixed(1) + "%" : "—";
+  }
+
+  return (
+    <details className="perf-breakdown">
+      <summary className="perf-breakdown-summary">Scan timing breakdown</summary>
+      <table className="perf-table">
+        <thead>
+          <tr><th>Phase</th><th>Time</th><th>Share</th></tr>
+        </thead>
+        <tbody>
+          {phases.map(([label, ms]) =>
+            ms !== undefined ? (
+              <tr key={label}>
+                <td className="perf-phase">{label}</td>
+                <td className="perf-ms">{ms.toLocaleString()} ms</td>
+                <td className="perf-pct">{pct(ms)}</td>
+              </tr>
+            ) : null
+          )}
+          {otherMs > 0 && (
+            <tr>
+              <td className="perf-phase perf-other">other</td>
+              <td className="perf-ms">{otherMs.toLocaleString()} ms</td>
+              <td className="perf-pct">{pct(otherMs)}</td>
+            </tr>
+          )}
+        </tbody>
+        <tfoot>
+          <tr className="perf-total-row">
+            <td>Rust total</td>
+            <td className="perf-ms">{s.total_time_ms.toLocaleString()} ms</td>
+            <td className="perf-pct">100%</td>
+          </tr>
+          {invokeMs !== null && (
+            <>
+              <tr>
+                <td>UI invoke</td>
+                <td className="perf-ms">{Math.round(invokeMs).toLocaleString()} ms</td>
+                <td className="perf-pct perf-note">incl. Tauri IPC</td>
+              </tr>
+              {overheadMs !== null && (
+                <tr>
+                  <td>Tauri overhead</td>
+                  <td className="perf-ms">{overheadMs.toLocaleString()} ms</td>
+                  <td className="perf-pct perf-note">IPC + lock + ser</td>
+                </tr>
+              )}
+            </>
+          )}
+        </tfoot>
+      </table>
+    </details>
   );
 }
 
@@ -1126,6 +1202,7 @@ function App() {
   const scanTimingRef = useRef<{ start: number; invokeStart: number } | null>(null);
   const currentScanIdRef = useRef<string | null>(null);
   const scanStartMsRef = useRef<number | null>(null);
+  const [scanInvokeMs, setScanInvokeMs] = useState<number | null>(null);
 
   const [data, setData] = useState<DiskInsightOutput | null>(null);
   const [isLoading, setIsLoading] = useState(import.meta.env.DEV);
@@ -1288,9 +1365,11 @@ function App() {
         if (isScan && scanTimingRef.current) {
           const t0 = scanTimingRef.current.start;
           const now = performance.now();
+          const invoke_ms = now - scanTimingRef.current.invokeStart;
+          setScanInvokeMs(invoke_ms);
           console.log(
             `[perf-ui] invoke resolved  t+${(now - t0).toFixed(0)} ms` +
-            `  invoke_ms=${(now - scanTimingRef.current.invokeStart).toFixed(0)}`,
+            `  invoke_ms=${invoke_ms.toFixed(0)}`,
           );
         }
         setData(json);
@@ -1427,6 +1506,7 @@ function App() {
     scanTimingRef.current = { start: t0, invokeStart: t0 };
     currentScanIdRef.current = null;
     scanStartMsRef.current = t0;
+    setScanInvokeMs(null);
     setLocalElapsedMs(0);
     console.log(`[perf-ui] scan click  drive=${driveInput} policy=${storagePolicy}`);
     const drive = parseDriveLetter(driveInput);
@@ -1670,6 +1750,9 @@ function App() {
             scanTopN={scanTopN}
           />
           <SummaryCard summary={data.summary} />
+          {sourceKind === "live" && (
+            <PerfBreakdown summary={data.summary} invokeMs={scanInvokeMs} />
+          )}
           <div className="content-pane">
             <TreeView
               rootCount={data.root_children?.length ?? 0}
