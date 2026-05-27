@@ -1272,3 +1272,37 @@ Paths and verdicts:
 
 Next: K-5 scan speed / cold cache investigation. See `docs/scan-speed-cold-cache-plan.md`.
 
+---
+
+## 19. Status update (2026-05-27) — v0.3.0-daily-use tag preparation
+
+### HOLD 主因の解消確認
+
+H-3 判定（2026-05-27）で全 HOLD 主因が解消済みと確認:
+
+| HOLD 主因 | 解消手段 | 状態 |
+|---------|---------|------|
+| scan progress 見えない | K-2b/K-2c progress strip 実装 | ✓ 解消 |
+| size accuracy 不安 | N-2b–N-2e reclaimable estimate ○ | ✓ 解消 |
+| scan speed gap | release C: 約10s / WizTree 15s より速い | ✓ 実用水準 |
+
+追加 polish（P-1/P-2/G-2）:
+- release 初期画面から sample/demo 感を除去（empty state）
+- Direct children 行アクションは hover/focus 表示
+- reclaimable basis/caution は2行 clamp
+- Size metric select 幅調整
+
+### 残る非blocking項目
+
+| 項目 | 重要度 | 時期 |
+|------|--------|------|
+| H-1: TreeView 選択行視認性・サイズ列揃え | 低〜中 | tag 後 |
+| K-5: cold cache 計測・最適化 | 中（速度は実用水準達成） | tag 後も継続可 |
+| virtual scroll | 低（警告表示で運用可能） | 後フェーズ |
+
+### 判定
+
+**v0.3.0-daily-use tag 準備へ進む。**
+
+条件: H-2 README/runbook 更新（現在） → ユーザー実機確認 → V-2 tag preparation
+

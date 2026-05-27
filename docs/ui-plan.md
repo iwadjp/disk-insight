@@ -959,6 +959,31 @@ is unchanged; all existing behavior is preserved.
 | J-2 | Selected folder direct children panel（get_children 再利用、dir-first / size-desc、actions 付き） |
 | J-2b | Direct children row navigation（DIR 行クリックで selected folder 移動、stopPropagation でアクション保護） |
 | J-3  | Direct children sort control（size/name/type × asc/desc、パネル内ローカル state） |
+| J-4  | Session preferences（drive / top-N / policy / sort を localStorage に保存・復元） |
+| J-5  | Direct children name filter（case-insensitive、× clear、N of M カウント） |
+| J-5b | Parent navigation row（breadcrumb Up、drive root 合成 DirectoryEntry） |
+| K-1  | Scan performance baseline（`--perf` フラグ、phase 別タイミング） |
+| K-1b | Tauri UI end-to-end timing logs（`[perf-tauri]` / `[perf-ui]` ログ追加） |
+| K-1c | CLI model path timing（`--perf-model`、build_model_with_policy 計測） |
+| K-2b | Scan progress strip — Rust/Tauri 側 ScanProgressEvent emit 実装 |
+| K-2c | Scan progress strip — UI 側 Tauri event listener + progress strip コンポーネント |
+| K-5e | Tauri scan timing breakdown logs（K-5g: frontend timing logs も追加） |
+| M-2b | UI label 最小変更（ALLOCATED ESTIMATE / Size metric / Current allocation estimate 等） |
+| M-3b | `--diag-path` CLI 診断コマンド（per-path current/WOF estimate、WOF/hardlink evidence、Reclaimable estimate） |
+| M-3c | `--diag-path` 出力整理（Summary セクション追加、main delta source・top contributor % 等） |
+| N-1  | Reclaimable size model 設計（docs/reclaimable-size-model.md） |
+| N-1b | `--diag-path` に Reclaimable estimate セクション追加 |
+| N-2  | UI reclaimable estimate 設計（docs/ui-reclaimable-estimate-plan.md） |
+| N-2b | Reclaimable estimate UI 実装（Rust logic、wof_size_map、get_reclaimable_summary command、SelectedFolderCard 表示） |
+| N-2d | Reclaimable UI polish（not_recommended 時 Range 非表示、tight range label、Not recommended 強調） |
+| P-0  | Direct children 右クリックコンテキストメニュー（createPortal、DIR/FILE 分岐） |
+| P-1a | Direct children 行アクション — hover/focus 時のみ表示（opacity CSS） |
+| P-1b | Reclaimable basis/caution を2行 clamp（-webkit-line-clamp） |
+| P-1c | Direct children header/filter/breadcrumb compact 化（3バー→2バー） |
+| P-2  | release UI から Load Sample 非表示（import.meta.env.DEV） |
+| P-2b | release 初期画面 sample data 非表示・empty state 追加 |
+| P-2c | scan progress strip regression 修正（data が null でも strip 表示） |
+| G-2  | Size metric select 幅調整（max-width: 190px で toolbar 圧迫を解消） |
 
 ---
 
@@ -1320,7 +1345,8 @@ See `docs/diag-path-design.md`.
 
 ## v0.3.0-daily-use milestone (candidate)
 
-**STATUS: HOLD — 2026-05-25**
+**STATUS: tag preparation in progress — 2026-05-27**  
+(HOLD → proceed decision made at H-3, 2026-05-27)
 
 次ゴール: 著者が自分の用途で毎日使えるレベルに達すること。
 公開判断はその後（daily-use PASS 後に改めて判断する）。
@@ -2057,4 +2083,100 @@ Key open questions:
 - Tauri IPC overhead vs CLI model build time
 
 Next step: **K-5b** — re-measure warm/cold CLI + Tauri UI without source changes.
+
+---
+
+## P フェーズ: Release UI polish (2026-05-27)
+
+### P-0: Direct children right-click context menu
+
+**STATUS: COMPLETE — 2026-05-27**
+
+DIR 行: Open folder / Copy path  
+FILE 行: Open containing folder / Copy path  
+`createPortal` を使用してスタッキングコンテキスト問題を回避。
+
+### P-1a: Direct children row actions — hover/focus-only display
+
+**STATUS: COMPLETE — 2026-05-27**
+
+常時表示されていたアクションボタンを hover/focus 時のみ表示に変更。
+`opacity: 0; pointer-events: none` → hover/focus/context 時に `opacity: 1` へ切替（CSS のみ）。
+
+### P-1b: Reclaimable basis/caution 2-line clamp
+
+**STATUS: COMPLETE — 2026-05-27**
+
+basis / caution テキストを `-webkit-line-clamp: 2` で2行に抑制。
+長文テキストが selected folder card を大きくしすぎる問題を解消。
+
+### P-1c: Direct children header/filter compact化
+
+**STATUS: COMPLETE — 2026-05-27**
+
+filter row を header row と統合し、3バー → 2バーに削減。
+padding / height 削減で Direct children panel がよりコンパクトに。
+
+### P-2: Release UI — Load Sample 非表示
+
+**STATUS: COMPLETE — 2026-05-27**
+
+`import.meta.env.DEV` で Load Sample ボタンを release UI から非表示に。
+`vite-env.d.ts` を追加して TypeScript エラーを解消。
+
+### P-2b: Release 初期画面 sample data 非表示 / empty state
+
+**STATUS: COMPLETE — 2026-05-27**
+
+release 起動直後に sample data が表示されていた問題を解消。
+
+- `isLoading` 初期値: `useState(import.meta.env.DEV)`（release では false）
+- 初期 `useEffect` の sample load を `if (import.meta.env.DEV)` で囲む
+- empty state JSX 追加: "Select a drive and click **Scan** to analyze disk usage."
+
+### P-2c: Scan progress strip regression fix
+
+**STATUS: COMPLETE — 2026-05-27**
+
+P-2b 後、release 初回 scan で progress strip が表示されなくなった regression を修正。
+
+- scanning strip: `data !== null` → `scanStartMsRef.current !== null`
+  （data が null の初回 scan でも strip を表示）
+- loading placeholder: `isLoading && data === null && scanStartMsRef.current === null`
+  （strip と placeholder が同時表示されない）
+
+---
+
+## G-2: Release toolbar polish (2026-05-27)
+
+**STATUS: COMPLETE — 2026-05-27**
+
+Size metric select に `size-metric-select` クラスを追加し、`max-width: 190px` を適用。
+"Current allocation estimate" オプションテキストが toolbar を圧迫していた問題を解消。
+
+---
+
+## H-3: v0.3.0-daily-use milestone decision (2026-05-27)
+
+**STATUS: COMPLETE — 2026-05-27**
+
+**判定: tag準備へ進む（条件付き）**
+
+HOLD 主因がすべて解消:
+
+| HOLD 主因 | 解消手段 |
+|---------|---------|
+| scan progress 見えない | K-2b/K-2c で progress strip 実装 |
+| size accuracy 不安 | N-2 reclaimable estimate ○ |
+| scan speed gap | release C: 約10s（WizTree 15sより速い）、D: 約54s ≈ WizTree 51s |
+
+条件:
+1. H-2 README / runbook 更新 ← 現在
+2. ユーザー実機確認（release build、全フロー）
+3. V-2 tag preparation
+
+残る非blocking項目:
+- H-1: TreeView 操作性 polish（tag 後）
+- K-5: cold cache 計測継続（tag 後も可）
+- virtual scroll（後フェーズ）
 

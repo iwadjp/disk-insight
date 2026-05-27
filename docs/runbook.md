@@ -229,12 +229,16 @@ npm run tauri dev
 
 Expected:
 
-- App window opens with sample data loaded
+- App window opens with sample data loaded (dev mode only)
+- "Load sample" button is visible in the toolbar (dev mode only)
 - Status bar shows "Sample data"
 - Scan C: button starts a live scan
 - Scanning banner and spinner appear during scan
 - Window remains movable and scrollable during scan
 - After scan: status bar shows "Live scan: C:" with timestamp and duration
+
+> In **release mode** (`npm run tauri build`), the app starts with an empty state.
+> "Load sample" is hidden. Click Scan to begin.
 
 ---
 
@@ -476,3 +480,74 @@ expected behavior. See `docs/scan-progress-design.md` for implementation details
 1. Note the drive size and scan duration.
 2. Check Task Manager for CPU/IO during scan.
 3. Record steps to reproduce and file an issue.
+
+---
+
+## 12. v0.3.0 pre-tag verification checklist
+
+Use the **release build** (`npm run tauri build`). Run as Administrator.
+Do **not** use dev build timing for performance evaluation.
+
+### Startup (release build)
+
+- [ ] App starts with empty state: "Select a drive and click **Scan** to analyze disk usage."
+- [ ] "Load sample" button is NOT visible
+- [ ] Toolbar shows: Drive / Top / Size metric / Scan [C:]
+- [ ] Size metric shows "Current allocation estimate" by default
+- [ ] Previous session's drive / top-N / metric are restored (localStorage)
+
+### Scan flow
+
+- [ ] Click Scan → amber progress strip appears (shimmer bar + phase label + elapsed time)
+- [ ] Scan completes → Summary / TreeView / Direct children panel all appear
+- [ ] Toolbar is disabled (not responsive to clicks) during scan
+- [ ] Re-scan: previous results remain visible; progress strip reappears (no blank flash)
+
+### Direct children panel
+
+- [ ] Selected folder card shows: Estimated reclaimable, Range (when applicable), Confidence badge, Basis, Caution
+- [ ] C:\Windows: "Not recommended as deletion target" (bold, no Range row)
+- [ ] C:\Users: High confidence, tight range shown
+- [ ] Direct children panel lists immediate subdirs and files for selected folder
+- [ ] Clicking a DIR row navigates into that folder (breadcrumb updates)
+- [ ] Parent row ".. Parent: …" navigates up to parent folder
+- [ ] Filter input narrows the list; × clears filter
+- [ ] Sort key (Size / Name / Type) and direction (↓ / ↑) change order
+
+### Right-click context menu
+
+- [ ] Right-clicking a DIR row shows: "Open folder" / "Copy path"
+- [ ] Right-clicking a FILE row shows: "Open containing folder" / "Copy path"
+- [ ] "Open folder" opens Explorer at the folder
+- [ ] "Copy path" copies path to clipboard; button briefly shows "Copied!"
+- [ ] Clicking outside menu or pressing Esc closes the menu
+
+### TreeView (left pane)
+
+- [ ] Root children listed at startup after scan
+- [ ] Clicking ▶ expands a folder; ▼ collapses it
+- [ ] Clicking a folder label selects it (right pane updates)
+- [ ] Large folder warning shown when > 200 children loaded
+
+### Size metric selector
+
+- [ ] Changing to "WOF-adjusted estimate (experimental)" shows amber inline warning
+- [ ] Scan with WOF adjusted: sizes differ from current; status bar shows `wof_adjusted` badge
+- [ ] Switching back and scanning: badge disappears, sizes return to current
+
+### Actions
+
+- [ ] Selected folder "Open folder" opens Explorer
+- [ ] Selected folder "Copy path" copies to clipboard
+- [ ] Top files "Select file" opens Explorer with file highlighted
+
+### Safety
+
+- [ ] No delete button anywhere in the UI
+- [ ] No destructive action is reachable
+
+### Build cleanliness
+
+- [ ] `npm run build` succeeds with no TypeScript errors
+- [ ] `cargo build --release` succeeds with no errors
+- [ ] Both repos (disk-insight, private_notes) are git-clean
