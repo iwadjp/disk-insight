@@ -324,6 +324,7 @@ tbody tr:last-child td {
 .scanning-strip-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -353,6 +354,21 @@ tbody tr:last-child td {
   flex-shrink: 0;
 }
 
+.scanning-strip-amount,
+.scanning-strip-percent,
+.scanning-strip-segment {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: #78350f;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.scanning-strip-percent {
+  min-width: 3.5ch;
+  text-align: right;
+}
+
 .scanning-strip-bar {
   height: 3px;
   border-radius: 2px;
@@ -371,6 +387,17 @@ tbody tr:last-child td {
   background: #d97706;
   border-radius: 2px;
   animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.scanning-strip-bar-determinate::after {
+  content: none;
+}
+
+.scanning-strip-bar-fill {
+  height: 100%;
+  background: #d97706;
+  border-radius: 2px;
+  transition: width 120ms linear;
 }
 
 @keyframes shimmer {

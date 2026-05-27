@@ -81,6 +81,11 @@ type ScanProgress = {
   phase:      string;
   message:    string;
   elapsed_ms: number;
+  current?:    number;
+  total?:      number;
+  unit?:       string;
+  segment_current?: number;
+  segment_total?:   number;
 };
 
 type ReclaimableSummary = {
@@ -108,6 +113,7 @@ const TOP_OPTIONS = [10, 30, 50, 100, 200, 500];
 const LARGE_FOLDER_THRESHOLD = 200;
 const LARGE_TREE_THRESHOLD = 1000;
 const PREF_KEY = "disk-insight.preferences.v1";
+const PHASE_COMPLETION_LATCH_MS = 600;
 
 type AppPreferences = {
   drive?: string;
@@ -162,6 +168,14 @@ function formatElapsed(ms: number): string {
   const m = Math.floor(s / 60);
   const rem = Math.floor(s % 60);
   return `${m}m ${rem}s`;
+}
+
+function hasByteProgress(p: ScanProgress | null): p is ScanProgress & {
+  current: number;
+  total: number;
+  unit: string;
+} {
+  return p?.current != null && p.total != null && p.total > 0 && p.unit === "bytes";
 }
 
 function isDriveRoot(path: string): boolean {
@@ -1202,6 +1216,9 @@ function App() {
   const scanTimingRef = useRef<{ start: number; invokeStart: number } | null>(null);
   const currentScanIdRef = useRef<string | null>(null);
   const scanStartMsRef = useRef<number | null>(null);
+  const lastProgressRef = useRef<ScanProgress | null>(null);
+  const pendingProgressTimerRef = useRef<number | null>(null);
+  const pendingProgressRef = useRef<ScanProgress | null>(null);
   const [scanInvokeMs, setScanInvokeMs] = useState<number | null>(null);
 
   const [data, setData] = useState<DiskInsightOutput | null>(null);
@@ -1263,6 +1280,85 @@ function App() {
         : [],
     [selectedDir, data, childrenByParent],
   );
+
+  function clearPendingProgressLatch() {
+    if (pendingProgressTimerRef.current !== null) {
+      window.clearTimeout(pendingProgressTimerRef.current);
+      pendingProgressTimerRef.current = null;
+    }
+    pendingProgressRef.current = null;
+  }
+
+  function showProgress(p: ScanProgress) {
+    lastProgressRef.current = p;
+    setScanProgress(p);
+  }
+
+  function resetProgressLatch() {
+    clearPendingProgressLatch();
+    lastProgressRef.current = null;
+  }
+
+  function shouldLatchReadingMftCompletion(
+    prev: ScanProgress | null,
+    next: ScanProgress,
+  ): prev is ScanProgress & { current: number; total: number; unit: string } {
+    return (
+      hasByteProgress(prev) &&
+      prev.phase === "reading_mft" &&
+      next.phase !== "reading_mft" &&
+      next.phase !== "done"
+    );
+  }
+
+  function startProgressCompletionHold(scanId: string) {
+    pendingProgressTimerRef.current = window.setTimeout(() => {
+      pendingProgressTimerRef.current = null;
+      const pending = pendingProgressRef.current;
+      pendingProgressRef.current = null;
+      if (!pending || pending.scan_id !== currentScanIdRef.current || scanId !== currentScanIdRef.current) {
+        return;
+      }
+      showProgress(pending);
+    }, PHASE_COMPLETION_LATCH_MS);
+  }
+
+  function showProgressWithCompletionLatch(p: ScanProgress) {
+    if (p.phase === "done") {
+      clearPendingProgressLatch();
+      showProgress(p);
+      return;
+    }
+
+    if (pendingProgressTimerRef.current !== null) {
+      pendingProgressRef.current = p;
+      return;
+    }
+
+    if (
+      p.phase === "reading_mft" &&
+      hasByteProgress(p) &&
+      p.current >= p.total
+    ) {
+      showProgress({ ...p, current: p.total });
+      startProgressCompletionHold(p.scan_id);
+      return;
+    }
+
+    const prev = lastProgressRef.current;
+    if (shouldLatchReadingMftCompletion(prev, p)) {
+      const completed: ScanProgress = {
+        ...prev,
+        current: prev.total,
+      };
+      showProgress(completed);
+      pendingProgressRef.current = p;
+      startProgressCompletionHold(p.scan_id);
+      return;
+    }
+
+    showProgress(p);
+  }
 
   useEffect(() => {
     if (!selectedDir || sourceKind !== "live") {
@@ -1343,8 +1439,14 @@ function App() {
       scanTimingRef.current = { start: t0, invokeStart };
       console.log(`[perf-ui] invoke start  t+${(invokeStart - t0).toFixed(0)} ms`);
     }
-    if (isScan) setScanProgress(null);
-    if (!isScan) scanStartMsRef.current = null;
+    if (isScan) {
+      resetProgressLatch();
+      setScanProgress(null);
+    }
+    if (!isScan) {
+      resetProgressLatch();
+      scanStartMsRef.current = null;
+    }
     setIsLoading(true);
     setLoadingMsg(msg);
     setError(null);
@@ -1384,6 +1486,7 @@ function App() {
         setIsLoading(false);
       })
       .catch((err: unknown) => {
+        clearPendingProgressLatch();
         setError(err instanceof Error ? err.message : String(err));
         setIsScanError(isScan);
         setIsLoading(false);
@@ -1503,6 +1606,7 @@ function App() {
 
   function handleScan() {
     const t0 = performance.now();
+    resetProgressLatch();
     scanTimingRef.current = { start: t0, invokeStart: t0 };
     currentScanIdRef.current = null;
     scanStartMsRef.current = t0;
@@ -1564,17 +1668,18 @@ function App() {
     if (!isTauriRuntime()) return;
     const unlistenPromise = listen<ScanProgress>("scan_progress", (event) => {
       const p = event.payload;
-      console.log("[progress-ui] received", p.phase, p.elapsed_ms, "scan_id=" + p.scan_id);
       // Accept events: if no current scan_id yet, adopt this event's scan_id.
       if (currentScanIdRef.current === null) {
         currentScanIdRef.current = p.scan_id;
       } else if (p.scan_id !== currentScanIdRef.current) {
-        console.log("[progress-ui] stale event ignored, expected=" + currentScanIdRef.current);
         return;
       }
-      setScanProgress(p);
+      showProgressWithCompletionLatch(p);
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      clearPendingProgressLatch();
+      unlistenPromise.then((f) => f());
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1618,6 +1723,25 @@ function App() {
   const scanPhaseText = scanProgress ? phaseLabel(scanProgress.phase) : "Starting scan";
   const scanElapsedMs = scanProgress ? scanProgress.elapsed_ms : localElapsedMs;
   const scanDriveLabel = scanProgress?.drive ?? `${driveLabel}:`;
+  const scanHasProgress =
+    scanProgress?.current != null &&
+    scanProgress?.total != null &&
+    scanProgress.total > 0;
+  const scanProgressPercent = scanHasProgress
+    ? Math.max(0, Math.min(100, (scanProgress.current! / scanProgress.total!) * 100))
+    : null;
+  const scanProgressText = scanHasProgress
+    ? scanProgress.unit === "bytes"
+      ? `${formatBytes(scanProgress.current!)} / ${formatBytes(scanProgress.total!)}`
+      : `${scanProgress.current!.toLocaleString()} / ${scanProgress.total!.toLocaleString()} ${scanProgress.unit ?? ""}`.trim()
+    : null;
+  const scanSegmentText =
+    scanProgress?.phase === "reading_mft" &&
+    scanProgress.segment_current != null &&
+    scanProgress.segment_total != null &&
+    scanProgress.segment_total > 0
+      ? `segment ${scanProgress.segment_current.toLocaleString()}/${scanProgress.segment_total.toLocaleString()}`
+      : null;
 
   return (
     <main className="app">
@@ -1703,12 +1827,36 @@ function App() {
               <>
                 <span className="scanning-strip-sep" aria-hidden="true">—</span>
                 <span className="scanning-strip-phase">{scanPhaseText}</span>
+                {scanProgressText && (
+                  <>
+                    <span className="scanning-strip-amount">{scanProgressText}</span>
+                    <span className="scanning-strip-sep" aria-hidden="true">·</span>
+                    <span className="scanning-strip-percent">{scanProgressPercent!.toFixed(0)}%</span>
+                    {scanSegmentText && (
+                      <>
+                        <span className="scanning-strip-sep" aria-hidden="true">·</span>
+                        <span className="scanning-strip-segment">{scanSegmentText}</span>
+                      </>
+                    )}
+                  </>
+                )}
+                <span className="scanning-strip-sep" aria-hidden="true">·</span>
                 <span className="scanning-strip-elapsed">{formatElapsed(scanElapsedMs)}</span>
               </>
             )}
           </div>
           {scanStartMsRef.current !== null && (
-            <div className="scanning-strip-bar" aria-hidden="true" />
+            <div
+              className={`scanning-strip-bar${scanHasProgress ? " scanning-strip-bar-determinate" : ""}`}
+              aria-hidden="true"
+            >
+              {scanHasProgress && (
+                <div
+                  className="scanning-strip-bar-fill"
+                  style={{ width: `${scanProgressPercent ?? 0}%` }}
+                />
+              )}
+            </div>
           )}
         </div>
       )}

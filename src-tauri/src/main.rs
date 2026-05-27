@@ -25,6 +25,11 @@ struct ScanProgressEvent {
     phase:      String,
     message:    String,
     elapsed_ms: u64,
+    current:    Option<u64>,
+    total:      Option<u64>,
+    unit:       Option<&'static str>,
+    segment_current: Option<u64>,
+    segment_total:   Option<u64>,
 }
 
 fn phase_message(phase: &str) -> &'static str {
@@ -99,14 +104,18 @@ async fn scan_drive(
 
     let spawn_start = std::time::Instant::now();
     let model = tauri::async_runtime::spawn_blocking(move || {
-        build_mft_tree_model_with_policy_progress(drive_char, top_n, policy, |phase, elapsed_ms| {
-            eprintln!("[progress-tauri] emit phase={} elapsed_ms={}", phase, elapsed_ms);
+        build_mft_tree_model_with_policy_progress(drive_char, top_n, policy, |progress| {
             let event = ScanProgressEvent {
                 scan_id:    scan_id_cb.clone(),
                 drive:      drive_str_cb.clone(),
-                phase:      phase.to_string(),
-                message:    phase_message(phase).to_string(),
-                elapsed_ms,
+                phase:      progress.phase.to_string(),
+                message:    phase_message(progress.phase).to_string(),
+                elapsed_ms: progress.elapsed_ms,
+                current:    progress.current,
+                total:      progress.total,
+                unit:       progress.unit,
+                segment_current: progress.segment_current,
+                segment_total:   progress.segment_total,
             };
             let _ = app_cb.emit("scan_progress", &event);
         }).map_err(|e| format!("{e:#}"))

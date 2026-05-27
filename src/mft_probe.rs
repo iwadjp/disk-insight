@@ -2646,6 +2646,50 @@ impl StoragePolicy {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct MftProgress {
+    pub phase: &'static str,
+    pub elapsed_ms: u64,
+    pub current: Option<u64>,
+    pub total: Option<u64>,
+    pub unit: Option<&'static str>,
+    pub segment_current: Option<u64>,
+    pub segment_total: Option<u64>,
+}
+
+impl MftProgress {
+    fn phase(phase: &'static str, elapsed_ms: u64) -> Self {
+        Self {
+            phase,
+            elapsed_ms,
+            current: None,
+            total: None,
+            unit: None,
+            segment_current: None,
+            segment_total: None,
+        }
+    }
+
+    fn bytes(
+        phase: &'static str,
+        elapsed_ms: u64,
+        current: u64,
+        total: u64,
+        segment_current: u64,
+        segment_total: u64,
+    ) -> Self {
+        Self {
+            phase,
+            elapsed_ms,
+            current: Some(current),
+            total: Some(total),
+            unit: Some("bytes"),
+            segment_current: Some(segment_current),
+            segment_total: Some(segment_total),
+        }
+    }
+}
+
 // Core API boundary:
 // - builds structured MFT tree data and returns it to the caller
 // - never writes JSON or human output to stdout
@@ -2657,7 +2701,7 @@ pub fn build_mft_tree_model_with_policy(
     top_n: usize,
     storage_policy: StoragePolicy,
 ) -> Result<MftTreeModel> {
-    build_mft_tree_model_with_policy_progress(drive, top_n, storage_policy, |_, _| {})
+    build_mft_tree_model_with_policy_progress(drive, top_n, storage_policy, |_| {})
 }
 
 pub fn build_mft_tree_model_with_policy_progress<F>(
@@ -2667,7 +2711,7 @@ pub fn build_mft_tree_model_with_policy_progress<F>(
     mut progress: F,
 ) -> Result<MftTreeModel>
 where
-    F: FnMut(&str, u64),
+    F: FnMut(MftProgress),
 {
     use rayon::prelude::*;
     use std::collections::HashMap;
@@ -2676,14 +2720,23 @@ where
     let total_start = std::time::Instant::now();
     let info = get_mft_info(drive)?;
     let open_vol_elapsed = total_start.elapsed();
-    progress("opening_volume", open_vol_elapsed.as_millis() as u64);
+    progress(MftProgress::phase("opening_volume", open_vol_elapsed.as_millis() as u64));
     eprintln!("mft_tree_compute: drive={}  $MFT {} MB  {} extents  open_vol={} ms",
         drive, info.mft_size / 1_048_576, info.extents.len(), open_vol_elapsed.as_millis());
     let mut mft_buf = vec![0u8; info.mft_size as usize];
 
-    progress("reading_mft", open_vol_elapsed.as_millis() as u64);
+    progress(MftProgress::bytes(
+        "reading_mft",
+        total_start.elapsed().as_millis() as u64,
+        0,
+        info.mft_size,
+        0,
+        info.extents.len() as u64,
+    ));
     let io_start = std::time::Instant::now();
-    for (start_vcn, lcn, length) in &info.extents {
+    let mut read_mft_bytes = 0u64;
+    let extent_count = info.extents.len() as u64;
+    for (extent_index, (start_vcn, lcn, length)) in info.extents.iter().enumerate() {
         let disk_offset = lcn  * info.bytes_per_cluster;
         let dst_start   = start_vcn * info.bytes_per_cluster;
         let read_size   = length * info.bytes_per_cluster;
@@ -2700,7 +2753,24 @@ where
                 None,
             )
         }.context("ReadFile失敗")?;
+        read_mft_bytes = read_mft_bytes.saturating_add(bytes_read as u64);
+        progress(MftProgress::bytes(
+            "reading_mft",
+            total_start.elapsed().as_millis() as u64,
+            read_mft_bytes.min(info.mft_size),
+            info.mft_size,
+            (extent_index + 1) as u64,
+            extent_count,
+        ));
     }
+    progress(MftProgress::bytes(
+        "reading_mft",
+        total_start.elapsed().as_millis() as u64,
+        info.mft_size,
+        info.mft_size,
+        extent_count,
+        extent_count,
+    ));
     let io_elapsed = io_start.elapsed();
     unsafe { windows::Win32::Foundation::CloseHandle(info.handle).ok(); }
     eprintln!(
@@ -2713,7 +2783,7 @@ where
     let record_size   = info.bytes_per_record as usize;
     let total_records = info.mft_size as usize / record_size;
 
-    progress("parsing_records", total_start.elapsed().as_millis() as u64);
+    progress(MftProgress::phase("parsing_records", total_start.elapsed().as_millis() as u64));
     struct FlatEntry {
         record_idx: usize,
         name:       String,
@@ -2911,7 +2981,7 @@ where
         total_records,
     );
 
-    progress("building_tree", total_start.elapsed().as_millis() as u64);
+    progress(MftProgress::phase("building_tree", total_start.elapsed().as_millis() as u64));
     let tree_start = std::time::Instant::now();
 
     struct BaseGroupC {
@@ -3045,7 +3115,7 @@ where
         orphan_count,
     );
 
-    progress("aggregating_sizes", total_start.elapsed().as_millis() as u64);
+    progress(MftProgress::phase("aggregating_sizes", total_start.elapsed().as_millis() as u64));
     let agg_start = std::time::Instant::now();
 
     let mut order: Vec<usize> = Vec::with_capacity(arena.len());
@@ -3096,7 +3166,7 @@ where
 
     let agg_elapsed = agg_start.elapsed();
 
-    progress("building_ui_model", total_start.elapsed().as_millis() as u64);
+    progress(MftProgress::phase("building_ui_model", total_start.elapsed().as_millis() as u64));
     let ui_model_t = std::time::Instant::now();
 
     // Statistics
@@ -3254,7 +3324,7 @@ where
         wof_map_ms,
         ui_model_t.elapsed().as_millis(),
     );
-    progress("done", total_elapsed.as_millis() as u64);
+    progress(MftProgress::phase("done", total_elapsed.as_millis() as u64));
     Ok(MftTreeModel { output, arena_cache, wof_size_map })
 }
 
