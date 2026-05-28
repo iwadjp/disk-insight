@@ -735,6 +735,7 @@ function TreeView({
   loadingIds,
   selectedRecordIndex,
   treeError,
+  sourceKind,
   onToggleExpand,
   onSelect,
 }: {
@@ -744,6 +745,7 @@ function TreeView({
   loadingIds: Set<number>;
   selectedRecordIndex: number | undefined;
   treeError: string | null;
+  sourceKind: SourceKind | null;
   onToggleExpand: (node: TreeNode) => void;
   onSelect: (node: TreeNode) => void;
 }) {
@@ -798,7 +800,7 @@ function TreeView({
         )}
       </div>
       {treeError && (
-        <div className="folder-nav-footer folder-nav-footer--error">{treeError}</div>
+        <div className={`folder-nav-footer ${sourceKind === "cached" ? "folder-nav-footer--cached-note" : "folder-nav-footer--error"}`}>{treeError}</div>
       )}
       <div className={visibleRows.length >= LARGE_TREE_THRESHOLD
         ? "folder-nav-footer folder-nav-footer--warn"
@@ -815,6 +817,7 @@ function SelectedFolderCard({
   reclaimable,
   reclaimableLoading,
   reclaimableError,
+  sourceKind,
   onOpenExplorer,
   onCopyError,
 }: {
@@ -822,6 +825,7 @@ function SelectedFolderCard({
   reclaimable: ReclaimableSummary | null;
   reclaimableLoading: boolean;
   reclaimableError: string | null;
+  sourceKind: SourceKind | null;
   onOpenExplorer: (path: string) => void;
   onCopyError: (msg: string) => void;
 }) {
@@ -852,13 +856,13 @@ function SelectedFolderCard({
         </span>
         <span>Children: <strong>{formatNumber(dir.child_count)}</strong></span>
       </div>
-      {(reclaimableLoading || reclaimable !== null || reclaimableError !== null) && (
+      {(reclaimableLoading || reclaimable !== null || reclaimableError !== null || sourceKind === "cached") && (
         <div className="reclaimable-section">
           {reclaimableLoading ? (
             <div className="reclaimable-loading">Estimated reclaimable: loading…</div>
           ) : reclaimableError ? (
             <div className="reclaimable-unavailable">Reclaimable estimate unavailable</div>
-          ) : reclaimable && (
+          ) : reclaimable ? (
             <>
               <div className="reclaimable-header">
                 <span className="reclaimable-title">Estimated reclaimable</span>
@@ -882,7 +886,9 @@ function SelectedFolderCard({
               <div className="reclaimable-basis" title={reclaimable.basis}>{reclaimable.basis}</div>
               <div className="reclaimable-caution" title={reclaimable.caution}>{reclaimable.caution}</div>
             </>
-          )}
+          ) : sourceKind === "cached" ? (
+            <div className="reclaimable-cached-note">Reclaimable details are available after refresh completes.</div>
+          ) : null}
         </div>
       )}
     </div>
@@ -1097,7 +1103,7 @@ function DirectChildrenPanel({
     body = (
       <p className="direct-children-note">
         {sourceKind === "cached"
-          ? "Last scan results include only the visible root level. Run completion will enable deeper expansion."
+          ? "Last scan result only. Full folder expansion will be available after refresh."
           : "Direct children are available after a live scan in the Tauri app."}
       </p>
     );
@@ -1736,7 +1742,11 @@ function App() {
 
     // Need to fetch — only available on live scan
     if (sourceKind !== "live") {
-      setTreeError("Live scan required to load children. Run a scan in the Tauri app.");
+      setTreeError(
+        sourceKind === "cached"
+          ? "Last scan result only. Full folder expansion will be available after refresh."
+          : "Live scan required to load children. Run a scan in the Tauri app.",
+      );
       return;
     }
 
@@ -2121,6 +2131,7 @@ function App() {
               loadingIds={loadingIds}
               selectedRecordIndex={selectedDir?.record_index}
               treeError={treeError}
+              sourceKind={sourceKind}
               onToggleExpand={handleToggleExpand}
               onSelect={handleSelectTreeNode}
             />
@@ -2131,6 +2142,7 @@ function App() {
                   reclaimable={reclaimable}
                   reclaimableLoading={reclaimableLoading}
                   reclaimableError={reclaimableError}
+                  sourceKind={sourceKind}
                   onOpenExplorer={handleOpenExplorer}
                   onCopyError={handleCopyError}
                 />

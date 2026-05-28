@@ -802,10 +802,17 @@ tbody tr:last-child td {
 }
 
 .reclaimable-loading,
-.reclaimable-unavailable {
+.reclaimable-unavailable,
+.reclaimable-cached-note {
   font-size: 12px;
   color: #8a97a4;
   font-style: italic;
+}
+
+.folder-nav-footer--cached-note {
+  color: #854d0e;
+  background: #fefce8;
+  border-top-color: #fde68a;
 }
 
 .reclaimable-header {
