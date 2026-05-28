@@ -1401,6 +1401,7 @@ function App() {
   const [reclaimableLoading, setReclaimableLoading] = useState(false);
   const [reclaimableError, setReclaimableError] = useState<string | null>(null);
   const [focusedRecordIndex, setFocusedRecordIndex] = useState<number | null>(null);
+  const scanRestoreRef = useRef<{ path: string; drive: string } | null>(null);
 
   const visibleRows = useMemo(
     () => buildVisibleRows(data?.root_children ?? [], expandedIds, childrenByParent, childrenErrors),
@@ -1671,6 +1672,10 @@ function App() {
     setIsScanError(false);
     setStatusMessage(null);
     clearCacheBanner();
+    scanRestoreRef.current =
+      selectedDir && data
+        ? { path: selectedDir.path, drive: data.summary.drive }
+        : null;
     setExpandedIds(new Set());
     setLoadingIds(new Set());
     setChildrenByParent({});
@@ -1741,7 +1746,19 @@ function App() {
       setSourceKind("live");
       setLastUpdated(new Date());
       setScanTopN(top);
-      setSelectedDir(json.top_directories[0]);
+      const restore = scanRestoreRef.current;
+      scanRestoreRef.current = null;
+      let restoredDir: DirectoryEntry | undefined;
+      if (restore && restore.drive === `${drive}:`) {
+        const node = (json.root_children ?? []).find(
+          (n) => n.is_directory && n.path === restore.path,
+        );
+        if (node) {
+          restoredDir = treeNodeToDirEntry(node);
+          setFocusedRecordIndex(node.record_index);
+        }
+      }
+      setSelectedDir(restoredDir ?? json.top_directories[0]);
       showUpdatedBanner();
       console.log(`[perf-ui] setData called  t+${(performance.now() - t0).toFixed(0)} ms`);
       setIsLoading(false);
