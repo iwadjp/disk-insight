@@ -2462,6 +2462,98 @@ pub struct JsonTreeOutput {
     pub root_children:   Vec<JsonTreeNode>,
 }
 
+#[derive(serde::Serialize)]
+struct MinimalScanCache<'a> {
+    schema_version: u32,
+    cache_version: &'static str,
+    created_at_unix_ms: u64,
+    drive: &'a str,
+    volume_serial: Option<&'a str>,
+    storage_policy: &'a str,
+    summary: &'a JsonSummary,
+    top_directories: &'a [JsonDirEntry],
+    top_files: &'a [JsonFileEntry],
+    root_children: &'a [JsonTreeNode],
+}
+
+pub struct ScanCacheSaveReport {
+    pub path: String,
+    pub file_size_bytes: u64,
+    pub cache_save_ms: u64,
+}
+
+fn local_cache_dir() -> Result<std::path::PathBuf> {
+    let base = std::env::var_os("LOCALAPPDATA")
+        .map(std::path::PathBuf::from)
+        .ok_or_else(|| anyhow::anyhow!("LOCALAPPDATA is not set"))?;
+    Ok(base.join("disk-insight").join("cache"))
+}
+
+fn created_at_unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(u128::from(u64::MAX)) as u64
+}
+
+pub fn save_minimal_scan_cache(output: &JsonTreeOutput) -> Result<ScanCacheSaveReport> {
+    let save_start = std::time::Instant::now();
+    let cache_dir = local_cache_dir()?;
+    std::fs::create_dir_all(&cache_dir)?;
+
+    let drive_letter = output
+        .summary
+        .drive
+        .trim_end_matches(':')
+        .chars()
+        .next()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_uppercase())
+        .unwrap_or('X');
+
+    let cache_path = cache_dir.join(format!("scan-cache-{}.json", drive_letter));
+    let tmp_path = cache_dir.join(format!(
+        "scan-cache-{}.json.tmp-{}",
+        drive_letter,
+        created_at_unix_ms(),
+    ));
+
+    let cache = MinimalScanCache {
+        schema_version: 1,
+        cache_version: "K-6-A-1",
+        created_at_unix_ms: created_at_unix_ms(),
+        drive: &output.summary.drive,
+        volume_serial: None,
+        storage_policy: output.summary.storage_policy,
+        summary: &output.summary,
+        top_directories: &output.top_directories,
+        top_files: &output.top_files,
+        root_children: &output.root_children,
+    };
+
+    let json = serde_json::to_vec(&cache)?;
+    std::fs::write(&tmp_path, json)?;
+    match std::fs::rename(&tmp_path, &cache_path) {
+        Ok(()) => {}
+        Err(rename_err) => {
+            if cache_path.exists() {
+                std::fs::remove_file(&cache_path)?;
+                std::fs::rename(&tmp_path, &cache_path)?;
+            } else {
+                return Err(rename_err.into());
+            }
+        }
+    }
+
+    let file_size_bytes = std::fs::metadata(&cache_path)?.len();
+    Ok(ScanCacheSaveReport {
+        path: cache_path.display().to_string(),
+        file_size_bytes,
+        cache_save_ms: save_start.elapsed().as_millis() as u64,
+    })
+}
+
 /// Compact per-node data stored in ArenaCache. No path strings — paths are
 /// reconstructed on demand by ArenaCache::reconstruct_path.
 pub struct CacheNode {
@@ -3348,6 +3440,15 @@ where
         wof_map_ms,
         ui_model_t.elapsed().as_millis(),
     );
+    match save_minimal_scan_cache(&output) {
+        Ok(report) => eprintln!(
+            "[cache-save] cache_save_ms={} cache_file_size_bytes={} cache_file_path={}",
+            report.cache_save_ms,
+            report.file_size_bytes,
+            report.path,
+        ),
+        Err(e) => eprintln!("[cache-save-warning] failed to save minimal scan cache: {e:#}"),
+    }
     progress(MftProgress::phase("done", total_elapsed.as_millis() as u64));
     Ok(MftTreeModel { output, arena_cache, wof_size_map })
 }
