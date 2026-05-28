@@ -577,6 +577,18 @@ tbody tr:last-child td {
   background: transparent;
   transition: background 0.1s;
   min-height: 28px;
+  position: relative;
+}
+
+.tree-size-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(26, 86, 219, 0.09);
+  pointer-events: none;
+  border-radius: 0 2px 2px 0;
+  transition: width 0.15s ease;
 }
 
 .tree-row:last-child {

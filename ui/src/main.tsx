@@ -665,6 +665,7 @@ function SummaryCard({ summary }: { summary: Summary }) {
 type TreeRowProps = {
   node: TreeNode;
   depth: number;
+  totalSize: number;
   expandedIds: Set<number>;
   loadingIds: Set<number>;
   selectedRecordIndex: number | undefined;
@@ -675,6 +676,7 @@ type TreeRowProps = {
 function TreeNodeRow({
   node,
   depth,
+  totalSize,
   expandedIds,
   loadingIds,
   selectedRecordIndex,
@@ -687,6 +689,7 @@ function TreeNodeRow({
   const isSelected  = selectedRecordIndex === node.record_index;
   const indent      = 8 + depth * 16;
   const displayName = node.name || node.path;
+  const barPct      = totalSize > 0 ? Math.min(100, (node.subtree_size / totalSize) * 100) : 0;
 
   const rowClass =
     "tree-row"
@@ -696,6 +699,7 @@ function TreeNodeRow({
 
   return (
     <div className={rowClass} style={{ paddingLeft: indent }}>
+      {barPct > 0 && <div className="tree-size-bar" style={{ width: `${barPct}%` }} />}
       {isDir ? (
         <button
           className="tree-toggle"
@@ -731,6 +735,7 @@ function TreeNodeRow({
 function TreeView({
   rootCount,
   visibleRows,
+  totalSize,
   expandedIds,
   loadingIds,
   selectedRecordIndex,
@@ -741,6 +746,7 @@ function TreeView({
 }: {
   rootCount: number;
   visibleRows: VisibleTreeRow[];
+  totalSize: number;
   expandedIds: Set<number>;
   loadingIds: Set<number>;
   selectedRecordIndex: number | undefined;
@@ -789,6 +795,7 @@ function TreeView({
                 key={row.node.record_index}
                 node={row.node}
                 depth={row.depth}
+                totalSize={totalSize}
                 expandedIds={expandedIds}
                 loadingIds={loadingIds}
                 selectedRecordIndex={selectedRecordIndex}
@@ -2127,6 +2134,7 @@ function App() {
             <TreeView
               rootCount={data.root_children?.length ?? 0}
               visibleRows={visibleRows}
+              totalSize={data.summary.total_final_allocated}
               expandedIds={expandedIds}
               loadingIds={loadingIds}
               selectedRecordIndex={selectedDir?.record_index}
