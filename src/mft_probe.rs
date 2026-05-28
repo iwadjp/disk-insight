@@ -6,8 +6,8 @@ use windows::Win32::Security::{
     TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY,
 };
 use windows::Win32::Storage::FileSystem::{
-    CreateFileW, GetVolumeInformationW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ,
-    FILE_SHARE_WRITE, OPEN_EXISTING,
+    CreateFileW, GetDiskFreeSpaceExW, GetVolumeInformationW, FILE_FLAGS_AND_ATTRIBUTES,
+    FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
 };
 use windows::Win32::System::Ioctl::{
     FSCTL_GET_NTFS_VOLUME_DATA, NTFS_VOLUME_DATA_BUFFER,
@@ -2454,9 +2454,22 @@ pub struct JsonSummary {
     pub total_time_ms:         u64,
 }
 
+/// OS-level volume capacity from GetDiskFreeSpaceExW. Separate from the
+/// MFT-derived `total_final_allocated` in JsonSummary — the two measure
+/// different things and should not be compared directly in the UI.
+#[derive(serde::Serialize)]
+pub struct DriveCapacity {
+    pub total_bytes:     u64,
+    pub free_bytes:      u64,   // lpTotalNumberOfFreeBytes (not quota-limited)
+    pub available_bytes: u64,   // lpFreeBytesAvailableToCaller (quota-limited)
+    pub used_bytes:      u64,
+    pub used_percent:    f64,
+}
+
 #[derive(serde::Serialize)]
 pub struct JsonTreeOutput {
     pub summary:         JsonSummary,
+    pub capacity:        Option<DriveCapacity>,
     pub top_directories: Vec<JsonDirEntry>,
     pub top_files:       Vec<JsonFileEntry>,
     pub root_children:   Vec<JsonTreeNode>,
@@ -2471,6 +2484,7 @@ struct MinimalScanCache<'a> {
     volume_serial: Option<&'a str>,
     storage_policy: &'a str,
     summary: &'a JsonSummary,
+    capacity: Option<&'a DriveCapacity>,
     top_directories: &'a [JsonDirEntry],
     top_files: &'a [JsonFileEntry],
     root_children: &'a [JsonTreeNode],
@@ -2528,6 +2542,31 @@ fn get_volume_serial_hex(drive_letter: char) -> Result<String> {
     Ok(format!("{:08X}", serial))
 }
 
+fn get_drive_capacity(drive: char) -> Result<DriveCapacity> {
+    let root: Vec<u16> = format!("{}:\\", drive)
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut available_bytes: u64 = 0;
+    let mut total_bytes: u64 = 0;
+    let mut total_free_bytes: u64 = 0;
+    unsafe {
+        GetDiskFreeSpaceExW(
+            PCWSTR(root.as_ptr()),
+            Some(&mut available_bytes),
+            Some(&mut total_bytes),
+            Some(&mut total_free_bytes),
+        )
+    }.context("GetDiskFreeSpaceExW failed")?;
+    let used_bytes = total_bytes.saturating_sub(total_free_bytes);
+    let used_percent = if total_bytes > 0 {
+        used_bytes as f64 / total_bytes as f64 * 100.0
+    } else {
+        0.0
+    };
+    Ok(DriveCapacity { total_bytes, free_bytes: total_free_bytes, available_bytes, used_bytes, used_percent })
+}
+
 pub fn save_minimal_scan_cache(output: &JsonTreeOutput) -> Result<ScanCacheSaveReport> {
     let save_start = std::time::Instant::now();
     let cache_dir = local_cache_dir()?;
@@ -2573,6 +2612,7 @@ pub fn save_minimal_scan_cache(output: &JsonTreeOutput) -> Result<ScanCacheSaveR
         volume_serial: volume_serial.as_deref(),
         storage_policy: output.summary.storage_policy,
         summary: &output.summary,
+        capacity: output.capacity.as_ref(),
         top_directories: &output.top_directories,
         top_files: &output.top_files,
         root_children: &output.root_children,
@@ -2703,9 +2743,12 @@ pub fn load_minimal_scan_cache(
         .cloned()
         .ok_or_else(|| anyhow::anyhow!("cache missing root_children"))?;
 
+    let capacity = cache.get("capacity").cloned(); // None for caches saved before R-8
+
     Ok(Some(MinimalScanCacheLoad {
         output: serde_json::json!({
             "summary": summary,
+            "capacity": capacity,
             "top_directories": top_directories,
             "top_files": top_files,
             "root_children": root_children,
@@ -3594,7 +3637,21 @@ where
         total_time_ms:         total_elapsed.as_millis() as u64,
     };
 
-    let output = JsonTreeOutput { summary, top_directories, top_files, root_children };
+    let capacity = match get_drive_capacity(drive) {
+        Ok(cap) => {
+            eprintln!(
+                "[capacity] drive={} total={} free={} used={} used_pct={:.1}%",
+                drive, cap.total_bytes, cap.free_bytes, cap.used_bytes, cap.used_percent
+            );
+            Some(cap)
+        }
+        Err(e) => {
+            eprintln!("[capacity-warn] GetDiskFreeSpaceExW failed for {drive}: {e:#}");
+            None
+        }
+    };
+
+    let output = JsonTreeOutput { summary, capacity, top_directories, top_files, root_children };
     eprintln!(
         "[perf-model-detail] stats={} ms  top_build={} ms  arena_cache={} ms  wof_map={} ms  ui_total={} ms",
         stats_ms,

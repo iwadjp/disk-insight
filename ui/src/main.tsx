@@ -61,8 +61,17 @@ type VisibleTreeRow = {
   largeWarning?: number;
 };
 
+type DriveCapacity = {
+  total_bytes: number;
+  free_bytes: number;
+  available_bytes: number;
+  used_bytes: number;
+  used_percent: number;
+};
+
 type DiskInsightOutput = {
   summary: Summary;
+  capacity?: DriveCapacity;
   top_directories: DirectoryEntry[];
   top_files: FileEntry[];
   root_children?: TreeNode[];
@@ -659,6 +668,21 @@ function SummaryCard({ summary }: { summary: Summary }) {
         </div>
       ))}
     </section>
+  );
+}
+
+function CapacityCard({ capacity }: { capacity: DriveCapacity }) {
+  return (
+    <div className="capacity-card">
+      <span className="metric-label">Drive capacity</span>
+      <div className="capacity-card-stats">
+        <span title="Total volume capacity reported by the OS">{formatBytes(capacity.total_bytes)}{" "}total</span>
+        <span className="capacity-sep">·</span>
+        <span title="Used space (total minus free)">{formatBytes(capacity.used_bytes)}{" "}used ({capacity.used_percent.toFixed(1)}%)</span>
+        <span className="capacity-sep">·</span>
+        <span title="Free space on the volume">{formatBytes(capacity.free_bytes)}{" "}free</span>
+      </div>
+    </div>
   );
 }
 
@@ -2127,6 +2151,7 @@ function App() {
             scanTopN={scanTopN}
           />
           <SummaryCard summary={data.summary} />
+          {data.capacity && <CapacityCard capacity={data.capacity} />}
           {sourceKind === "live" && (
             <PerfBreakdown summary={data.summary} invokeMs={scanInvokeMs} />
           )}
