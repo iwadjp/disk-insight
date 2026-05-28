@@ -115,14 +115,14 @@ type TauriWindow = Window & {
 type SourceKind = "sample" | "live" | "cached";
 type CacheBannerState =
   | {
-      kind: "refreshing";
+      kind: "cached_refreshing";
       createdAtUnixMs: number;
       cacheLoadMs: number;
       cacheFileSizeBytes: number;
       cachePath: string;
     }
-  | { kind: "updated" }
-  | { kind: "failed"; message: string };
+  | { kind: "live" }
+  | { kind: "refresh_failed"; message: string };
 type DirectChildrenSortKey = "size" | "name" | "type";
 type SortDirection = "asc" | "desc";
 type ContextMenuState = { node: TreeNode; x: number; y: number };
@@ -132,6 +132,7 @@ const LARGE_FOLDER_THRESHOLD = 200;
 const LARGE_TREE_THRESHOLD = 1000;
 const PREF_KEY = "disk-insight.preferences.v1";
 const PHASE_COMPLETION_LATCH_MS = 600;
+const UPDATED_BANNER_DISMISS_MS = 4000;
 
 type AppPreferences = {
   drive?: string;
@@ -505,7 +506,7 @@ function StatusBar({
 
   const sourceLabel =
     sourceKind === "live"
-      ? `Live scan: ${data.summary.drive}`
+      ? `Live result: ${data.summary.drive}`
       : sourceKind === "cached"
         ? `Last scan result: ${data.summary.drive}`
         : "Sample data";
@@ -540,7 +541,7 @@ function StatusBar({
 function LastScanBanner({ banner }: { banner: CacheBannerState | null }) {
   if (!banner) return null;
 
-  if (banner.kind === "refreshing") {
+  if (banner.kind === "cached_refreshing") {
     return (
       <div className="last-scan-banner last-scan-banner--refreshing" role="status">
         Showing last scan result from {formatDateTime(new Date(banner.createdAtUnixMs))} ·
@@ -549,7 +550,7 @@ function LastScanBanner({ banner }: { banner: CacheBannerState | null }) {
     );
   }
 
-  if (banner.kind === "updated") {
+  if (banner.kind === "live") {
     return (
       <div className="last-scan-banner last-scan-banner--updated" role="status">
         Updated just now
@@ -559,7 +560,7 @@ function LastScanBanner({ banner }: { banner: CacheBannerState | null }) {
 
   return (
     <div className="last-scan-banner last-scan-banner--failed" role="status">
-      Last scan result shown; refresh failed: {banner.message}
+      Last scan result shown; refresh failed. Run Scan again to retry.
     </div>
   );
 }
@@ -1285,6 +1286,8 @@ function App() {
   const lastProgressRef = useRef<ScanProgress | null>(null);
   const pendingProgressTimerRef = useRef<number | null>(null);
   const pendingProgressRef = useRef<ScanProgress | null>(null);
+  const updatedBannerTimerRef = useRef<number | null>(null);
+  const bannerGenerationRef = useRef(0);
   const [scanInvokeMs, setScanInvokeMs] = useState<number | null>(null);
 
   const [data, setData] = useState<DiskInsightOutput | null>(null);
@@ -1347,6 +1350,30 @@ function App() {
         : [],
     [selectedDir, data, childrenByParent],
   );
+
+  function clearUpdatedBannerTimer() {
+    bannerGenerationRef.current += 1;
+    if (updatedBannerTimerRef.current !== null) {
+      window.clearTimeout(updatedBannerTimerRef.current);
+      updatedBannerTimerRef.current = null;
+    }
+  }
+
+  function showUpdatedBanner() {
+    clearUpdatedBannerTimer();
+    const generation = bannerGenerationRef.current;
+    setCacheBanner({ kind: "live" });
+    updatedBannerTimerRef.current = window.setTimeout(() => {
+      if (generation !== bannerGenerationRef.current) return;
+      updatedBannerTimerRef.current = null;
+      setCacheBanner((current) => (current?.kind === "live" ? null : current));
+    }, UPDATED_BANNER_DISMISS_MS);
+  }
+
+  function clearCacheBanner() {
+    clearUpdatedBannerTimer();
+    setCacheBanner(null);
+  }
 
   function clearPendingProgressLatch() {
     if (pendingProgressTimerRef.current !== null) {
@@ -1519,7 +1546,7 @@ function App() {
     setError(null);
     setIsScanError(false);
     setStatusMessage(null);
-    setCacheBanner(null);
+    clearCacheBanner();
     setExpandedIds(new Set());
     setLoadingIds(new Set());
     setChildrenByParent({});
@@ -1578,6 +1605,7 @@ function App() {
     setError(null);
     setIsScanError(false);
     setStatusMessage(null);
+    clearCacheBanner();
     setExpandedIds(new Set());
     setLoadingIds(new Set());
     setChildrenByParent({});
@@ -1600,8 +1628,9 @@ function App() {
         setLastUpdated(new Date(cached.created_at_unix_ms));
         setScanTopN(top);
         setSelectedDir(cached.output.top_directories[0]);
+        clearUpdatedBannerTimer();
         setCacheBanner({
-          kind: "refreshing",
+          kind: "cached_refreshing",
           createdAtUnixMs: cached.created_at_unix_ms,
           cacheLoadMs: cached.cache_load_ms,
           cacheFileSizeBytes: cached.cache_file_size_bytes,
@@ -1618,13 +1647,13 @@ function App() {
           console.log(`[cache-ui] cache rendered (rAF)  t+${(performance.now() - t0).toFixed(0)} ms`);
         });
       } else {
-        setCacheBanner(null);
+        clearCacheBanner();
         console.log(
           `[cache-ui] cache_hit=false cache_probe_ms=${(performance.now() - cacheStart).toFixed(1)}`,
         );
       }
     } catch (err: unknown) {
-      setCacheBanner(null);
+      clearCacheBanner();
       console.warn("[cache-ui] cache load ignored", err);
     }
 
@@ -1647,7 +1676,7 @@ function App() {
       setLastUpdated(new Date());
       setScanTopN(top);
       setSelectedDir(json.top_directories[0]);
-      setCacheBanner({ kind: "updated" });
+      showUpdatedBanner();
       console.log(`[perf-ui] setData called  t+${(performance.now() - t0).toFixed(0)} ms`);
       setIsLoading(false);
     } catch (err: unknown) {
@@ -1656,9 +1685,10 @@ function App() {
       setError(message);
       setIsScanError(true);
       if (showedCachedResult) {
-        setCacheBanner({ kind: "failed", message });
+        clearUpdatedBannerTimer();
+        setCacheBanner({ kind: "refresh_failed", message });
       } else {
-        setCacheBanner(null);
+        clearCacheBanner();
       }
       setIsLoading(false);
     }
@@ -1856,6 +1886,13 @@ function App() {
 
   // K-2b: local elapsed timer — ticks every 500 ms during a real scan.
   // Provides elapsed display even if Tauri events don't arrive.
+  useEffect(() => {
+    return () => {
+      clearUpdatedBannerTimer();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!isLoading || scanStartMsRef.current === null) return;
     const t0 = scanStartMsRef.current;
