@@ -693,6 +693,7 @@ type TreeRowProps = {
   expandedIds: Set<number>;
   loadingIds: Set<number>;
   selectedRecordIndex: number | undefined;
+  focusedRecordIndex: number | null;
   onToggleExpand: (node: TreeNode) => void;
   onSelect: (node: TreeNode) => void;
 };
@@ -704,6 +705,7 @@ function TreeNodeRow({
   expandedIds,
   loadingIds,
   selectedRecordIndex,
+  focusedRecordIndex,
   onToggleExpand,
   onSelect,
 }: TreeRowProps) {
@@ -711,6 +713,7 @@ function TreeNodeRow({
   const isExpanded  = expandedIds.has(node.record_index);
   const isLoading   = loadingIds.has(node.record_index);
   const isSelected  = selectedRecordIndex === node.record_index;
+  const isFocused   = isDir && focusedRecordIndex === node.record_index;
   const indent      = 8 + depth * 16;
   const displayName = node.name || node.path;
   const barPct      = totalSize > 0 ? Math.min(100, (node.subtree_size / totalSize) * 100) : 0;
@@ -718,11 +721,18 @@ function TreeNodeRow({
   const rowClass =
     "tree-row"
     + (isSelected ? " tree-row--active" : "")
+    + (isFocused ? " tree-row--keyboard-focused" : "")
     + (isDir ? "" : " tree-row--file")
     + (isLoading ? " tree-row--loading" : "");
 
   return (
-    <div className={rowClass} style={{ paddingLeft: indent }}>
+    <div
+      className={rowClass}
+      style={{ paddingLeft: indent }}
+      data-record-index={node.record_index}
+      role="treeitem"
+      aria-expanded={isDir ? isExpanded : undefined}
+    >
       {barPct > 0 && <div className="tree-size-bar" style={{ width: `${barPct}%` }} />}
       {isDir ? (
         <button
@@ -732,7 +742,9 @@ function TreeNodeRow({
           aria-label={isExpanded ? "Collapse" : "Expand"}
           title={isExpanded ? "Collapse" : "Expand"}
         >
-          {isLoading ? "…" : isExpanded ? "▼" : "▶"}
+          {isLoading ? "…" : (
+            <span className={isExpanded ? "tree-chevron tree-chevron--expanded" : "tree-chevron"}>▶</span>
+          )}
         </button>
       ) : (
         <span className="tree-toggle tree-toggle--leaf" aria-hidden="true">·</span>
@@ -763,10 +775,12 @@ function TreeView({
   expandedIds,
   loadingIds,
   selectedRecordIndex,
+  focusedRecordIndex,
   treeError,
   sourceKind,
   onToggleExpand,
   onSelect,
+  onKeyDown,
 }: {
   rootCount: number;
   visibleRows: VisibleTreeRow[];
@@ -774,15 +788,26 @@ function TreeView({
   expandedIds: Set<number>;
   loadingIds: Set<number>;
   selectedRecordIndex: number | undefined;
+  focusedRecordIndex: number | null;
   treeError: string | null;
   sourceKind: SourceKind | null;
   onToggleExpand: (node: TreeNode) => void;
   onSelect: (node: TreeNode) => void;
+  onKeyDown: (e: React.KeyboardEvent) => void;
 }) {
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (focusedRecordIndex === null) return;
+    listRef.current
+      ?.querySelector<HTMLElement>(`[data-record-index="${focusedRecordIndex}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [focusedRecordIndex]);
+
   return (
-    <aside className="folder-nav">
+    <aside className="folder-nav" tabIndex={0} onKeyDown={onKeyDown}>
       <div className="folder-nav-header">Folders</div>
-      <div className="folder-nav-list">
+      <div className="folder-nav-list" ref={listRef} role="tree">
         {visibleRows.length === 0 ? (
           <p className="empty-note">
             No root entries available. Run a live scan to load the folder tree.
@@ -823,6 +848,7 @@ function TreeView({
                 expandedIds={expandedIds}
                 loadingIds={loadingIds}
                 selectedRecordIndex={selectedRecordIndex}
+                focusedRecordIndex={focusedRecordIndex}
                 onToggleExpand={onToggleExpand}
                 onSelect={onSelect}
               />
@@ -1374,6 +1400,7 @@ function App() {
   const [reclaimable, setReclaimable] = useState<ReclaimableSummary | null>(null);
   const [reclaimableLoading, setReclaimableLoading] = useState(false);
   const [reclaimableError, setReclaimableError] = useState<string | null>(null);
+  const [focusedRecordIndex, setFocusedRecordIndex] = useState<number | null>(null);
 
   const visibleRows = useMemo(
     () => buildVisibleRows(data?.root_children ?? [], expandedIds, childrenByParent, childrenErrors),
@@ -1594,6 +1621,7 @@ function App() {
     setReclaimable(null);
     setReclaimableLoading(false);
     setReclaimableError(null);
+    setFocusedRecordIndex(null);
     loader()
       .then((json) => {
         if (isScan && scanTimingRef.current) {
@@ -1653,6 +1681,7 @@ function App() {
     setReclaimable(null);
     setReclaimableLoading(false);
     setReclaimableError(null);
+    setFocusedRecordIndex(null);
 
     let showedCachedResult = false;
     try {
@@ -1728,6 +1757,85 @@ function App() {
         clearCacheBanner();
       }
       setIsLoading(false);
+    }
+  }
+
+  function handleTreeKeyDown(e: React.KeyboardEvent) {
+    const navKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "Enter"];
+    if (!navKeys.includes(e.key)) return;
+    e.preventDefault();
+
+    const folderRows = visibleRows.filter(
+      (r) => !r.isEmpty && !r.nodeError && r.largeWarning === undefined && r.node.is_directory,
+    );
+    if (folderRows.length === 0) return;
+
+    const currentIdx =
+      focusedRecordIndex !== null
+        ? folderRows.findIndex((r) => r.node.record_index === focusedRecordIndex)
+        : -1;
+    const currentRow = currentIdx >= 0 ? folderRows[currentIdx] : null;
+
+    function moveTo(idx: number) {
+      const row = folderRows[Math.max(0, Math.min(folderRows.length - 1, idx))];
+      setFocusedRecordIndex(row.node.record_index);
+      handleSelectTreeNode(row.node);
+    }
+
+    switch (e.key) {
+      case "ArrowDown":
+        moveTo(currentIdx < 0 ? 0 : Math.min(folderRows.length - 1, currentIdx + 1));
+        break;
+      case "ArrowUp":
+        moveTo(currentIdx < 0 ? 0 : Math.max(0, currentIdx - 1));
+        break;
+      case "Home":
+        moveTo(0);
+        break;
+      case "End":
+        moveTo(folderRows.length - 1);
+        break;
+      case "Enter":
+        if (currentRow) handleSelectTreeNode(currentRow.node);
+        break;
+      case "ArrowRight": {
+        if (!currentRow) { moveTo(0); break; }
+        const curId = currentRow.node.record_index;
+        if (!expandedIds.has(curId)) {
+          handleToggleExpand(currentRow.node);
+        } else {
+          // Find first directory child in visibleRows after the current node
+          const curVisIdx = visibleRows.findIndex(
+            (r) =>
+              !r.isEmpty && !r.nodeError && r.largeWarning === undefined &&
+              r.node.record_index === curId,
+          );
+          for (let i = curVisIdx + 1; i < visibleRows.length; i++) {
+            const r = visibleRows[i];
+            if (r.isEmpty || r.nodeError || r.largeWarning !== undefined) continue;
+            if (r.depth <= currentRow.depth) break; // exited subtree
+            if (r.node.is_directory) {
+              setFocusedRecordIndex(r.node.record_index);
+              handleSelectTreeNode(r.node);
+              break;
+            }
+          }
+        }
+        break;
+      }
+      case "ArrowLeft": {
+        if (!currentRow) break;
+        const curId = currentRow.node.record_index;
+        if (expandedIds.has(curId)) {
+          handleToggleExpand(currentRow.node);
+        } else {
+          const parentIdx = folderRows.findIndex(
+            (r) => r.node.record_index === currentRow.node.parent_record_index,
+          );
+          if (parentIdx >= 0) moveTo(parentIdx);
+        }
+        break;
+      }
     }
   }
 
@@ -2163,10 +2271,12 @@ function App() {
               expandedIds={expandedIds}
               loadingIds={loadingIds}
               selectedRecordIndex={selectedDir?.record_index}
+              focusedRecordIndex={focusedRecordIndex}
               treeError={treeError}
               sourceKind={sourceKind}
               onToggleExpand={handleToggleExpand}
               onSelect={handleSelectTreeNode}
+              onKeyDown={handleTreeKeyDown}
             />
             <div className="content-right">
               {selectedDir && (

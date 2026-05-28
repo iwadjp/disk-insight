@@ -589,6 +589,11 @@ tbody tr:last-child td {
   min-height: 200px;
 }
 
+.folder-nav:focus-visible {
+  outline: 2px solid #1a56db;
+  outline-offset: 1px;
+}
+
 .folder-nav-header {
   padding: 10px 14px;
   font-size: 12px;
@@ -648,6 +653,11 @@ tbody tr:last-child td {
   background: #dce8fc;
 }
 
+.tree-row--keyboard-focused {
+  outline: 2px solid #1a56db;
+  outline-offset: -2px;
+}
+
 .tree-row--file {
   color: #5e6b78;
 }
@@ -686,6 +696,17 @@ tbody tr:last-child td {
   color: transparent;
   pointer-events: none;
   cursor: default;
+}
+
+.tree-chevron {
+  display: inline-block;
+  line-height: 1;
+  transform-origin: center;
+  transition: transform 0.12s ease;
+}
+
+.tree-chevron--expanded {
+  transform: rotate(90deg);
 }
 
 .tree-label {
