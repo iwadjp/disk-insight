@@ -294,6 +294,11 @@ tbody tr:last-child td {
   color: #166534;
 }
 
+.source-badge--cached {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
 .source-badge--experimental {
   background: #fef9c3;
   color: #854d0e;
@@ -308,6 +313,33 @@ tbody tr:last-child td {
 }
 
 /* ── Scanning strip ── */
+.last-scan-banner {
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border: 1px solid;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.last-scan-banner--refreshing {
+  background: #fffbeb;
+  border-color: #facc15;
+  color: #854d0e;
+}
+
+.last-scan-banner--updated {
+  background: #ecfdf5;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.last-scan-banner--failed {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
 .scanning-strip {
   display: flex;
   flex-direction: column;

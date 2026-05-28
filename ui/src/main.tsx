@@ -68,6 +68,14 @@ type DiskInsightOutput = {
   root_children?: TreeNode[];
 };
 
+type CachedScanResponse = {
+  output: DiskInsightOutput;
+  created_at_unix_ms: number;
+  cache_path: string;
+  cache_file_size_bytes: number;
+  cache_load_ms: number;
+};
+
 type DriveInfo = {
   letter: string;
   root: string;
@@ -104,7 +112,17 @@ type TauriWindow = Window & {
   __TAURI_INTERNALS__?: unknown;
 };
 
-type SourceKind = "sample" | "live";
+type SourceKind = "sample" | "live" | "cached";
+type CacheBannerState =
+  | {
+      kind: "refreshing";
+      createdAtUnixMs: number;
+      cacheLoadMs: number;
+      cacheFileSizeBytes: number;
+      cachePath: string;
+    }
+  | { kind: "updated" }
+  | { kind: "failed"; message: string };
 type DirectChildrenSortKey = "size" | "name" | "type";
 type SortDirection = "asc" | "desc";
 type ContextMenuState = { node: TreeNode; x: number; y: number };
@@ -211,6 +229,14 @@ async function scanDrive(drive: string, top: number, storagePolicy: string): Pro
     throw new Error("Real scan is available only in the Tauri desktop app.");
   }
   return invoke<DiskInsightOutput>("scan_drive", { drive, top, storagePolicy });
+}
+
+async function loadScanCache(
+  drive: string,
+  storagePolicy: string,
+): Promise<CachedScanResponse | null> {
+  if (!isTauriRuntime()) return null;
+  return invoke<CachedScanResponse | null>("load_scan_cache", { drive, storagePolicy });
 }
 
 async function openInExplorer(path: string): Promise<void> {
@@ -478,7 +504,11 @@ function StatusBar({
   if (!sourceKind || !lastUpdated || !data) return null;
 
   const sourceLabel =
-    sourceKind === "live" ? `Live scan: ${data.summary.drive}` : "Sample data";
+    sourceKind === "live"
+      ? `Live scan: ${data.summary.drive}`
+      : sourceKind === "cached"
+        ? `Last scan result: ${data.summary.drive}`
+        : "Sample data";
 
   const updatedLabel = `Last updated: ${formatDateTime(lastUpdated)}`;
 
@@ -494,15 +524,42 @@ function StatusBar({
   return (
     <div className="status-bar">
       <span className={`source-badge source-badge--${sourceKind}`}>{sourceLabel}</span>
-      {sourceKind === "live" && scanTopN !== null && (
+      {(sourceKind === "live" || sourceKind === "cached") && scanTopN !== null && (
         <span className="status-meta">Top {scanTopN}</span>
       )}
-      {sourceKind === "live" && policyLabel && (
+      {(sourceKind === "live" || sourceKind === "cached") && policyLabel && (
         <span className="source-badge source-badge--experimental">{policyLabel}</span>
       )}
       <span className="status-meta">{updatedLabel}</span>
       {durationLabel && <span className="status-meta">{durationLabel}</span>}
       {isLoading && <span className="status-meta status-updating">(updating…)</span>}
+    </div>
+  );
+}
+
+function LastScanBanner({ banner }: { banner: CacheBannerState | null }) {
+  if (!banner) return null;
+
+  if (banner.kind === "refreshing") {
+    return (
+      <div className="last-scan-banner last-scan-banner--refreshing" role="status">
+        Showing last scan result from {formatDateTime(new Date(banner.createdAtUnixMs))} ·
+        Refreshing in background...
+      </div>
+    );
+  }
+
+  if (banner.kind === "updated") {
+    return (
+      <div className="last-scan-banner last-scan-banner--updated" role="status">
+        Updated just now
+      </div>
+    );
+  }
+
+  return (
+    <div className="last-scan-banner last-scan-banner--failed" role="status">
+      Last scan result shown; refresh failed: {banner.message}
     </div>
   );
 }
@@ -1038,7 +1095,9 @@ function DirectChildrenPanel({
   } else if (sourceKind !== "live") {
     body = (
       <p className="direct-children-note">
-        Direct children are available after a live scan in the Tauri app.
+        {sourceKind === "cached"
+          ? "Last scan results include only the visible root level. Run completion will enable deeper expansion."
+          : "Direct children are available after a live scan in the Tauri app."}
       </p>
     );
   } else if (children === undefined) {
@@ -1237,6 +1296,7 @@ function App() {
   const [isScanError, setIsScanError] = useState(false);
   const [sourceKind, setSourceKind] = useState<SourceKind | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [cacheBanner, setCacheBanner] = useState<CacheBannerState | null>(null);
   const [drives, setDrives] = useState<DriveInfo[]>([
     { letter: "C", root: "C:\\", display: "C:", drive_type: "unknown" },
   ]);
@@ -1459,6 +1519,7 @@ function App() {
     setError(null);
     setIsScanError(false);
     setStatusMessage(null);
+    setCacheBanner(null);
     setExpandedIds(new Set());
     setLoadingIds(new Set());
     setChildrenByParent({});
@@ -1498,6 +1559,109 @@ function App() {
         setIsScanError(isScan);
         setIsLoading(false);
       });
+  }
+
+  async function runScanWithCache(
+    drive: string,
+    top: number,
+    policy: string,
+    msg: string,
+  ) {
+    const flowStart = performance.now();
+    const t0 = scanTimingRef.current?.start ?? flowStart;
+    scanTimingRef.current = { start: t0, invokeStart: flowStart };
+
+    resetProgressLatch();
+    setScanProgress(null);
+    setIsLoading(true);
+    setLoadingMsg(msg);
+    setError(null);
+    setIsScanError(false);
+    setStatusMessage(null);
+    setExpandedIds(new Set());
+    setLoadingIds(new Set());
+    setChildrenByParent({});
+    setChildrenErrors({});
+    setTreeError(null);
+    setSelectedChildrenLoading(false);
+    setSelectedChildrenError(null);
+    setReclaimable(null);
+    setReclaimableLoading(false);
+    setReclaimableError(null);
+
+    let showedCachedResult = false;
+    try {
+      const cacheStart = performance.now();
+      const cached = await loadScanCache(drive, policy);
+      const cacheApplyStart = performance.now();
+      if (cached) {
+        setData(cached.output);
+        setSourceKind("cached");
+        setLastUpdated(new Date(cached.created_at_unix_ms));
+        setScanTopN(top);
+        setSelectedDir(cached.output.top_directories[0]);
+        setCacheBanner({
+          kind: "refreshing",
+          createdAtUnixMs: cached.created_at_unix_ms,
+          cacheLoadMs: cached.cache_load_ms,
+          cacheFileSizeBytes: cached.cache_file_size_bytes,
+          cachePath: cached.cache_path,
+        });
+        showedCachedResult = true;
+        const cacheApplyMs = performance.now() - cacheApplyStart;
+        console.log(
+          `[cache-ui] cache_hit=true cache_load_ms=${cached.cache_load_ms}` +
+          ` cache_apply_ms=${cacheApplyMs.toFixed(1)}` +
+          ` cache_file_size_bytes=${cached.cache_file_size_bytes}`,
+        );
+        requestAnimationFrame(() => {
+          console.log(`[cache-ui] cache rendered (rAF)  t+${(performance.now() - t0).toFixed(0)} ms`);
+        });
+      } else {
+        setCacheBanner(null);
+        console.log(
+          `[cache-ui] cache_hit=false cache_probe_ms=${(performance.now() - cacheStart).toFixed(1)}`,
+        );
+      }
+    } catch (err: unknown) {
+      setCacheBanner(null);
+      console.warn("[cache-ui] cache load ignored", err);
+    }
+
+    try {
+      const scanInvokeStart = performance.now();
+      scanTimingRef.current = { start: t0, invokeStart: scanInvokeStart };
+      console.log(`[perf-ui] invoke start  t+${(scanInvokeStart - t0).toFixed(0)} ms`);
+      const json = await scanDrive(drive, top, policy);
+      if (scanTimingRef.current) {
+        const now = performance.now();
+        const invokeMs = now - scanTimingRef.current.invokeStart;
+        setScanInvokeMs(invokeMs);
+        console.log(
+          `[perf-ui] invoke resolved  t+${(now - t0).toFixed(0)} ms` +
+          `  invoke_ms=${invokeMs.toFixed(0)}`,
+        );
+      }
+      setData(json);
+      setSourceKind("live");
+      setLastUpdated(new Date());
+      setScanTopN(top);
+      setSelectedDir(json.top_directories[0]);
+      setCacheBanner({ kind: "updated" });
+      console.log(`[perf-ui] setData called  t+${(performance.now() - t0).toFixed(0)} ms`);
+      setIsLoading(false);
+    } catch (err: unknown) {
+      clearPendingProgressLatch();
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      setIsScanError(true);
+      if (showedCachedResult) {
+        setCacheBanner({ kind: "failed", message });
+      } else {
+        setCacheBanner(null);
+      }
+      setIsLoading(false);
+    }
   }
 
   function handleSelectTreeNode(node: TreeNode) {
@@ -1628,7 +1792,7 @@ function App() {
     }
     const policyNote = storagePolicy === "wof_adjusted" ? " [WOF-adjusted estimate]" : "";
     const msg = `Scanning ${drive}: — reading NTFS metadata. Top ${topN} entries.${policyNote}`;
-    runLoad(() => scanDrive(drive, topN, storagePolicy), msg, true, "live", topN);
+    void runScanWithCache(drive, topN, storagePolicy, msg);
   }
 
   useEffect(() => {
@@ -1896,6 +2060,8 @@ function App() {
       {statusMessage && (
         <div className="status-message status-message--success">{statusMessage}</div>
       )}
+
+      <LastScanBanner banner={cacheBanner} />
 
       {data && (
         <>

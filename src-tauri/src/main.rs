@@ -1,6 +1,7 @@
 use disk_insight::mft_probe::{
     build_mft_tree_model_with_policy_progress,
     compute_reclaimable_summary,
+    load_minimal_scan_cache,
     ArenaCache, JsonTreeNode, JsonTreeOutput, ReclaimableSummary, StoragePolicy,
 };
 use std::collections::HashMap;
@@ -14,6 +15,15 @@ struct DriveInfo {
     root: String,
     display: String,
     drive_type: String,
+}
+
+#[derive(serde::Serialize)]
+struct CachedScanResponse {
+    output: serde_json::Value,
+    created_at_unix_ms: u64,
+    cache_path: String,
+    cache_file_size_bytes: u64,
+    cache_load_ms: u64,
 }
 
 const SAMPLE_JSON: &str = include_str!("../../public/sample/probe7.sample.json");
@@ -59,6 +69,60 @@ struct AppState {
 fn load_sample_json() -> Result<serde_json::Value, String> {
     serde_json::from_str(SAMPLE_JSON)
         .map_err(|e| format!("failed to parse embedded sample JSON: {e}"))
+}
+
+#[tauri::command]
+fn load_scan_cache(
+    drive: String,
+    storage_policy: Option<String>,
+) -> Result<Option<CachedScanResponse>, String> {
+    let drive_char = drive
+        .trim_end_matches(':')
+        .chars()
+        .next()
+        .filter(|c| c.is_ascii_alphabetic())
+        .map(|c| c.to_ascii_uppercase())
+        .ok_or_else(|| format!("invalid drive: {}", drive))?;
+
+    let policy = match storage_policy.as_deref() {
+        Some("wof_adjusted") => StoragePolicy::WofAdjusted,
+        _ => StoragePolicy::Current,
+    };
+
+    match load_minimal_scan_cache(drive_char, policy) {
+        Ok(Some(cache)) => {
+            eprintln!(
+                "[cache-load] cache_hit=true cache_load_ms={} cache_file_size_bytes={} cache_path={} cache_created_at={}",
+                cache.cache_load_ms,
+                cache.file_size_bytes,
+                cache.path,
+                cache.created_at_unix_ms,
+            );
+            Ok(Some(CachedScanResponse {
+                output: cache.output,
+                created_at_unix_ms: cache.created_at_unix_ms,
+                cache_path: cache.path,
+                cache_file_size_bytes: cache.file_size_bytes,
+                cache_load_ms: cache.cache_load_ms,
+            }))
+        }
+        Ok(None) => {
+            eprintln!(
+                "[cache-load] cache_hit=false drive={} policy={}",
+                drive_char,
+                policy.as_str()
+            );
+            Ok(None)
+        }
+        Err(e) => {
+            eprintln!(
+                "[cache-load-warning] cache load ignored drive={} policy={} error={e:#}",
+                drive_char,
+                policy.as_str()
+            );
+            Ok(None)
+        }
+    }
 }
 
 #[tauri::command]
@@ -305,6 +369,7 @@ fn main() {
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             load_sample_json,
+            load_scan_cache,
             scan_drive,
             open_in_explorer,
             select_in_explorer,

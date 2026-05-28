@@ -2476,11 +2476,22 @@ struct MinimalScanCache<'a> {
     root_children: &'a [JsonTreeNode],
 }
 
+pub struct MinimalScanCacheLoad {
+    pub output: serde_json::Value,
+    pub created_at_unix_ms: u64,
+    pub path: String,
+    pub file_size_bytes: u64,
+    pub cache_load_ms: u64,
+}
+
 pub struct ScanCacheSaveReport {
     pub path: String,
     pub file_size_bytes: u64,
     pub cache_save_ms: u64,
 }
+
+const MINIMAL_SCAN_CACHE_SCHEMA_VERSION: u64 = 1;
+const MINIMAL_SCAN_CACHE_VERSION: &str = "K-6-A-1";
 
 fn local_cache_dir() -> Result<std::path::PathBuf> {
     let base = std::env::var_os("LOCALAPPDATA")
@@ -2555,8 +2566,8 @@ pub fn save_minimal_scan_cache(output: &JsonTreeOutput) -> Result<ScanCacheSaveR
     ));
 
     let cache = MinimalScanCache {
-        schema_version: 1,
-        cache_version: "K-6-A-1",
+        schema_version: MINIMAL_SCAN_CACHE_SCHEMA_VERSION as u32,
+        cache_version: MINIMAL_SCAN_CACHE_VERSION,
         created_at_unix_ms: created_at_unix_ms(),
         drive: &output.summary.drive,
         volume_serial: volume_serial.as_deref(),
@@ -2587,6 +2598,123 @@ pub fn save_minimal_scan_cache(output: &JsonTreeOutput) -> Result<ScanCacheSaveR
         file_size_bytes,
         cache_save_ms: save_start.elapsed().as_millis() as u64,
     })
+}
+
+pub fn load_minimal_scan_cache(
+    drive_letter: char,
+    storage_policy: StoragePolicy,
+) -> Result<Option<MinimalScanCacheLoad>> {
+    let load_start = std::time::Instant::now();
+    let cache_dir = local_cache_dir()?;
+    let drive_letter = drive_letter.to_ascii_uppercase();
+    let drive_label = format!("{}:", drive_letter);
+
+    let volume_serial = match get_volume_serial_hex(drive_letter) {
+        Ok(serial) => Some(serial),
+        Err(e) => {
+            eprintln!(
+                "[cache-load-warning] failed to get volume serial for {}:: {e:#}",
+                drive_letter,
+            );
+            None
+        }
+    };
+    let cache_stem = match volume_serial.as_deref() {
+        Some(serial) => format!("scan-cache-{}-{}", drive_letter, serial),
+        None => format!("scan-cache-{}", drive_letter),
+    };
+    let cache_path = cache_dir.join(format!("{}.json", cache_stem));
+    if !cache_path.exists() {
+        return Ok(None);
+    }
+
+    let file_size_bytes = std::fs::metadata(&cache_path)?.len();
+    let raw = std::fs::read(&cache_path)?;
+    let cache: serde_json::Value = serde_json::from_slice(&raw)?;
+
+    let schema_version = cache
+        .get("schema_version")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| anyhow::anyhow!("cache missing schema_version"))?;
+    if schema_version != MINIMAL_SCAN_CACHE_SCHEMA_VERSION {
+        bail!("unsupported cache schema_version: {}", schema_version);
+    }
+
+    let cache_version = cache
+        .get("cache_version")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("cache missing cache_version"))?;
+    if cache_version != MINIMAL_SCAN_CACHE_VERSION {
+        bail!("unsupported cache_version: {}", cache_version);
+    }
+
+    let cached_drive = cache
+        .get("drive")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("cache missing drive"))?;
+    if cached_drive != drive_label {
+        bail!("cache drive mismatch: expected {}, got {}", drive_label, cached_drive);
+    }
+
+    let cached_policy = cache
+        .get("storage_policy")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("cache missing storage_policy"))?;
+    if cached_policy != storage_policy.as_str() {
+        bail!(
+            "cache storage_policy mismatch: expected {}, got {}",
+            storage_policy.as_str(),
+            cached_policy
+        );
+    }
+
+    if let Some(expected_serial) = volume_serial.as_deref() {
+        let cached_serial = cache
+            .get("volume_serial")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("cache missing volume_serial"))?;
+        if cached_serial != expected_serial {
+            bail!(
+                "cache volume_serial mismatch: expected {}, got {}",
+                expected_serial,
+                cached_serial
+            );
+        }
+    }
+
+    let created_at_unix_ms = cache
+        .get("created_at_unix_ms")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| anyhow::anyhow!("cache missing created_at_unix_ms"))?;
+    let summary = cache
+        .get("summary")
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("cache missing summary"))?;
+    let top_directories = cache
+        .get("top_directories")
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("cache missing top_directories"))?;
+    let top_files = cache
+        .get("top_files")
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("cache missing top_files"))?;
+    let root_children = cache
+        .get("root_children")
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("cache missing root_children"))?;
+
+    Ok(Some(MinimalScanCacheLoad {
+        output: serde_json::json!({
+            "summary": summary,
+            "top_directories": top_directories,
+            "top_files": top_files,
+            "root_children": root_children,
+        }),
+        created_at_unix_ms,
+        path: cache_path.display().to_string(),
+        file_size_bytes,
+        cache_load_ms: load_start.elapsed().as_millis() as u64,
+    }))
 }
 
 /// Compact per-node data stored in ArenaCache. No path strings — paths are
