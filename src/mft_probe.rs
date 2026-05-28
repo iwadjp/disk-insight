@@ -6,7 +6,7 @@ use windows::Win32::Security::{
     TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY,
 };
 use windows::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ,
+    CreateFileW, GetVolumeInformationW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ,
     FILE_SHARE_WRITE, OPEN_EXISTING,
 };
 use windows::Win32::System::Ioctl::{
@@ -2497,6 +2497,26 @@ fn created_at_unix_ms() -> u64 {
         .min(u128::from(u64::MAX)) as u64
 }
 
+fn get_volume_serial_hex(drive_letter: char) -> Result<String> {
+    let root: Vec<u16> = format!("{}:\\", drive_letter)
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut serial = 0u32;
+    unsafe {
+        GetVolumeInformationW(
+            PCWSTR(root.as_ptr()),
+            None,
+            Some(&mut serial),
+            None,
+            None,
+            None,
+        )
+    }
+    .context("GetVolumeInformationW failed")?;
+    Ok(format!("{:08X}", serial))
+}
+
 pub fn save_minimal_scan_cache(output: &JsonTreeOutput) -> Result<ScanCacheSaveReport> {
     let save_start = std::time::Instant::now();
     let cache_dir = local_cache_dir()?;
@@ -2512,10 +2532,25 @@ pub fn save_minimal_scan_cache(output: &JsonTreeOutput) -> Result<ScanCacheSaveR
         .map(|c| c.to_ascii_uppercase())
         .unwrap_or('X');
 
-    let cache_path = cache_dir.join(format!("scan-cache-{}.json", drive_letter));
+    let volume_serial = match get_volume_serial_hex(drive_letter) {
+        Ok(serial) => Some(serial),
+        Err(e) => {
+            eprintln!(
+                "[cache-save-warning] failed to get volume serial for {}:: {e:#}",
+                drive_letter,
+            );
+            None
+        }
+    };
+    let cache_stem = match volume_serial.as_deref() {
+        Some(serial) => format!("scan-cache-{}-{}", drive_letter, serial),
+        None => format!("scan-cache-{}", drive_letter),
+    };
+
+    let cache_path = cache_dir.join(format!("{}.json", cache_stem));
     let tmp_path = cache_dir.join(format!(
-        "scan-cache-{}.json.tmp-{}",
-        drive_letter,
+        "{}.json.tmp-{}",
+        cache_stem,
         created_at_unix_ms(),
     ));
 
@@ -2524,7 +2559,7 @@ pub fn save_minimal_scan_cache(output: &JsonTreeOutput) -> Result<ScanCacheSaveR
         cache_version: "K-6-A-1",
         created_at_unix_ms: created_at_unix_ms(),
         drive: &output.summary.drive,
-        volume_serial: None,
+        volume_serial: volume_serial.as_deref(),
         storage_policy: output.summary.storage_policy,
         summary: &output.summary,
         top_directories: &output.top_directories,
