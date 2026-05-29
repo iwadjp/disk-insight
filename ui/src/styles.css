@@ -313,6 +313,12 @@ tbody tr:last-child td {
   color: #166534;
 }
 
+.status-message--info {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
 /* ── Status bar ── */
 .status-bar {
   display: flex;
@@ -385,6 +391,12 @@ tbody tr:last-child td {
   background: #fef2f2;
   border-color: #fca5a5;
   color: #991b1b;
+}
+
+.last-scan-banner--cancelled {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #475569;
 }
 
 .scanning-strip {

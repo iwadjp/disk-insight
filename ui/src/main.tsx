@@ -131,7 +131,8 @@ type CacheBannerState =
       cachePath: string;
     }
   | { kind: "live" }
-  | { kind: "refresh_failed"; message: string };
+  | { kind: "refresh_failed"; message: string }
+  | { kind: "refresh_cancelled" };
 type DirectChildrenSortKey = "size" | "name" | "type";
 type SortDirection = "asc" | "desc";
 type ContextMenuState = { node: TreeNode; x: number; y: number };
@@ -261,6 +262,11 @@ async function selectInExplorer(path: string): Promise<void> {
     throw new Error("File selection is available only in the Tauri desktop app.");
   }
   return invoke<void>("select_in_explorer", { path });
+}
+
+async function cancelScan(): Promise<void> {
+  if (!isTauriRuntime()) return;
+  return invoke<void>("cancel_scan");
 }
 
 async function getChildren(parentRecordIndex: number): Promise<TreeNode[]> {
@@ -563,6 +569,14 @@ function LastScanBanner({ banner }: { banner: CacheBannerState | null }) {
     return (
       <div className="last-scan-banner last-scan-banner--updated" role="status">
         Updated just now
+      </div>
+    );
+  }
+
+  if (banner.kind === "refresh_cancelled") {
+    return (
+      <div className="last-scan-banner last-scan-banner--cancelled" role="status">
+        Refresh cancelled. Showing last scan result.
       </div>
     );
   }
@@ -1380,7 +1394,10 @@ function App() {
   const [reclaimableError, setReclaimableError] = useState<string | null>(null);
   const [focusedRecordIndex, setFocusedRecordIndex] = useState<number | null>(null);
   const [currentFilterQuery, setCurrentFilterQuery] = useState("");
+  const [cancelMessage, setCancelMessage] = useState<string | null>(null);
   const scanRestoreRef = useRef<{ path: string; drive: string } | null>(null);
+  const scanGenerationRef = useRef(0);
+  const cancelMessageTimerRef = useRef<number | null>(null);
 
   const visibleRows = useMemo(
     () => buildVisibleRows(data?.root_children ?? [], expandedIds, childrenByParent, childrenErrors),
@@ -1671,6 +1688,8 @@ function App() {
     policy: string,
     msg: string,
   ) {
+    scanGenerationRef.current += 1;
+    const generation = scanGenerationRef.current;
     const flowStart = performance.now();
     const t0 = scanTimingRef.current?.start ?? flowStart;
     scanTimingRef.current = { start: t0, invokeStart: flowStart };
@@ -1682,6 +1701,7 @@ function App() {
     setError(null);
     setIsScanError(false);
     setStatusMessage(null);
+    setCancelMessage(null);
     clearCacheBanner();
     scanRestoreRef.current =
       selectedDir && data
@@ -1755,7 +1775,9 @@ function App() {
       const scanInvokeStart = performance.now();
       scanTimingRef.current = { start: t0, invokeStart: scanInvokeStart };
       console.log(`[perf-ui] invoke start  t+${(scanInvokeStart - t0).toFixed(0)} ms`);
+      if (scanGenerationRef.current !== generation) return;
       const json = await scanDrive(drive, top, policy);
+      if (scanGenerationRef.current !== generation) return;
       if (scanTimingRef.current) {
         const now = performance.now();
         const invokeMs = now - scanTimingRef.current.invokeStart;
@@ -1787,6 +1809,7 @@ function App() {
       setIsLoading(false);
     } catch (err: unknown) {
       clearPendingProgressLatch();
+      if (scanGenerationRef.current !== generation) return;
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
       setIsScanError(true);
@@ -2005,6 +2028,36 @@ function App() {
     setIsScanError(false);
   }
 
+  function showCancelMessage(msg: string) {
+    if (cancelMessageTimerRef.current !== null) {
+      window.clearTimeout(cancelMessageTimerRef.current);
+    }
+    setCancelMessage(msg);
+    cancelMessageTimerRef.current = window.setTimeout(() => {
+      cancelMessageTimerRef.current = null;
+      setCancelMessage(null);
+    }, 5000);
+  }
+
+  function handleCancelScan() {
+    if (!isLoading || scanStartMsRef.current === null) return;
+    scanGenerationRef.current += 1;
+    void cancelScan();
+    resetProgressLatch();
+    currentScanIdRef.current = null;
+    scanStartMsRef.current = null;
+    setIsLoading(false);
+    setScanProgress(null);
+    setLocalElapsedMs(0);
+    if (data !== null) {
+      clearUpdatedBannerTimer();
+      setCacheBanner({ kind: "refresh_cancelled" });
+    } else {
+      clearCacheBanner();
+      showCancelMessage("Scan cancelled.");
+    }
+  }
+
   function handleScan() {
     const t0 = performance.now();
     resetProgressLatch();
@@ -2089,6 +2142,9 @@ function App() {
   useEffect(() => {
     return () => {
       clearUpdatedBannerTimer();
+      if (cancelMessageTimerRef.current !== null) {
+        window.clearTimeout(cancelMessageTimerRef.current);
+      }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -2217,13 +2273,19 @@ function App() {
                 Load sample
               </button>
             )}
-            <button
-              className="btn btn-primary"
-              onClick={handleScan}
-              disabled={isLoading}
-            >
-              Scan {driveLabel}:
-            </button>
+            {isLoading && scanStartMsRef.current !== null ? (
+              <button className="btn" onClick={handleCancelScan}>
+                Cancel scan
+              </button>
+            ) : (
+              <button
+                className="btn btn-primary"
+                onClick={handleScan}
+                disabled={isLoading}
+              >
+                Scan {driveLabel}:
+              </button>
+            )}
           </div>
           {storagePolicy === "wof_adjusted" && (
             <div
@@ -2305,6 +2367,10 @@ function App() {
 
       {statusMessage && (
         <div className="status-message status-message--success">{statusMessage}</div>
+      )}
+
+      {cancelMessage && (
+        <div className="status-message status-message--info">{cancelMessage}</div>
       )}
 
       <LastScanBanner banner={cacheBanner} />

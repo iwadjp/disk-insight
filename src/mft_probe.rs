@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use std::sync::atomic::{AtomicBool, Ordering};
 use windows::Win32::Foundation::{HANDLE, LUID};
 use windows::Win32::Security::{
     AdjustTokenPrivileges, LookupPrivilegeValueW,
@@ -3011,13 +3012,15 @@ pub fn build_mft_tree_model_with_policy(
     top_n: usize,
     storage_policy: StoragePolicy,
 ) -> Result<MftTreeModel> {
-    build_mft_tree_model_with_policy_progress(drive, top_n, storage_policy, |_| {})
+    let no_cancel = AtomicBool::new(false);
+    build_mft_tree_model_with_policy_progress(drive, top_n, storage_policy, &no_cancel, |_| {})
 }
 
 pub fn build_mft_tree_model_with_policy_progress<F>(
     drive: char,
     top_n: usize,
     storage_policy: StoragePolicy,
+    cancel: &AtomicBool,
     mut progress: F,
 ) -> Result<MftTreeModel>
 where
@@ -3072,6 +3075,9 @@ where
             (extent_index + 1) as u64,
             extent_count,
         ));
+        if cancel.load(Ordering::Relaxed) {
+            bail!("Scan cancelled");
+        }
     }
     progress(MftProgress::bytes(
         "reading_mft",
@@ -3089,6 +3095,9 @@ where
         info.mft_size,
         info.extents.len(),
     );
+    if cancel.load(Ordering::Relaxed) {
+        bail!("Scan cancelled");
+    }
 
     let record_size   = info.bytes_per_record as usize;
     let total_records = info.mft_size as usize / record_size;
@@ -3302,6 +3311,9 @@ where
         total_records as u64,
         total_records as u64,
     ));
+    if cancel.load(Ordering::Relaxed) {
+        bail!("Scan cancelled");
+    }
 
     progress(MftProgress::phase("building_tree", total_start.elapsed().as_millis() as u64));
     let tree_start = std::time::Instant::now();
@@ -3437,6 +3449,10 @@ where
         orphan_count,
     );
 
+    if cancel.load(Ordering::Relaxed) {
+        bail!("Scan cancelled");
+    }
+
     progress(MftProgress::phase("aggregating_sizes", total_start.elapsed().as_millis() as u64));
     let agg_start = std::time::Instant::now();
 
@@ -3487,6 +3503,9 @@ where
     }
 
     let agg_elapsed = agg_start.elapsed();
+    if cancel.load(Ordering::Relaxed) {
+        bail!("Scan cancelled");
+    }
 
     progress(MftProgress::phase("building_ui_model", total_start.elapsed().as_millis() as u64));
     let ui_model_t = std::time::Instant::now();
@@ -3660,14 +3679,18 @@ where
         wof_map_ms,
         ui_model_t.elapsed().as_millis(),
     );
-    match save_minimal_scan_cache(&output) {
-        Ok(report) => eprintln!(
-            "[cache-save] cache_save_ms={} cache_file_size_bytes={} cache_file_path={}",
-            report.cache_save_ms,
-            report.file_size_bytes,
-            report.path,
-        ),
-        Err(e) => eprintln!("[cache-save-warning] failed to save minimal scan cache: {e:#}"),
+    if cancel.load(Ordering::Relaxed) {
+        eprintln!("[cache-save] skipped: scan was cancelled");
+    } else {
+        match save_minimal_scan_cache(&output) {
+            Ok(report) => eprintln!(
+                "[cache-save] cache_save_ms={} cache_file_size_bytes={} cache_file_path={}",
+                report.cache_save_ms,
+                report.file_size_bytes,
+                report.path,
+            ),
+            Err(e) => eprintln!("[cache-save-warning] failed to save minimal scan cache: {e:#}"),
+        }
     }
     progress(MftProgress::phase("done", total_elapsed.as_millis() as u64));
     Ok(MftTreeModel { output, arena_cache, wof_size_map })

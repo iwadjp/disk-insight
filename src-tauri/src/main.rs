@@ -6,7 +6,8 @@ use disk_insight::mft_probe::{
 };
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{Emitter, State};
 
 #[derive(serde::Serialize)]
@@ -63,6 +64,7 @@ struct AppState {
     arena_cache:   Mutex<Option<ArenaCache>>,
     lazy_children: Mutex<Option<HashMap<u64, Vec<JsonTreeNode>>>>,
     wof_size_map:  Mutex<Option<HashMap<u64, (u64, u64)>>>,
+    cancel_flag:   Mutex<Option<Arc<AtomicBool>>>,
 }
 
 #[tauri::command]
@@ -161,14 +163,22 @@ async fn scan_drive(
         drive_char, top_n, policy.as_str(), scan_id
     );
 
+    // ── Per-scan cancel flag ──────────────────────────────────────────────────
+    let cancel = Arc::new(AtomicBool::new(false));
+    match state.cancel_flag.lock() {
+        Ok(mut guard) => *guard = Some(Arc::clone(&cancel)),
+        Err(e) => eprintln!("[cancel] cancel_flag lock poisoned at scan start: {e}"),
+    }
+
     let drive_str = format!("{}:", drive_char);
     let scan_id_cb = scan_id.clone();
     let drive_str_cb = drive_str.clone();
     let app_cb = app.clone();
+    let cancel_cb = Arc::clone(&cancel);
 
     let spawn_start = std::time::Instant::now();
-    let model = tauri::async_runtime::spawn_blocking(move || {
-        build_mft_tree_model_with_policy_progress(drive_char, top_n, policy, |progress| {
+    let spawn_result = tauri::async_runtime::spawn_blocking(move || {
+        build_mft_tree_model_with_policy_progress(drive_char, top_n, policy, &cancel_cb, |progress| {
             let event = ScanProgressEvent {
                 scan_id:    scan_id_cb.clone(),
                 drive:      drive_str_cb.clone(),
@@ -184,8 +194,15 @@ async fn scan_drive(
             let _ = app_cb.emit("scan_progress", &event);
         }).map_err(|e| format!("{e:#}"))
     })
-    .await
-    .map_err(|e| format!("scan task failed: {e}"))??;
+    .await;
+
+    // ── Clear cancel flag regardless of outcome ───────────────────────────────
+    if let Ok(mut guard) = state.cancel_flag.lock() {
+        *guard = None;
+    }
+
+    let model = spawn_result
+        .map_err(|e| format!("scan task failed: {e}"))??;
 
     let spawn_ms = spawn_start.elapsed().as_millis();
     eprintln!(
@@ -196,6 +213,13 @@ async fn scan_drive(
         model.output.top_files.len(),
         model.output.summary.children_map_time_ms,
     );
+
+    // ── Final cancel check before committing to AppState ─────────────────────
+    // Handles the race where cancel_scan arrives just as the scan completes.
+    if cancel.load(Ordering::Relaxed) {
+        eprintln!("[perf-tauri] scan completed but was cancelled — discarding result");
+        return Err("Scan cancelled".to_string());
+    }
 
     let output      = model.output;
     let arena_cache = model.arena_cache;
@@ -241,6 +265,16 @@ async fn scan_drive(
     eprintln!("[perf-tauri] scan_drive return  total={} ms", cmd_ms);
 
     Ok(output)
+}
+
+#[tauri::command]
+fn cancel_scan(state: State<'_, AppState>) {
+    if let Ok(guard) = state.cancel_flag.lock() {
+        if let Some(flag) = guard.as_ref() {
+            flag.store(true, Ordering::Relaxed);
+            eprintln!("[cancel] cancel requested");
+        }
+    }
 }
 
 #[tauri::command]
@@ -371,6 +405,7 @@ fn main() {
             load_sample_json,
             load_scan_cache,
             scan_drive,
+            cancel_scan,
             open_in_explorer,
             select_in_explorer,
             get_children,
