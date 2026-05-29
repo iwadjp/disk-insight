@@ -1698,7 +1698,19 @@ function App() {
         setSourceKind("cached");
         setLastUpdated(new Date(cached.created_at_unix_ms));
         setScanTopN(top);
-        setSelectedDir(cached.output.top_directories[0]);
+        const cacheRestore = scanRestoreRef.current;
+        // Do NOT clear scanRestoreRef here — fresh result restore still needs it.
+        let cachedRestoredDir: DirectoryEntry | undefined;
+        if (cacheRestore && cacheRestore.drive === `${drive}:`) {
+          const node = (cached.output.root_children ?? []).find(
+            (n: TreeNode) => n.is_directory && n.path === cacheRestore.path,
+          );
+          if (node) {
+            cachedRestoredDir = treeNodeToDirEntry(node);
+            setFocusedRecordIndex(node.record_index);
+          }
+        }
+        setSelectedDir(cachedRestoredDir ?? cached.output.top_directories[0]);
         clearUpdatedBannerTimer();
         setCacheBanner({
           kind: "cached_refreshing",
@@ -1858,6 +1870,17 @@ function App() {
 
   function handleSelectTreeNode(node: TreeNode) {
     if (!node.is_directory) return;
+    // During a refresh, keep scanRestoreRef current with the latest user
+    // selection so fresh result restore uses it instead of the pre-scan snapshot.
+    if (isLoading && data) {
+      const isRootChild = (data.root_children ?? []).some(
+        (n) => n.record_index === node.record_index,
+      );
+      if (isRootChild) {
+        scanRestoreRef.current = { path: node.path, drive: data.summary.drive };
+      }
+    }
+    setFocusedRecordIndex(node.record_index);
     setSelectedDir(treeNodeToDirEntry(node));
     setTreeError(null);
   }
