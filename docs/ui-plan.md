@@ -1612,12 +1612,12 @@ Direct children panel に name/path filter を追加した。
   - `Filter children...` placeholder
   - フィルタ中は `×` clear ボタンを表示
 - localStorage 保存なし（フィルタは一時操作のため）
-- 全ファイル検索 / global search は未実装
+- 全ファイル検索 / global search は未実装（→ R-7 で current visible results filter を別途追加: direct children + top_directories + top_files を対象）
 
 #### 制約確認
 
 - Rust core / Tauri command 変更なし
-- 全ドライブ横断検索・全ファイル検索は未実装
+- 全ドライブ横断検索・full tree global search は未実装 → v0.5 以降 defer
 - virtual scroll 未実装
 - delete 未追加
 

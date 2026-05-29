@@ -1057,10 +1057,6 @@ tbody tr:last-child td {
   flex-shrink: 0;
 }
 
-.direct-children-controls .filter-input {
-  width: 120px;
-  flex: none;
-}
 
 .sort-label {
   display: flex;
@@ -1431,4 +1427,32 @@ tbody tr:last-child td {
 
 .perf-table tfoot tr:last-child td {
   padding-bottom: 6px;
+}
+
+/* ── Top results search bar (R-7) ── */
+.top-search-bar {
+  background: #ffffff;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  padding: 9px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.top-search-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.top-search-input {
+  width: 260px;
+  flex: none;
+}
+
+.top-search-count {
+  font-size: 12px;
+  color: #5e6b78;
 }

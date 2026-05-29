@@ -1063,6 +1063,7 @@ function DirectChildrenPanel({
   isLoading,
   error,
   sourceKind,
+  currentFilterQuery,
   sortKey,
   sortDir,
   onSortKeyChange,
@@ -1079,6 +1080,7 @@ function DirectChildrenPanel({
   isLoading: boolean;
   error: string | null;
   sourceKind: SourceKind | null;
+  currentFilterQuery: string;
   sortKey: DirectChildrenSortKey;
   sortDir: SortDirection;
   onSortKeyChange: (key: DirectChildrenSortKey) => void;
@@ -1090,13 +1092,6 @@ function DirectChildrenPanel({
   onSelectFile: (path: string) => void;
   onCopyError: (msg: string) => void;
 }) {
-
-  const [filterText, setFilterText] = useState("");
-  const filterTrimmed = filterText.trim();
-
-  useEffect(() => {
-    setFilterText("");
-  }, [dir.record_index]);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -1137,14 +1132,14 @@ function DirectChildrenPanel({
 
   const filtered = useMemo(() => {
     if (!children) return [];
-    if (!filterTrimmed) return children;
-    const lower = filterTrimmed.toLowerCase();
+    const cq = currentFilterQuery.trim().toLowerCase();
+    if (!cq) return children;
     return children.filter(
       (n) =>
-        n.name.toLowerCase().includes(lower) ||
-        n.path.toLowerCase().includes(lower),
+        n.name.toLowerCase().includes(cq) ||
+        n.path.toLowerCase().includes(cq),
     );
-  }, [children, filterTrimmed]);
+  }, [children, currentFilterQuery]);
 
   const sorted = useMemo(
     () => sortDirectChildren(filtered, sortKey, sortDir),
@@ -1168,10 +1163,10 @@ function DirectChildrenPanel({
     body = <p className="direct-children-note">Fetching…</p>;
   } else if (children.length === 0) {
     body = <p className="direct-children-note">This folder has no children.</p>;
-  } else if (filterTrimmed && sorted.length === 0) {
+  } else if (currentFilterQuery.trim() && sorted.length === 0) {
     body = (
       <p className="direct-children-note">
-        No direct children match &ldquo;{filterTrimmed}&rdquo;.
+        No direct children match &ldquo;{currentFilterQuery.trim()}&rdquo;.
       </p>
     );
   } else {
@@ -1230,26 +1225,9 @@ function DirectChildrenPanel({
           <span className="heading-path">{dir.path}</span>
         </span>
         <div className="direct-children-controls">
-          <input
-            className="filter-input"
-            type="text"
-            placeholder="Filter…"
-            value={filterText}
-            onChange={(e) => setFilterText(e.target.value)}
-          />
-          {filterText && (
-            <button
-              className="filter-clear-btn"
-              onClick={() => setFilterText("")}
-              title="Clear filter"
-              aria-label="Clear filter"
-            >
-              ×
-            </button>
-          )}
           {children !== undefined && (
             <span className="direct-children-count">
-              {filterTrimmed
+              {currentFilterQuery.trim()
                 ? `${formatNumber(filtered.length)} of ${formatNumber(children.length)}`
                 : formatNumber(children.length)}
             </span>
@@ -1401,6 +1379,7 @@ function App() {
   const [reclaimableLoading, setReclaimableLoading] = useState(false);
   const [reclaimableError, setReclaimableError] = useState<string | null>(null);
   const [focusedRecordIndex, setFocusedRecordIndex] = useState<number | null>(null);
+  const [currentFilterQuery, setCurrentFilterQuery] = useState("");
   const scanRestoreRef = useRef<{ path: string; drive: string } | null>(null);
 
   const visibleRows = useMemo(
@@ -1415,6 +1394,38 @@ function App() {
         : [],
     [selectedDir, data, childrenByParent],
   );
+
+  const topDirsBase = useMemo(
+    () =>
+      data
+        ? selectedDir
+          ? filterByDir(data.top_directories, selectedDir.path)
+          : data.top_directories
+        : [],
+    [data, selectedDir],
+  );
+
+  const topFilesBase = useMemo(
+    () =>
+      data
+        ? selectedDir
+          ? filterByDir(data.top_files, selectedDir.path)
+          : data.top_files
+        : [],
+    [data, selectedDir],
+  );
+
+  const filteredTopDirs = useMemo(() => {
+    const q = currentFilterQuery.trim().toLowerCase();
+    if (!q) return topDirsBase;
+    return topDirsBase.filter((item) => item.path.toLowerCase().includes(q));
+  }, [topDirsBase, currentFilterQuery]);
+
+  const filteredTopFiles = useMemo(() => {
+    const q = currentFilterQuery.trim().toLowerCase();
+    if (!q) return topFilesBase;
+    return topFilesBase.filter((item) => item.path.toLowerCase().includes(q));
+  }, [topFilesBase, currentFilterQuery]);
 
   function clearUpdatedBannerTimer() {
     bannerGenerationRef.current += 1;
@@ -2117,6 +2128,13 @@ function App() {
   }, []);
 
   const driveLabel = parseDriveLetter(driveInput) ?? driveInput.slice(0, 1).toUpperCase();
+  const currentFilterQ = currentFilterQuery.trim().toLowerCase();
+  const selectedDirChildren = selectedDir ? childrenByParent[selectedDir.record_index] : undefined;
+  const filteredChildrenCount = currentFilterQ && selectedDirChildren !== undefined
+    ? selectedDirChildren.filter(
+        (n) => n.name.toLowerCase().includes(currentFilterQ) || n.path.toLowerCase().includes(currentFilterQ)
+      ).length
+    : null;
   const scanPhaseText = scanProgress ? phaseLabel(scanProgress.phase) : "Starting scan";
   const scanElapsedMs = scanProgress ? scanProgress.elapsed_ms : localElapsedMs;
   const scanDriveLabel = scanProgress?.drive ?? `${driveLabel}:`;
@@ -2330,6 +2348,38 @@ function App() {
                   onCopyError={handleCopyError}
                 />
               )}
+              <div className="top-search-bar">
+                <div className="top-search-row">
+                  <input
+                    className="filter-input top-search-input"
+                    type="text"
+                    placeholder="Filter current results..."
+                    value={currentFilterQuery}
+                    onChange={(e) => setCurrentFilterQuery(e.target.value)}
+                    aria-label="Filter current results"
+                  />
+                  {currentFilterQuery && (
+                    <button
+                      className="filter-clear-btn"
+                      onClick={() => setCurrentFilterQuery("")}
+                      title="Clear filter"
+                      aria-label="Clear filter"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+                {currentFilterQ && (
+                  <div className="top-search-count">
+                    Showing{" "}
+                    {selectedDirChildren !== undefined && filteredChildrenCount !== null && (
+                      <>{formatNumber(filteredChildrenCount)} / {formatNumber(selectedDirChildren.length)} children,{" "}</>
+                    )}
+                    {formatNumber(filteredTopDirs.length)} / {formatNumber(topDirsBase.length)} dirs,{" "}
+                    {formatNumber(filteredTopFiles.length)} / {formatNumber(topFilesBase.length)} files
+                  </div>
+                )}
+              </div>
               {selectedDir && (
                 <DirectChildrenPanel
                   dir={selectedDir}
@@ -2337,6 +2387,7 @@ function App() {
                   isLoading={selectedChildrenLoading}
                   error={selectedChildrenError}
                   sourceKind={sourceKind}
+                  currentFilterQuery={currentFilterQuery}
                   sortKey={directChildrenSortKey}
                   sortDir={directChildrenSortDir}
                   onSortKeyChange={setDirectChildrenSortKey}
@@ -2350,11 +2401,7 @@ function App() {
                 />
               )}
               <DirectoriesTable
-                rows={
-                  selectedDir
-                    ? filterByDir(data.top_directories, selectedDir.path)
-                    : data.top_directories
-                }
+                rows={filteredTopDirs}
                 title={
                   selectedDir && !isDriveRoot(selectedDir.path)
                     ? <>Top directories (scan results) under <span className="heading-path">{selectedDir.path}</span></>
@@ -2362,11 +2409,7 @@ function App() {
                 }
               />
               <FilesTable
-                rows={
-                  selectedDir
-                    ? filterByDir(data.top_files, selectedDir.path)
-                    : data.top_files
-                }
+                rows={filteredTopFiles}
                 title={
                   selectedDir && !isDriveRoot(selectedDir.path)
                     ? <>Top files (scan results) under <span className="heading-path">{selectedDir.path}</span></>
