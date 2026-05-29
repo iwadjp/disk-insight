@@ -479,6 +479,13 @@ function formatBytes(bytes: number): string {
     : `${value.toFixed(1)} ${units[unitIndex]}`;
 }
 
+function formatPercent(bytes: number, total: number): string {
+  if (total <= 0 || bytes <= 0) return "—";
+  const pct = (bytes / total) * 100;
+  if (pct < 0.1) return "<0.1%";
+  return `${pct.toFixed(1)}%`;
+}
+
 function formatRecords(records: number): string {
   if (records < 1000) return records.toLocaleString();
   if (records < 1_000_000) return `${(records / 1000).toFixed(1)}K`;
@@ -770,12 +777,18 @@ function TreeNodeRow({
           title={node.path}
         >
           <span className="tree-name">{displayName}</span>
-          <span className="tree-size">{formatBytes(node.subtree_size)}</span>
+          <span className="tree-size">
+            {formatBytes(node.subtree_size)}
+            {totalSize > 0 && <span className="size-pct"> · {formatPercent(node.subtree_size, totalSize)}</span>}
+          </span>
         </button>
       ) : (
         <div className="tree-label tree-label--file" title={node.path}>
           <span className="tree-name">{displayName}</span>
-          <span className="tree-size">{formatBytes(node.subtree_size)}</span>
+          <span className="tree-size">
+            {formatBytes(node.subtree_size)}
+            {totalSize > 0 && <span className="size-pct"> · {formatPercent(node.subtree_size, totalSize)}</span>}
+          </span>
         </div>
       )}
     </div>
@@ -966,7 +979,7 @@ function SelectedFolderCard({
   );
 }
 
-function DirectoriesTable({ rows, title }: { rows: DirectoryEntry[]; title: React.ReactNode }) {
+function DirectoriesTable({ rows, title, totalSize }: { rows: DirectoryEntry[]; title: React.ReactNode; totalSize: number }) {
   return (
     <section className="table-section">
       <div className="section-header">
@@ -991,8 +1004,14 @@ function DirectoriesTable({ rows, title }: { rows: DirectoryEntry[]; title: Reac
             {rows.map((row) => (
               <tr key={row.record_index}>
                 <td className="path">{row.path}</td>
-                <td className="numeric">{formatBytes(row.subtree_size)}</td>
-                <td className="numeric">{formatBytes(row.direct_file_size)}</td>
+                <td className="numeric">
+                  {formatBytes(row.subtree_size)}
+                  {totalSize > 0 && <span className="size-pct"> · {formatPercent(row.subtree_size, totalSize)}</span>}
+                </td>
+                <td className="numeric">
+                  {formatBytes(row.direct_file_size)}
+                  {totalSize > 0 && row.direct_file_size > 0 && <span className="size-pct"> · {formatPercent(row.direct_file_size, totalSize)}</span>}
+                </td>
                 <td className="numeric">{formatNumber(row.child_count)}</td>
               </tr>
             ))}
@@ -1006,12 +1025,14 @@ function DirectoriesTable({ rows, title }: { rows: DirectoryEntry[]; title: Reac
 function FilesTable({
   rows,
   title,
+  totalSize,
   onOpenLocation,
   onSelectFile,
   onCopyError,
 }: {
   rows: FileEntry[];
   title: React.ReactNode;
+  totalSize: number;
   onOpenLocation: (path: string) => void;
   onSelectFile: (path: string) => void;
   onCopyError: (msg: string) => void;
@@ -1043,7 +1064,10 @@ function FilesTable({
               {rows.map((row) => (
                 <tr key={row.record_index}>
                   <td className="path">{row.path}</td>
-                  <td className="numeric">{formatBytes(row.final_allocated_size)}</td>
+                  <td className="numeric">
+                    {formatBytes(row.final_allocated_size)}
+                    {totalSize > 0 && <span className="size-pct"> · {formatPercent(row.final_allocated_size, totalSize)}</span>}
+                  </td>
                   <td className="actions-col">
                     <div className="actions-cell">
                       <button
@@ -1078,6 +1102,7 @@ function DirectChildrenPanel({
   error,
   sourceKind,
   currentFilterQuery,
+  totalSize,
   sortKey,
   sortDir,
   onSortKeyChange,
@@ -1095,6 +1120,7 @@ function DirectChildrenPanel({
   error: string | null;
   sourceKind: SourceKind | null;
   currentFilterQuery: string;
+  totalSize: number;
   sortKey: DirectChildrenSortKey;
   sortDir: SortDirection;
   onSortKeyChange: (key: DirectChildrenSortKey) => void;
@@ -1207,6 +1233,7 @@ function DirectChildrenPanel({
               title="Estimated allocated-style size."
             >
               {formatBytes(node.subtree_size)}
+              {totalSize > 0 && <span className="size-pct"> · {formatPercent(node.subtree_size, totalSize)}</span>}
             </span>
             {/* stopPropagation prevents action clicks from firing row navigation */}
             <div className="direct-child-actions" onClick={(e) => e.stopPropagation()}>
@@ -2456,6 +2483,7 @@ function App() {
                   error={selectedChildrenError}
                   sourceKind={sourceKind}
                   currentFilterQuery={currentFilterQuery}
+                  totalSize={data.summary.total_final_allocated}
                   sortKey={directChildrenSortKey}
                   sortDir={directChildrenSortDir}
                   onSortKeyChange={setDirectChildrenSortKey}
@@ -2470,6 +2498,7 @@ function App() {
               )}
               <DirectoriesTable
                 rows={filteredTopDirs}
+                totalSize={data.summary.total_final_allocated}
                 title={
                   selectedDir && !isDriveRoot(selectedDir.path)
                     ? <>Top directories (scan results) under <span className="heading-path">{selectedDir.path}</span></>
@@ -2478,6 +2507,7 @@ function App() {
               />
               <FilesTable
                 rows={filteredTopFiles}
+                totalSize={data.summary.total_final_allocated}
                 title={
                   selectedDir && !isDriveRoot(selectedDir.path)
                     ? <>Top files (scan results) under <span className="heading-path">{selectedDir.path}</span></>
