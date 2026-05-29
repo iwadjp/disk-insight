@@ -2164,73 +2164,75 @@ function App() {
     <main className="app">
       <header className="app-header">
         <h1>disk-insight</h1>
-        <div className="toolbar">
-          <label className="toolbar-label">
-            Drive
-            <select
-              className="top-select"
-              value={driveInput}
-              onChange={(e) => setDriveInput(e.target.value)}
+        <div className="toolbar-group">
+          <div className="toolbar">
+            <label className="toolbar-label">
+              Drive
+              <select
+                className="top-select"
+                value={driveInput}
+                onChange={(e) => setDriveInput(e.target.value)}
+                disabled={isLoading}
+              >
+                {drives.map((d) => (
+                  <option key={d.letter} value={d.letter}>{d.display}</option>
+                ))}
+              </select>
+            </label>
+            <label className="toolbar-label">
+              Top
+              <select
+                className="top-select"
+                value={topN}
+                onChange={(e) => setTopN(Number(e.target.value))}
+                disabled={isLoading}
+              >
+                {TOP_OPTIONS.map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </label>
+            <label className="toolbar-label">
+              Size metric
+              <select
+                className="top-select size-metric-select"
+                value={storagePolicy}
+                onChange={(e) => setStoragePolicy(e.target.value)}
+                disabled={isLoading}
+                title="Compare estimates with Explorer &quot;Size on disk&quot; or WizTree &quot;Allocated&quot;, not Explorer &quot;Size&quot;."
+              >
+                <option value="current">Current allocation</option>
+                <option value="wof_adjusted">WOF-adjusted</option>
+              </select>
+            </label>
+            <div className="toolbar-separator" />
+            {import.meta.env.DEV && (
+              <button
+                className="btn"
+                onClick={() =>
+                  runLoad(loadSampleData, "Loading sample data...", false, "sample")
+                }
+                disabled={isLoading}
+              >
+                Load sample
+              </button>
+            )}
+            <button
+              className="btn btn-primary"
+              onClick={handleScan}
               disabled={isLoading}
             >
-              {drives.map((d) => (
-                <option key={d.letter} value={d.letter}>{d.display}</option>
-              ))}
-            </select>
-          </label>
-          <label className="toolbar-label">
-            Top
-            <select
-              className="top-select"
-              value={topN}
-              onChange={(e) => setTopN(Number(e.target.value))}
-              disabled={isLoading}
-            >
-              {TOP_OPTIONS.map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
-          </label>
-          <label className="toolbar-label">
-            Size metric
-            <select
-              className="top-select size-metric-select"
-              value={storagePolicy}
-              onChange={(e) => setStoragePolicy(e.target.value)}
-              disabled={isLoading}
-              title="Compare estimates with Explorer &quot;Size on disk&quot; or WizTree &quot;Allocated&quot;, not Explorer &quot;Size&quot;."
-            >
-              <option value="current">Current allocation estimate</option>
-              <option value="wof_adjusted">WOF-adjusted estimate (experimental)</option>
-            </select>
-          </label>
+              Scan {driveLabel}:
+            </button>
+          </div>
           {storagePolicy === "wof_adjusted" && (
-            <span
+            <div
               className="policy-warning"
               title="Experimental WOF-aware estimate. It may be closer to WizTree &quot;Allocated&quot; for WOF-compressed files."
             >
-              Experimental WOF-aware estimate. Hard links and WinSxS are not fully corrected.
-            </span>
+              Experimental WOF estimate; hard links / WinSxS not fully corrected.
+            </div>
           )}
-          <div className="toolbar-separator" />
-          {import.meta.env.DEV && (
-            <button
-              className="btn"
-              onClick={() =>
-                runLoad(loadSampleData, "Loading sample data...", false, "sample")
-              }
-              disabled={isLoading}
-            >
-              Load sample
-            </button>
-          )}
-          <button
-            className="btn btn-primary"
-            onClick={handleScan}
-            disabled={isLoading}
-          >
-            Scan {driveLabel}:
-          </button>
         </div>
       </header>
 
