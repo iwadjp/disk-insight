@@ -71,7 +71,7 @@ h2 {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
-  margin-bottom: 22px;
+  margin-bottom: 16px;
 }
 
 .metric,
@@ -106,8 +106,8 @@ h2 {
   background: #ffffff;
   border: 1px solid #d9e1e8;
   border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 18px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
   display: flex;
   align-items: center;
   gap: 16px;
@@ -312,7 +312,7 @@ tbody tr:last-child td {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   font-size: 13px;
 }
 
@@ -527,7 +527,7 @@ tbody tr:last-child td {
 
 .top-select {
   max-width: 260px;
-  padding: 6px 8px;
+  padding: 7px 8px;
   border: 1px solid #c5d0db;
   border-radius: 6px;
   background: #ffffff;
@@ -1373,9 +1373,9 @@ tbody tr:last-child td {
 
 /* ── Perf breakdown (R-2e measurement aid) ── */
 .perf-breakdown {
-  margin: 0 24px 12px;
+  margin: 0 0 16px;
   border: 1px solid #3c3c3c;
-  border-radius: 4px;
+  border-radius: 8px;
   background: #1e1e1e;
 }
 
@@ -1429,13 +1429,13 @@ tbody tr:last-child td {
   padding-bottom: 6px;
 }
 
-/* ── Top results search bar (R-7) ── */
+/* ── Current results filter bar (R-7) ── */
 .top-search-bar {
   background: #ffffff;
   border: 1px solid #d9e1e8;
   border-radius: 8px;
-  padding: 9px 14px;
-  margin-bottom: 14px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
   display: flex;
   flex-direction: column;
   gap: 5px;
