@@ -315,6 +315,29 @@ fn get_children(
 }
 
 #[tauri::command]
+fn search_subtree(
+    state: State<'_, AppState>,
+    parent_record_index: u64,
+    query: String,
+    max_results: Option<usize>,
+) -> Result<Vec<JsonTreeNode>, String> {
+    let q = query.trim();
+    if q.chars().count() < 2 {
+        return Ok(Vec::new());
+    }
+    // Root search disabled: NTFS root directory has FRN 5.
+    if parent_record_index == 5 {
+        return Err("Select a folder below the drive root to search.".to_string());
+    }
+    let max = max_results.unwrap_or(200).min(200);
+    let guard = state.arena_cache.lock()
+        .map_err(|e| format!("state lock poisoned: {e}"))?;
+    let cache = guard.as_ref()
+        .ok_or_else(|| "Search requires live scan data.".to_string())?;
+    Ok(cache.search_subtree(parent_record_index, q, max))
+}
+
+#[tauri::command]
 fn get_reclaimable_summary(
     state: State<'_, AppState>,
     record_index: u64,
@@ -409,6 +432,7 @@ fn main() {
             open_in_explorer,
             select_in_explorer,
             get_children,
+            search_subtree,
             get_reclaimable_summary,
             list_drives,
         ])

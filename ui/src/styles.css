@@ -1494,3 +1494,105 @@ tbody tr:last-child td {
   font-size: 12px;
   color: #5e6b78;
 }
+
+/* ── Subtree search panel ── */
+.subtree-search-panel {
+  background: #ffffff;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.subtree-search-header {
+  display: flex;
+  align-items: center;
+  padding: 7px 12px;
+  background: #f8fafc;
+  border-bottom: 1px solid #d9e1e8;
+}
+
+.subtree-search-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #465563;
+}
+
+.subtree-search-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #edf1f5;
+}
+
+.subtree-search-note {
+  padding: 10px 14px;
+  margin: 0;
+  font-size: 13px;
+  color: #5e6b78;
+}
+
+.subtree-search-note--error {
+  color: #9b1c1c;
+}
+
+.subtree-search-count {
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #5e6b78;
+  background: #f8fafc;
+  border-bottom: 1px solid #edf1f5;
+}
+
+.subtree-search-count--capped {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.subtree-search-list {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.subtree-result-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-bottom: 1px solid #edf1f5;
+  min-height: 32px;
+}
+
+.subtree-result-row:last-child {
+  border-bottom: none;
+}
+
+.subtree-result-row:hover {
+  background: #f5f7fa;
+}
+
+.subtree-result-path {
+  flex: 1;
+  min-width: 0;
+  font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #17202a;
+}
+
+.subtree-result-row:hover .direct-child-actions,
+.subtree-result-row:focus-within .direct-child-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.filter-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #f5f7fa;
+}

@@ -276,6 +276,17 @@ async function getChildren(parentRecordIndex: number): Promise<TreeNode[]> {
   return invoke<TreeNode[]>("get_children", { parentRecordIndex });
 }
 
+async function searchSubtree(
+  parentRecordIndex: number,
+  query: string,
+  maxResults: number,
+): Promise<TreeNode[]> {
+  if (!isTauriRuntime()) {
+    throw new Error("Subtree search is available only in the Tauri desktop app.");
+  }
+  return invoke<TreeNode[]>("search_subtree", { parentRecordIndex, query, maxResults });
+}
+
 async function getReclaimableSummary(
   recordIndex: number,
   path: string,
@@ -1092,6 +1103,189 @@ function FilesTable({
         )}
       </div>
     </section>
+  );
+}
+
+function SubtreeSearchPanel({
+  selectedDir,
+  sourceKind,
+  totalSize,
+  onOpenExplorer,
+  onSelectFile,
+  onCopyError,
+}: {
+  selectedDir: DirectoryEntry;
+  sourceKind: SourceKind | null;
+  totalSize: number;
+  onOpenExplorer: (path: string) => void;
+  onSelectFile: (path: string) => void;
+  onCopyError: (msg: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<TreeNode[] | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const debounceRef = useRef<number | null>(null);
+  const searchGenRef = useRef(0);
+
+  const isLive = sourceKind === "live";
+  const isRoot = isDriveRoot(selectedDir.path);
+  const isDisabled = !isLive || isRoot;
+
+  useEffect(() => {
+    searchGenRef.current += 1;
+    setQuery("");
+    setResults(null);
+    setError(null);
+    setIsLoading(false);
+    if (debounceRef.current !== null) {
+      window.clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+  }, [selectedDir.record_index]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current !== null) window.clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  function runSearch(trimmed: string) {
+    searchGenRef.current += 1;
+    const gen = searchGenRef.current;
+    setIsLoading(true);
+    setError(null);
+    setResults(null);
+    searchSubtree(selectedDir.record_index, trimmed, 200)
+      .then((nodes) => {
+        if (gen !== searchGenRef.current) return;
+        setResults(nodes);
+        setIsLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (gen !== searchGenRef.current) return;
+        setError(err instanceof Error ? err.message : String(err));
+        setResults(null);
+        setIsLoading(false);
+      });
+  }
+
+  function handleQueryChange(value: string) {
+    setQuery(value);
+    if (debounceRef.current !== null) {
+      window.clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    if (isDisabled) {
+      setResults(null);
+      setError(null);
+      return;
+    }
+    const trimmed = value.trim();
+    if (trimmed.length < 2) {
+      setResults(null);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+    debounceRef.current = window.setTimeout(() => {
+      debounceRef.current = null;
+      runSearch(trimmed);
+    }, 250);
+  }
+
+  function relPath(fullPath: string): string {
+    const base = selectedDir.path.endsWith("\\") ? selectedDir.path : selectedDir.path + "\\";
+    return fullPath.startsWith(base) ? fullPath.slice(base.length) : fullPath;
+  }
+
+  let body: React.ReactNode = null;
+  if (!isLive) {
+    body = <p className="subtree-search-note">Search requires a live scan.</p>;
+  } else if (isRoot) {
+    body = <p className="subtree-search-note">Select a folder below the drive root to search.</p>;
+  } else if (query.trim().length > 0 && query.trim().length < 2) {
+    body = <p className="subtree-search-note">Enter at least 2 characters.</p>;
+  } else if (isLoading) {
+    body = <p className="subtree-search-note">Searching…</p>;
+  } else if (error) {
+    body = <p className="subtree-search-note subtree-search-note--error">{error}</p>;
+  } else if (results !== null && results.length === 0) {
+    body = <p className="subtree-search-note">No matches in selected folder.</p>;
+  }
+
+  return (
+    <div className="subtree-search-panel">
+      <div className="subtree-search-header">
+        <span className="subtree-search-title">Search in selected folder</span>
+      </div>
+      <div className="subtree-search-input-row">
+        <input
+          className="filter-input"
+          type="text"
+          placeholder="Search in selected folder..."
+          value={query}
+          onChange={(e) => handleQueryChange(e.target.value)}
+          disabled={isDisabled}
+          aria-label="Search in selected folder"
+        />
+        {query && (
+          <button
+            className="filter-clear-btn"
+            onClick={() => handleQueryChange("")}
+            title="Clear search"
+            aria-label="Clear search"
+          >
+            ×
+          </button>
+        )}
+      </div>
+      {body}
+      {!isLoading && results !== null && results.length > 0 && (
+        <>
+          <div className={results.length >= 200
+            ? "subtree-search-count subtree-search-count--capped"
+            : "subtree-search-count"}>
+            {results.length >= 200
+              ? "Showing first 200 matches. Refine your query."
+              : `${formatNumber(results.length)} match${results.length !== 1 ? "es" : ""} in selected folder`}
+          </div>
+          <div className="subtree-search-list">
+            {results.map((node) => (
+              <div
+                key={node.record_index}
+                className="subtree-result-row"
+              >
+                <span className={`direct-child-badge direct-child-badge--${node.is_directory ? "dir" : "file"}`}>
+                  {node.is_directory ? "DIR" : "FILE"}
+                </span>
+                <span className="subtree-result-path" title={node.path}>
+                  {relPath(node.path)}
+                </span>
+                <span className="direct-child-size">
+                  {formatBytes(node.subtree_size)}
+                  {totalSize > 0 && <span className="size-pct"> · {formatPercent(node.subtree_size, totalSize)}</span>}
+                </span>
+                <div className="direct-child-actions" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => onOpenExplorer(node.is_directory ? node.path : getParentDir(node.path))}
+                  >
+                    Open folder
+                  </button>
+                  {!node.is_directory && (
+                    <button className="btn btn-sm" onClick={() => onSelectFile(node.path)}>
+                      Select file
+                    </button>
+                  )}
+                  <CopyButton text={node.path} onError={onCopyError} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -2491,6 +2685,16 @@ function App() {
                   ancestorDirs={selectedAncestorDirs}
                   onNavigateToDir={handleNavigateToDir}
                   onNavigate={handleSelectTreeNode}
+                  onOpenExplorer={handleOpenExplorer}
+                  onSelectFile={handleSelectFile}
+                  onCopyError={handleCopyError}
+                />
+              )}
+              {selectedDir && (
+                <SubtreeSearchPanel
+                  selectedDir={selectedDir}
+                  sourceKind={sourceKind}
+                  totalSize={data.summary.total_final_allocated}
                   onOpenExplorer={handleOpenExplorer}
                   onSelectFile={handleSelectFile}
                   onCopyError={handleCopyError}

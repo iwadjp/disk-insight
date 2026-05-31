@@ -2841,6 +2841,43 @@ impl ArenaCache {
             .map(|v| v.iter().map(|&ci| self.build_node(ci)).collect())
             .unwrap_or_default()
     }
+
+    /// Search descendants of `parent_frn` for nodes whose name contains `query`
+    /// (case-insensitive). Returns up to `max_results` matching nodes via BFS.
+    /// `parent_frn` itself is not included in results. Paths are reconstructed
+    /// only for matching nodes to keep cost proportional to match count.
+    pub fn search_subtree(
+        &self,
+        parent_frn: u64,
+        query: &str,
+        max_results: usize,
+    ) -> Vec<JsonTreeNode> {
+        let query_lower = query.to_lowercase();
+        let mut results = Vec::new();
+        let mut queue: std::collections::VecDeque<u64> = std::collections::VecDeque::new();
+        queue.push_back(parent_frn);
+
+        'outer: while let Some(dir_frn) = queue.pop_front() {
+            let child_indices = match self.dir_children.get(&dir_frn) {
+                Some(v) => v,
+                None => continue,
+            };
+            for &ci in child_indices {
+                let node = &self.nodes[ci];
+                if node.name.to_lowercase().contains(&query_lower) {
+                    results.push(self.build_node(ci));
+                    if results.len() >= max_results {
+                        break 'outer;
+                    }
+                }
+                if node.is_dir {
+                    queue.push_back(node.frn);
+                }
+            }
+        }
+
+        results
+    }
 }
 
 // Richer model returned to callers (Tauri layer). `output` is what the UI
