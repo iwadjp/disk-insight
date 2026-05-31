@@ -1159,6 +1159,21 @@ function SubtreeSearchPanel({
     };
   }, []);
 
+  // Clear search state when live scan ends (e.g. rescan starts, cached result shown).
+  useEffect(() => {
+    if (!isLive) {
+      searchGenRef.current += 1;
+      setQuery("");
+      setResults(null);
+      setError(null);
+      setIsLoading(false);
+      if (debounceRef.current !== null) {
+        window.clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+    }
+  }, [isLive]);
+
   function runSearch(trimmed: string) {
     searchGenRef.current += 1;
     const gen = searchGenRef.current;
@@ -1203,6 +1218,12 @@ function SubtreeSearchPanel({
     }, 250);
   }
 
+  const placeholder = !isLive
+    ? "Search requires a live scan."
+    : isRoot
+      ? "Select a folder below the drive root to search."
+      : "Search in selected folder...";
+
   let body: React.ReactNode = null;
   if (!isLive) {
     body = <p className="subtree-search-note">Search requires a live scan.</p>;
@@ -1227,13 +1248,13 @@ function SubtreeSearchPanel({
         <input
           className="filter-input"
           type="text"
-          placeholder="Search in selected folder..."
+          placeholder={placeholder}
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}
           disabled={isDisabled}
           aria-label="Search in selected folder"
         />
-        {query && (
+        {query && !isDisabled && (
           <button
             className="filter-clear-btn"
             onClick={() => handleQueryChange("")}
