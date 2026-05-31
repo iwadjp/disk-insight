@@ -648,7 +648,7 @@ function PerfBreakdown({ summary, invokeMs }: { summary: Summary; invokeMs: numb
 
   return (
     <details className="perf-breakdown">
-      <summary className="perf-breakdown-summary">Scan timing breakdown</summary>
+      <summary className="perf-breakdown-summary">Scan timing details</summary>
       <table className="perf-table">
         <thead>
           <tr><th>Phase</th><th>Time</th><th>Share</th></tr>
@@ -2661,9 +2661,6 @@ function App() {
           />
           <SummaryCard summary={data.summary} />
           {data.capacity && <CapacityCard capacity={data.capacity} />}
-          {sourceKind === "live" && (
-            <PerfBreakdown summary={data.summary} invokeMs={scanInvokeMs} />
-          )}
           <div className="content-pane">
             <TreeView
               rootCount={data.root_children?.length ?? 0}
@@ -2779,6 +2776,9 @@ function App() {
               />
             </div>
           </div>
+          {sourceKind === "live" && (
+            <PerfBreakdown summary={data.summary} invokeMs={scanInvokeMs} />
+          )}
         </>
       )}
     </main>
