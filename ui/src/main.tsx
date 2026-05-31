@@ -211,6 +211,13 @@ function isDriveRoot(path: string): boolean {
   return /^[A-Za-z]:\\?$/.test(path);
 }
 
+function formatRelativePath(path: string, basePath?: string | null): string {
+  if (!basePath || isDriveRoot(basePath)) return path;
+  const base = basePath.endsWith("\\") ? basePath : basePath + "\\";
+  if (path.startsWith(base)) return path.slice(base.length);
+  return path;
+}
+
 function filterByDir<T extends { path: string }>(items: T[], selectedPath: string): T[] {
   if (isDriveRoot(selectedPath)) return items;
   return items.filter(
@@ -990,7 +997,7 @@ function SelectedFolderCard({
   );
 }
 
-function DirectoriesTable({ rows, title, totalSize }: { rows: DirectoryEntry[]; title: React.ReactNode; totalSize: number }) {
+function DirectoriesTable({ rows, title, totalSize, basePath }: { rows: DirectoryEntry[]; title: React.ReactNode; totalSize: number; basePath?: string | null }) {
   return (
     <section className="table-section">
       <div className="section-header">
@@ -1014,7 +1021,7 @@ function DirectoriesTable({ rows, title, totalSize }: { rows: DirectoryEntry[]; 
           <tbody>
             {rows.map((row) => (
               <tr key={row.record_index}>
-                <td className="path">{row.path}</td>
+                <td className="path" title={row.path}>{formatRelativePath(row.path, basePath)}</td>
                 <td className="numeric">
                   {formatBytes(row.subtree_size)}
                   {totalSize > 0 && <span className="size-pct"> · {formatPercent(row.subtree_size, totalSize)}</span>}
@@ -1037,6 +1044,7 @@ function FilesTable({
   rows,
   title,
   totalSize,
+  basePath,
   onOpenLocation,
   onSelectFile,
   onCopyError,
@@ -1044,6 +1052,7 @@ function FilesTable({
   rows: FileEntry[];
   title: React.ReactNode;
   totalSize: number;
+  basePath?: string | null;
   onOpenLocation: (path: string) => void;
   onSelectFile: (path: string) => void;
   onCopyError: (msg: string) => void;
@@ -1074,7 +1083,7 @@ function FilesTable({
             <tbody>
               {rows.map((row) => (
                 <tr key={row.record_index}>
-                  <td className="path">{row.path}</td>
+                  <td className="path" title={row.path}>{formatRelativePath(row.path, basePath)}</td>
                   <td className="numeric">
                     {formatBytes(row.final_allocated_size)}
                     {totalSize > 0 && <span className="size-pct"> · {formatPercent(row.final_allocated_size, totalSize)}</span>}
@@ -1194,11 +1203,6 @@ function SubtreeSearchPanel({
     }, 250);
   }
 
-  function relPath(fullPath: string): string {
-    const base = selectedDir.path.endsWith("\\") ? selectedDir.path : selectedDir.path + "\\";
-    return fullPath.startsWith(base) ? fullPath.slice(base.length) : fullPath;
-  }
-
   let body: React.ReactNode = null;
   if (!isLive) {
     body = <p className="subtree-search-note">Search requires a live scan.</p>;
@@ -1260,7 +1264,7 @@ function SubtreeSearchPanel({
                   {node.is_directory ? "DIR" : "FILE"}
                 </span>
                 <span className="subtree-result-path" title={node.path}>
-                  {relPath(node.path)}
+                  {formatRelativePath(node.path, selectedDir.path)}
                 </span>
                 <span className="direct-child-size">
                   {formatBytes(node.subtree_size)}
@@ -2703,6 +2707,7 @@ function App() {
               <DirectoriesTable
                 rows={filteredTopDirs}
                 totalSize={data.summary.total_final_allocated}
+                basePath={selectedDir?.path}
                 title={
                   selectedDir && !isDriveRoot(selectedDir.path)
                     ? <>Top directories (scan results) under <span className="heading-path">{selectedDir.path}</span></>
@@ -2712,6 +2717,7 @@ function App() {
               <FilesTable
                 rows={filteredTopFiles}
                 totalSize={data.summary.total_final_allocated}
+                basePath={selectedDir?.path}
                 title={
                   selectedDir && !isDriveRoot(selectedDir.path)
                     ? <>Top files (scan results) under <span className="heading-path">{selectedDir.path}</span></>
