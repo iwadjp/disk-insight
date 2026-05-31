@@ -829,6 +829,7 @@ type TreeRowProps = {
   focusedRecordIndex: number | null;
   onToggleExpand: (node: TreeNode) => void;
   onSelect: (node: TreeNode) => void;
+  onContextMenu: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
 };
 
 function TreeNodeRow({
@@ -841,6 +842,7 @@ function TreeNodeRow({
   focusedRecordIndex,
   onToggleExpand,
   onSelect,
+  onContextMenu,
 }: TreeRowProps) {
   const isDir       = node.is_directory;
   const isExpanded  = expandedIds.has(node.record_index);
@@ -865,6 +867,7 @@ function TreeNodeRow({
       data-record-index={node.record_index}
       role="treeitem"
       aria-expanded={isDir ? isExpanded : undefined}
+      onContextMenu={(e) => onContextMenu(e, node)}
     >
       {barPct > 0 && <div className="tree-size-bar" style={{ width: `${barPct}%` }} />}
       {isDir ? (
@@ -919,6 +922,7 @@ function TreeView({
   sourceKind,
   onToggleExpand,
   onSelect,
+  onContextMenu,
   onKeyDown,
 }: {
   rootCount: number;
@@ -932,6 +936,7 @@ function TreeView({
   sourceKind: SourceKind | null;
   onToggleExpand: (node: TreeNode) => void;
   onSelect: (node: TreeNode) => void;
+  onContextMenu: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
 }) {
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -990,6 +995,7 @@ function TreeView({
                 focusedRecordIndex={focusedRecordIndex}
                 onToggleExpand={onToggleExpand}
                 onSelect={onSelect}
+                onContextMenu={onContextMenu}
               />
             )
           )
@@ -1746,6 +1752,7 @@ function App() {
   const [reclaimableLoading, setReclaimableLoading] = useState(false);
   const [reclaimableError, setReclaimableError] = useState<string | null>(null);
   const [focusedRecordIndex, setFocusedRecordIndex] = useState<number | null>(null);
+  const [treeContextMenu, setTreeContextMenu] = useState<ContextMenuTarget | null>(null);
   const [currentFilterQuery, setCurrentFilterQuery] = useState("");
   const [cancelMessage, setCancelMessage] = useState<string | null>(null);
   const scanRestoreRef = useRef<{ path: string; drive: string } | null>(null);
@@ -2272,6 +2279,18 @@ function App() {
     setTreeError(null);
   }
 
+  function handleTreeContextMenu(e: React.MouseEvent<HTMLDivElement>, node: TreeNode) {
+    e.preventDefault();
+    e.stopPropagation();
+    setTreeContextMenu({
+      path: node.path,
+      isDirectory: node.is_directory,
+      recordIndex: node.record_index,
+      x: e.clientX,
+      y: e.clientY,
+    });
+  }
+
   function handleNavigateToDir(dir: DirectoryEntry) {
     setSelectedDir(dir);
     setTreeError(null);
@@ -2768,8 +2787,18 @@ function App() {
               sourceKind={sourceKind}
               onToggleExpand={handleToggleExpand}
               onSelect={handleSelectTreeNode}
+              onContextMenu={handleTreeContextMenu}
               onKeyDown={handleTreeKeyDown}
             />
+            {treeContextMenu && (
+              <SafeContextMenu
+                target={treeContextMenu}
+                onClose={() => setTreeContextMenu(null)}
+                onOpenExplorer={handleOpenExplorer}
+                onSelectFile={handleSelectFile}
+                onCopyError={handleCopyError}
+              />
+            )}
             <div className="content-right">
               {selectedDir && (
                 <SelectedFolderCard
