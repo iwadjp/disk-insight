@@ -2808,6 +2808,27 @@ function App() {
                   </div>
                 )}
               </div>
+              {selectedDir && (
+                <DirectChildrenPanel
+                  dir={selectedDir}
+                  children={childrenByParent[selectedDir.record_index]}
+                  isLoading={selectedChildrenLoading}
+                  error={selectedChildrenError}
+                  sourceKind={sourceKind}
+                  currentFilterQuery={currentFilterQuery}
+                  totalSize={data.summary.total_final_allocated}
+                  sortKey={directChildrenSortKey}
+                  sortDir={directChildrenSortDir}
+                  onSortKeyChange={setDirectChildrenSortKey}
+                  onSortDirChange={setDirectChildrenSortDir}
+                  ancestorDirs={selectedAncestorDirs}
+                  onNavigateToDir={handleNavigateToDir}
+                  onNavigate={handleSelectTreeNode}
+                  onOpenExplorer={handleOpenExplorer}
+                  onSelectFile={handleSelectFile}
+                  onCopyError={handleCopyError}
+                />
+              )}
               <DirectoriesTable
                 rows={filteredTopDirs}
                 totalSize={data.summary.total_final_allocated}
@@ -2833,27 +2854,6 @@ function App() {
                 onSelectFile={handleSelectFile}
                 onCopyError={handleCopyError}
               />
-              {selectedDir && (
-                <DirectChildrenPanel
-                  dir={selectedDir}
-                  children={childrenByParent[selectedDir.record_index]}
-                  isLoading={selectedChildrenLoading}
-                  error={selectedChildrenError}
-                  sourceKind={sourceKind}
-                  currentFilterQuery={currentFilterQuery}
-                  totalSize={data.summary.total_final_allocated}
-                  sortKey={directChildrenSortKey}
-                  sortDir={directChildrenSortDir}
-                  onSortKeyChange={setDirectChildrenSortKey}
-                  onSortDirChange={setDirectChildrenSortDir}
-                  ancestorDirs={selectedAncestorDirs}
-                  onNavigateToDir={handleNavigateToDir}
-                  onNavigate={handleSelectTreeNode}
-                  onOpenExplorer={handleOpenExplorer}
-                  onSelectFile={handleSelectFile}
-                  onCopyError={handleCopyError}
-                />
-              )}
               {selectedDir && (
                 <SubtreeSearchPanel
                   selectedDir={selectedDir}
