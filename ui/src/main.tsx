@@ -505,7 +505,6 @@ function SafeContextMenu({
   onCopyError: (msg: string) => void;
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const [copied, setCopied] = useState(false);
   const menuWidth = 196;
   const menuHeight = target.isDirectory ? 74 : 106;
   const x = Math.min(target.x, window.innerWidth - menuWidth - 4);
@@ -533,19 +532,13 @@ function SafeContextMenu({
 
   function copyPath() {
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(target.path)
-        .then(() => {
-          setCopied(true);
-          window.setTimeout(onClose, 600);
-        })
-        .catch((err: unknown) => {
-          onCopyError(err instanceof Error ? err.message : "Failed to copy path.");
-          onClose();
-        });
+      navigator.clipboard.writeText(target.path).catch((err: unknown) => {
+        onCopyError(err instanceof Error ? err.message : "Failed to copy path.");
+      });
     } else {
       onCopyError("Clipboard is not available.");
-      onClose();
     }
+    onClose();
   }
 
   return createPortal(
@@ -572,8 +565,8 @@ function SafeContextMenu({
           Select in Explorer
         </button>
       )}
-      <button className="context-menu-item" onClick={copyPath} disabled={copied}>
-        {copied ? "Copied!" : "Copy path"}
+      <button className="context-menu-item" onClick={copyPath}>
+        Copy path
       </button>
     </div>,
     document.body,
