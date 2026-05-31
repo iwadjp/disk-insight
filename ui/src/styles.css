@@ -1548,6 +1548,42 @@ details[open] > .reclaimable-summary::before {
   overflow: hidden;
 }
 
+.subtree-search-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: #f8fafc;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #465563;
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+.subtree-search-summary::-webkit-details-marker {
+  display: none;
+}
+
+.subtree-search-summary::before {
+  content: "▶";
+  font-size: 10px;
+  color: #9eacba;
+  transition: transform 0.12s ease;
+  flex-shrink: 0;
+}
+
+details[open] > .subtree-search-summary::before {
+  transform: rotate(90deg);
+}
+
+details[open] > .subtree-search-summary {
+  border-bottom: 1px solid #d9e1e8;
+}
+
 .subtree-search-header {
   display: flex;
   align-items: center;

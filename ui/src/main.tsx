@@ -1374,11 +1374,17 @@ function SubtreeSearchPanel({
     body = <p className="subtree-search-note">No matches in selected folder.</p>;
   }
 
+  const folderName = !isDriveRoot(selectedDir.path) ? breadcrumbLabel(selectedDir.path) : null;
+  const resultSuffix = results !== null && results.length > 0
+    ? ` · ${formatNumber(results.length)}${results.length >= 200 ? "+" : ""} result${results.length !== 1 ? "s" : ""}`
+    : null;
+  const summaryLabel = folderName ? `Search inside ${folderName}` : "Search inside selected folder";
+
   return (
-    <div className="subtree-search-panel">
-      <div className="subtree-search-header">
-        <span className="subtree-search-title">Search in selected folder</span>
-      </div>
+    <details className="subtree-search-panel">
+      <summary className="subtree-search-summary">
+        {summaryLabel}{resultSuffix}
+      </summary>
       <div className="subtree-search-input-row">
         <input
           className="filter-input"
@@ -1459,7 +1465,7 @@ function SubtreeSearchPanel({
           onCopyError={onCopyError}
         />
       )}
-    </div>
+    </details>
   );
 }
 
