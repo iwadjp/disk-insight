@@ -2395,6 +2395,14 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Suppress WebView2 default context menu to prevent accidental page reload.
+  // DirectChildrenPanel rows call stopPropagation() so their custom menu is unaffected.
+  useEffect(() => {
+    const handler = (e: MouseEvent) => { e.preventDefault(); };
+    document.addEventListener("contextmenu", handler);
+    return () => document.removeEventListener("contextmenu", handler);
+  }, []);
+
   useEffect(() => {
     if (!isLoading || scanStartMsRef.current === null) return;
     const t0 = scanStartMsRef.current;
