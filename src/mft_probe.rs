@@ -2543,7 +2543,7 @@ fn get_volume_serial_hex(drive_letter: char) -> Result<String> {
     Ok(format!("{:08X}", serial))
 }
 
-fn get_drive_capacity(drive: char) -> Result<DriveCapacity> {
+pub fn get_drive_capacity_now(drive: char) -> Result<DriveCapacity> {
     let root: Vec<u16> = format!("{}:\\", drive)
         .encode_utf16()
         .chain(std::iter::once(0))
@@ -3693,7 +3693,7 @@ where
         total_time_ms:         total_elapsed.as_millis() as u64,
     };
 
-    let capacity = match get_drive_capacity(drive) {
+    let capacity = match get_drive_capacity_now(drive) {
         Ok(cap) => {
             eprintln!(
                 "[capacity] drive={} total={} free={} used={} used_pct={:.1}%",

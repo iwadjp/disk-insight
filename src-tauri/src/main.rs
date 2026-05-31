@@ -1,8 +1,9 @@
 use disk_insight::mft_probe::{
     build_mft_tree_model_with_policy_progress,
     compute_reclaimable_summary,
+    get_drive_capacity_now as read_drive_capacity_now,
     load_minimal_scan_cache,
-    ArenaCache, JsonTreeNode, JsonTreeOutput, ReclaimableSummary, StoragePolicy,
+    ArenaCache, DriveCapacity, JsonTreeNode, JsonTreeOutput, ReclaimableSummary, StoragePolicy,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -339,6 +340,19 @@ fn cancel_scan(state: State<'_, AppState>) {
 }
 
 #[tauri::command]
+fn get_drive_capacity_now(drive: String) -> Result<DriveCapacity, String> {
+    let drive_char = drive
+        .trim_end_matches(':')
+        .chars()
+        .next()
+        .filter(|c| c.is_ascii_alphabetic())
+        .map(|c| c.to_ascii_uppercase())
+        .ok_or_else(|| format!("invalid drive: {}", drive))?;
+
+    read_drive_capacity_now(drive_char).map_err(|e| format!("{e:#}"))
+}
+
+#[tauri::command]
 fn get_children(
     state: State<'_, AppState>,
     parent_record_index: u64,
@@ -490,6 +504,7 @@ fn main() {
             load_scan_cache,
             scan_drive,
             cancel_scan,
+            get_drive_capacity_now,
             open_in_explorer,
             select_in_explorer,
             get_children,

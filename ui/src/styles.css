@@ -913,6 +913,16 @@ tbody tr:last-child td {
   font-style: italic;
 }
 
+.selected-folder-note--cleanup-delta {
+  color: #475569;
+  font-style: normal;
+}
+
+.selected-folder-note--cleanup-delta span {
+  margin-left: 8px;
+  color: #8a97a4;
+}
+
 .reclaimable-details {
   margin-top: 10px;
   border-top: 1px solid #e8edf1;

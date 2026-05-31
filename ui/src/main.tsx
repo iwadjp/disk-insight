@@ -133,6 +133,12 @@ type CacheBannerState =
   | { kind: "live" }
   | { kind: "refresh_failed"; message: string }
   | { kind: "refresh_cancelled" };
+type CleanupRefreshDelta = {
+  drive: string;
+  beforeFreeBytes: number;
+  afterFreeBytes: number;
+  deltaBytes: number;
+};
 type DirectChildrenSortKey = "size" | "name" | "type";
 type SortDirection = "asc" | "desc";
 type ContextMenuTarget = {
@@ -274,6 +280,13 @@ async function loadScanCache(
 ): Promise<CachedScanResponse | null> {
   if (!isTauriRuntime()) return null;
   return invoke<CachedScanResponse | null>("load_scan_cache", { drive, storagePolicy });
+}
+
+async function getDriveCapacityNow(drive: string): Promise<DriveCapacity> {
+  if (!isTauriRuntime()) {
+    throw new Error("Drive capacity refresh is available only in the Tauri desktop app.");
+  }
+  return invoke<DriveCapacity>("get_drive_capacity_now", { drive });
 }
 
 async function openInExplorer(path: string): Promise<void> {
@@ -596,6 +609,15 @@ function formatBytes(bytes: number): string {
   return unitIndex === 0
     ? `${value} ${units[unitIndex]}`
     : `${value.toFixed(1)} ${units[unitIndex]}`;
+}
+
+function formatDriveFreeDelta(deltaBytes: number): string {
+  const nearZeroThreshold = 1024 * 1024;
+  if (Math.abs(deltaBytes) < nearZeroThreshold) {
+    return "Drive free space unchanged since cleanup refresh";
+  }
+  const sign = deltaBytes > 0 ? "+" : "-";
+  return `Drive free space changed: ${sign}${formatBytes(Math.abs(deltaBytes))} since cleanup refresh`;
 }
 
 function formatPercent(bytes: number, total: number): string {
@@ -1023,6 +1045,7 @@ function SelectedFolderCard({
   onOpenExplorer,
   onRefreshAfterCleanup,
   refreshAfterCleanupDisabled,
+  cleanupRefreshDelta,
   onCopyError,
 }: {
   dir: DirectoryEntry;
@@ -1033,6 +1056,7 @@ function SelectedFolderCard({
   onOpenExplorer: (path: string) => void;
   onRefreshAfterCleanup: () => void;
   refreshAfterCleanupDisabled: boolean;
+  cleanupRefreshDelta: CleanupRefreshDelta | null;
   onCopyError: (msg: string) => void;
 }) {
   const confidenceClass = reclaimable
@@ -1062,6 +1086,12 @@ function SelectedFolderCard({
           </button>
         </div>
       </div>
+      {cleanupRefreshDelta && (
+        <div className="selected-folder-note selected-folder-note--cleanup-delta">
+          {formatDriveFreeDelta(cleanupRefreshDelta.deltaBytes)}
+          <span>May include changes from other apps.</span>
+        </div>
+      )}
       <div className="selected-folder-stats">
         <span title="Estimated allocated-style total for this folder subtree.">
           Subtree estimate: <strong>{formatBytes(dir.subtree_size)}</strong>
@@ -1727,6 +1757,7 @@ function App() {
   const [sourceKind, setSourceKind] = useState<SourceKind | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [cacheBanner, setCacheBanner] = useState<CacheBannerState | null>(null);
+  const [cleanupRefreshDelta, setCleanupRefreshDelta] = useState<CleanupRefreshDelta | null>(null);
   const [drives, setDrives] = useState<DriveInfo[]>([
     { letter: "C", root: "C:\\", display: "C:", drive_type: "unknown" },
   ]);
@@ -2012,6 +2043,7 @@ function App() {
     setError(null);
     setIsScanError(false);
     setStatusMessage(null);
+    setCleanupRefreshDelta(null);
     clearCacheBanner();
     setExpandedIds(new Set());
     setLoadingIds(new Set());
@@ -2060,7 +2092,7 @@ function App() {
     top: number,
     policy: string,
     msg: string,
-  ) {
+  ): Promise<boolean> {
     scanGenerationRef.current += 1;
     const generation = scanGenerationRef.current;
     const flowStart = performance.now();
@@ -2075,6 +2107,7 @@ function App() {
     setIsScanError(false);
     setStatusMessage(null);
     setCancelMessage(null);
+    setCleanupRefreshDelta(null);
     clearCacheBanner();
     scanRestoreRef.current =
       selectedDir && data
@@ -2148,9 +2181,9 @@ function App() {
       const scanInvokeStart = performance.now();
       scanTimingRef.current = { start: t0, invokeStart: scanInvokeStart };
       console.log(`[perf-ui] invoke start  t+${(scanInvokeStart - t0).toFixed(0)} ms`);
-      if (scanGenerationRef.current !== generation) return;
+      if (scanGenerationRef.current !== generation) return false;
       const json = await scanDrive(drive, top, policy);
-      if (scanGenerationRef.current !== generation) return;
+      if (scanGenerationRef.current !== generation) return false;
       if (scanTimingRef.current) {
         const now = performance.now();
         const invokeMs = now - scanTimingRef.current.invokeStart;
@@ -2180,9 +2213,10 @@ function App() {
       showUpdatedBanner();
       console.log(`[perf-ui] setData called  t+${(performance.now() - t0).toFixed(0)} ms`);
       setIsLoading(false);
+      return true;
     } catch (err: unknown) {
       clearPendingProgressLatch();
-      if (scanGenerationRef.current !== generation) return;
+      if (scanGenerationRef.current !== generation) return false;
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
       setIsScanError(true);
@@ -2193,6 +2227,7 @@ function App() {
         clearCacheBanner();
       }
       setIsLoading(false);
+      return false;
     }
   }
 
@@ -2443,7 +2478,7 @@ function App() {
     }
   }
 
-  function handleScan() {
+  function beginScanForDrive(drive: string): Promise<boolean> {
     const t0 = performance.now();
     resetProgressLatch();
     scanTimingRef.current = { start: t0, invokeStart: t0 };
@@ -2452,15 +2487,51 @@ function App() {
     setScanInvokeMs(null);
     setLocalElapsedMs(0);
     console.log(`[perf-ui] scan click  drive=${driveInput} policy=${storagePolicy}`);
+    const policyNote = storagePolicy === "wof_adjusted" ? " [WOF-adjusted estimate]" : "";
+    const msg = `Scanning ${drive}: — reading NTFS metadata. Top ${topN} entries.${policyNote}`;
+    return runScanWithCache(drive, topN, storagePolicy, msg);
+  }
+
+  function handleScan() {
     const drive = parseDriveLetter(driveInput);
     if (!drive) {
       setError("Drive must be a single letter (A–Z).");
       setIsScanError(false);
       return;
     }
-    const policyNote = storagePolicy === "wof_adjusted" ? " [WOF-adjusted estimate]" : "";
-    const msg = `Scanning ${drive}: — reading NTFS metadata. Top ${topN} entries.${policyNote}`;
-    void runScanWithCache(drive, topN, storagePolicy, msg);
+    void beginScanForDrive(drive);
+  }
+
+  function handleRefreshAfterCleanup() {
+    if (isLoading) return;
+    const drive = parseDriveLetter(driveInput);
+    if (!drive) {
+      handleScan();
+      return;
+    }
+    void (async () => {
+      let beforeFreeBytes: number | null = null;
+      try {
+        beforeFreeBytes = (await getDriveCapacityNow(drive)).free_bytes;
+      } catch (err: unknown) {
+        console.warn("[cleanup-refresh] before capacity unavailable", err);
+      }
+
+      const scanSucceeded = await beginScanForDrive(drive);
+      if (!scanSucceeded || beforeFreeBytes === null) return;
+
+      try {
+        const after = await getDriveCapacityNow(drive);
+        setCleanupRefreshDelta({
+          drive: `${drive}:`,
+          beforeFreeBytes,
+          afterFreeBytes: after.free_bytes,
+          deltaBytes: after.free_bytes - beforeFreeBytes,
+        });
+      } catch (err: unknown) {
+        console.warn("[cleanup-refresh] after capacity unavailable", err);
+      }
+    })();
   }
 
   useEffect(() => {
@@ -2472,6 +2543,10 @@ function App() {
       directChildrenSortDirection: directChildrenSortDir,
     });
   }, [driveInput, topN, storagePolicy, directChildrenSortKey, directChildrenSortDir]);
+
+  useEffect(() => {
+    setCleanupRefreshDelta(null);
+  }, [driveInput]);
 
   // K-1b: log when scan data is first rendered to DOM
   useEffect(() => {
@@ -2822,8 +2897,9 @@ function App() {
                   reclaimableError={reclaimableError}
                   sourceKind={sourceKind}
                   onOpenExplorer={handleOpenExplorer}
-                  onRefreshAfterCleanup={handleScan}
+                  onRefreshAfterCleanup={handleRefreshAfterCleanup}
                   refreshAfterCleanupDisabled={scanDisabled}
+                  cleanupRefreshDelta={cleanupRefreshDelta}
                   onCopyError={handleCopyError}
                 />
               )}
