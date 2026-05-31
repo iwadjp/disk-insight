@@ -654,11 +654,6 @@ function StatusBar({
 
   const updatedLabel = `Last updated: ${formatDateTime(lastUpdated)}`;
 
-  const durationLabel =
-    sourceKind === "live"
-      ? `Scan completed in ${formatNumber(data.summary.total_time_ms)} ms`
-      : null;
-
   const policyLabel = data.summary.storage_policy && data.summary.storage_policy !== "current"
     ? storagePolicyDisplayName(data.summary.storage_policy)
     : null;
@@ -673,7 +668,6 @@ function StatusBar({
         <span className="source-badge source-badge--experimental">{policyLabel}</span>
       )}
       <span className="status-meta">{updatedLabel}</span>
-      {durationLabel && <span className="status-meta">{durationLabel}</span>}
       {isLoading && <span className="status-meta status-updating">(updating…)</span>}
     </div>
   );
@@ -797,7 +791,6 @@ function SummaryCard({ summary }: { summary: Summary }) {
     ],
     ["Files", formatNumber(summary.files)],
     ["Directories", formatNumber(summary.directories)],
-    ["Total time", `${formatNumber(summary.total_time_ms)} ms`],
   ];
   return (
     <section className="summary" aria-label="Scan summary">
@@ -1060,39 +1053,36 @@ function SelectedFolderCard({
         <span>Children: <strong>{formatNumber(dir.child_count)}</strong></span>
       </div>
       {(reclaimableLoading || reclaimable !== null || reclaimableError !== null || sourceKind === "cached") && (
-        <div className="reclaimable-section">
-          {reclaimableLoading ? (
-            <div className="reclaimable-loading">Estimated reclaimable: loading…</div>
-          ) : reclaimableError ? (
-            <div className="reclaimable-unavailable">Reclaimable estimate unavailable</div>
-          ) : reclaimable ? (
-            <>
-              <div className="reclaimable-header">
-                <span className="reclaimable-title">Estimated reclaimable</span>
+        <details className="reclaimable-details">
+          <summary className="reclaimable-summary">
+            {reclaimableLoading && "Estimated reclaimable: loading…"}
+            {reclaimableError && "Reclaimable estimate unavailable"}
+            {reclaimable && reclaimable.not_recommended && "Estimated reclaimable: not recommended as target"}
+            {reclaimable && !reclaimable.not_recommended && (
+              <>
+                {"Estimated reclaimable: "}
+                <strong>{formatBytes(reclaimable.wof_adjusted_bytes)}</strong>
+                {" "}
                 <span className={confidenceClass}>{reclaimable.confidence}</span>
+              </>
+            )}
+            {!reclaimableLoading && !reclaimableError && !reclaimable && sourceKind === "cached" && (
+              "Reclaimable: available after refresh"
+            )}
+          </summary>
+          {reclaimable && !reclaimable.not_recommended && (
+            <div className="reclaimable-section">
+              <div className="reclaimable-range">
+                {reclaimable.confidence === "High" &&
+                 (reclaimable.range_upper - reclaimable.range_lower) < reclaimable.range_upper * 0.01
+                  ? "Range: tight (within 1%)"
+                  : `Range: ${formatBytes(reclaimable.range_lower)} – ${formatBytes(reclaimable.range_upper)}`}
               </div>
-              <div className={reclaimable.not_recommended
-                ? "reclaimable-estimate reclaimable-estimate--not-recommended"
-                : "reclaimable-estimate"}>
-                {reclaimable.not_recommended
-                  ? "Not recommended as deletion target"
-                  : formatBytes(reclaimable.wof_adjusted_bytes)}
-              </div>
-              {!reclaimable.not_recommended && (
-                <div className="reclaimable-range">
-                  {reclaimable.confidence === "High" &&
-                   (reclaimable.range_upper - reclaimable.range_lower) < reclaimable.range_upper * 0.01
-                    ? "Range: tight (within 1%)"
-                    : `Range: ${formatBytes(reclaimable.range_lower)} – ${formatBytes(reclaimable.range_upper)}`}
-                </div>
-              )}
               <div className="reclaimable-basis" title={reclaimable.basis}>{reclaimable.basis}</div>
               <div className="reclaimable-caution" title={reclaimable.caution}>{reclaimable.caution}</div>
-            </>
-          ) : sourceKind === "cached" ? (
-            <div className="reclaimable-cached-note">Reclaimable details are available after refresh completes.</div>
-          ) : null}
-        </div>
+            </div>
+          )}
+        </details>
       )}
     </div>
   );
@@ -2791,10 +2781,10 @@ function App() {
                   <input
                     className="filter-input top-search-input"
                     type="text"
-                    placeholder="Filter current results..."
+                    placeholder="Filter visible result lists..."
                     value={currentFilterQuery}
                     onChange={(e) => setCurrentFilterQuery(e.target.value)}
-                    aria-label="Filter current results"
+                    aria-label="Filter visible result lists"
                   />
                   {currentFilterQuery && (
                     <button
@@ -2818,6 +2808,31 @@ function App() {
                   </div>
                 )}
               </div>
+              <DirectoriesTable
+                rows={filteredTopDirs}
+                totalSize={data.summary.total_final_allocated}
+                basePath={selectedDir?.path}
+                onOpenExplorer={handleOpenExplorer}
+                onCopyError={handleCopyError}
+                title={
+                  selectedDir && !isDriveRoot(selectedDir.path)
+                    ? <>Top directories (scan results) under <span className="heading-path">{selectedDir.path}</span></>
+                    : "Top directories"
+                }
+              />
+              <FilesTable
+                rows={filteredTopFiles}
+                totalSize={data.summary.total_final_allocated}
+                basePath={selectedDir?.path}
+                title={
+                  selectedDir && !isDriveRoot(selectedDir.path)
+                    ? <>Top files (scan results) under <span className="heading-path">{selectedDir.path}</span></>
+                    : "Top files"
+                }
+                onOpenLocation={handleOpenExplorer}
+                onSelectFile={handleSelectFile}
+                onCopyError={handleCopyError}
+              />
               {selectedDir && (
                 <DirectChildrenPanel
                   dir={selectedDir}
@@ -2849,31 +2864,6 @@ function App() {
                   onCopyError={handleCopyError}
                 />
               )}
-              <DirectoriesTable
-                rows={filteredTopDirs}
-                totalSize={data.summary.total_final_allocated}
-                basePath={selectedDir?.path}
-                onOpenExplorer={handleOpenExplorer}
-                onCopyError={handleCopyError}
-                title={
-                  selectedDir && !isDriveRoot(selectedDir.path)
-                    ? <>Top directories (scan results) under <span className="heading-path">{selectedDir.path}</span></>
-                    : "Top directories"
-                }
-              />
-              <FilesTable
-                rows={filteredTopFiles}
-                totalSize={data.summary.total_final_allocated}
-                basePath={selectedDir?.path}
-                title={
-                  selectedDir && !isDriveRoot(selectedDir.path)
-                    ? <>Top files (scan results) under <span className="heading-path">{selectedDir.path}</span></>
-                    : "Top files"
-                }
-                onOpenLocation={handleOpenExplorer}
-                onSelectFile={handleSelectFile}
-                onCopyError={handleCopyError}
-              />
             </div>
           </div>
           {sourceKind === "live" && (

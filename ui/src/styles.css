@@ -69,7 +69,7 @@ h2 {
 
 .summary {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -913,10 +913,45 @@ tbody tr:last-child td {
   font-style: italic;
 }
 
-.reclaimable-section {
-  margin-top: 12px;
-  padding-top: 10px;
+.reclaimable-details {
+  margin-top: 10px;
   border-top: 1px solid #e8edf1;
+  padding-top: 8px;
+}
+
+.reclaimable-summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #465563;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+  padding: 2px 0;
+}
+
+.reclaimable-summary::-webkit-details-marker {
+  display: none;
+}
+
+.reclaimable-summary::before {
+  content: "▶";
+  font-size: 10px;
+  color: #9eacba;
+  transition: transform 0.12s ease;
+  flex-shrink: 0;
+}
+
+details[open] > .reclaimable-summary::before {
+  transform: rotate(90deg);
+}
+
+.reclaimable-section {
+  margin-top: 8px;
+  padding-top: 0;
+  border-top: none;
 }
 
 .reclaimable-loading,
