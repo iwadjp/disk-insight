@@ -135,7 +135,13 @@ type CacheBannerState =
   | { kind: "refresh_cancelled" };
 type DirectChildrenSortKey = "size" | "name" | "type";
 type SortDirection = "asc" | "desc";
-type ContextMenuState = { node: TreeNode; x: number; y: number };
+type ContextMenuTarget = {
+  path: string;
+  isDirectory: boolean;
+  recordIndex: number;
+  x: number;
+  y: number;
+};
 
 const TOP_OPTIONS = [10, 30, 50, 100, 200, 500];
 const LARGE_FOLDER_THRESHOLD = 200;
@@ -482,6 +488,88 @@ function CopyButton({
     <button className="btn btn-sm" onClick={handleClick}>
       {copied ? "Copied!" : "Copy path"}
     </button>
+  );
+}
+
+function SafeContextMenu({
+  target,
+  onClose,
+  onOpenExplorer,
+  onSelectFile,
+  onCopyError,
+}: {
+  target: ContextMenuTarget;
+  onClose: () => void;
+  onOpenExplorer: (path: string) => void;
+  onSelectFile?: (path: string) => void;
+  onCopyError: (msg: string) => void;
+}) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuWidth = 196;
+  const menuHeight = target.isDirectory ? 74 : 106;
+  const x = Math.min(target.x, window.innerWidth - menuWidth - 4);
+  const y = Math.min(target.y, window.innerHeight - menuHeight - 4);
+
+  useEffect(() => {
+    function handleMouseDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    }
+    window.addEventListener("mousedown", handleMouseDown);
+    return () => window.removeEventListener("mousedown", handleMouseDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function copyPath() {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(target.path).catch((err: unknown) => {
+        onCopyError(err instanceof Error ? err.message : "Failed to copy path.");
+      });
+    } else {
+      onCopyError("Clipboard is not available.");
+    }
+    onClose();
+  }
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      className="context-menu"
+      style={{ left: x, top: y }}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <button
+        className="context-menu-item"
+        onClick={() => {
+          onOpenExplorer(target.isDirectory ? target.path : getParentDir(target.path));
+          onClose();
+        }}
+      >
+        {target.isDirectory ? "Open folder" : "Open containing folder"}
+      </button>
+      {!target.isDirectory && onSelectFile && (
+        <button
+          className="context-menu-item"
+          onClick={() => { onSelectFile(target.path); onClose(); }}
+        >
+          Select in Explorer
+        </button>
+      )}
+      <button className="context-menu-item" onClick={copyPath}>
+        Copy path
+      </button>
+    </div>,
+    document.body,
   );
 }
 
@@ -1010,7 +1098,16 @@ function SelectedFolderCard({
   );
 }
 
-function DirectoriesTable({ rows, title, totalSize, basePath }: { rows: DirectoryEntry[]; title: React.ReactNode; totalSize: number; basePath?: string | null }) {
+function DirectoriesTable({ rows, title, totalSize, basePath, onOpenExplorer, onCopyError }: {
+  rows: DirectoryEntry[];
+  title: React.ReactNode;
+  totalSize: number;
+  basePath?: string | null;
+  onOpenExplorer: (path: string) => void;
+  onCopyError: (msg: string) => void;
+}) {
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
+
   return (
     <section className="table-section">
       <div className="section-header">
@@ -1033,7 +1130,14 @@ function DirectoriesTable({ rows, title, totalSize, basePath }: { rows: Director
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.record_index}>
+              <tr
+                key={row.record_index}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setCtxMenu({ path: row.path, isDirectory: true, recordIndex: row.record_index, x: e.clientX, y: e.clientY });
+                }}
+              >
                 <td className="path" title={row.path}>{formatRelativePath(row.path, basePath)}</td>
                 <td className="numeric">
                   {formatBytes(row.subtree_size)}
@@ -1049,6 +1153,14 @@ function DirectoriesTable({ rows, title, totalSize, basePath }: { rows: Director
           </tbody>
         </table>
       </div>
+      {ctxMenu && (
+        <SafeContextMenu
+          target={ctxMenu}
+          onClose={() => setCtxMenu(null)}
+          onOpenExplorer={onOpenExplorer}
+          onCopyError={onCopyError}
+        />
+      )}
     </section>
   );
 }
@@ -1070,6 +1182,8 @@ function FilesTable({
   onSelectFile: (path: string) => void;
   onCopyError: (msg: string) => void;
 }) {
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
+
   return (
     <section className="table-section">
       <div className="section-header">
@@ -1095,7 +1209,14 @@ function FilesTable({
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.record_index}>
+                <tr
+                  key={row.record_index}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setCtxMenu({ path: row.path, isDirectory: false, recordIndex: row.record_index, x: e.clientX, y: e.clientY });
+                  }}
+                >
                   <td className="path" title={row.path}>{formatRelativePath(row.path, basePath)}</td>
                   <td className="numeric">
                     {formatBytes(row.final_allocated_size)}
@@ -1124,6 +1245,15 @@ function FilesTable({
           </table>
         )}
       </div>
+      {ctxMenu && (
+        <SafeContextMenu
+          target={ctxMenu}
+          onClose={() => setCtxMenu(null)}
+          onOpenExplorer={onOpenLocation}
+          onSelectFile={onSelectFile}
+          onCopyError={onCopyError}
+        />
+      )}
     </section>
   );
 }
@@ -1147,6 +1277,7 @@ function SubtreeSearchPanel({
   const [results, setResults] = useState<TreeNode[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
   const debounceRef = useRef<number | null>(null);
   const searchGenRef = useRef(0);
 
@@ -1160,6 +1291,7 @@ function SubtreeSearchPanel({
     setResults(null);
     setError(null);
     setIsLoading(false);
+    setCtxMenu(null);
     if (debounceRef.current !== null) {
       window.clearTimeout(debounceRef.current);
       debounceRef.current = null;
@@ -1292,7 +1424,12 @@ function SubtreeSearchPanel({
             {results.map((node) => (
               <div
                 key={node.record_index}
-                className="subtree-result-row"
+                className={`subtree-result-row${ctxMenu?.recordIndex === node.record_index ? " subtree-result-row--context" : ""}`}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setCtxMenu({ path: node.path, isDirectory: node.is_directory, recordIndex: node.record_index, x: e.clientX, y: e.clientY });
+                }}
               >
                 <span className={`direct-child-badge direct-child-badge--${node.is_directory ? "dir" : "file"}`}>
                   {node.is_directory ? "DIR" : "FILE"}
@@ -1322,6 +1459,15 @@ function SubtreeSearchPanel({
             ))}
           </div>
         </>
+      )}
+      {ctxMenu && (
+        <SafeContextMenu
+          target={ctxMenu}
+          onClose={() => setCtxMenu(null)}
+          onOpenExplorer={onOpenExplorer}
+          onSelectFile={onSelectFile}
+          onCopyError={onCopyError}
+        />
       )}
     </div>
   );
@@ -1365,41 +1511,22 @@ function DirectChildrenPanel({
   onCopyError: (msg: string) => void;
 }) {
 
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null);
 
   useEffect(() => {
     setContextMenu(null);
   }, [dir.record_index]);
 
-  useEffect(() => {
-    if (!contextMenu) return;
-    function handleMouseDown(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setContextMenu(null);
-      }
-    }
-    window.addEventListener("mousedown", handleMouseDown);
-    return () => window.removeEventListener("mousedown", handleMouseDown);
-  }, [contextMenu]);
-
-  useEffect(() => {
-    if (!contextMenu) return;
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setContextMenu(null);
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [contextMenu]);
-
   function handleContextMenu(e: React.MouseEvent<HTMLDivElement>, node: TreeNode) {
     e.preventDefault();
     e.stopPropagation();
-    const menuWidth = 160;
-    const menuHeight = 68;
-    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 4);
-    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 4);
-    setContextMenu({ node, x, y });
+    setContextMenu({
+      path: node.path,
+      isDirectory: node.is_directory,
+      recordIndex: node.record_index,
+      x: e.clientX,
+      y: e.clientY,
+    });
   }
 
   const filtered = useMemo(() => {
@@ -1447,7 +1574,7 @@ function DirectChildrenPanel({
         {sorted.map((node) => (
           <div
             key={node.record_index}
-            className={`direct-child-row${node.is_directory ? " direct-child-row--dir" : ""}${contextMenu?.node.record_index === node.record_index ? " direct-child-row--context" : ""}`}
+            className={`direct-child-row${node.is_directory ? " direct-child-row--dir" : ""}${contextMenu?.recordIndex === node.record_index ? " direct-child-row--context" : ""}`}
             onClick={node.is_directory ? () => onNavigate(node) : undefined}
             onContextMenu={(e) => handleContextMenu(e, node)}
             title={node.is_directory ? `Open ${node.path}` : undefined}
@@ -1551,43 +1678,14 @@ function DirectChildrenPanel({
         </div>
       )}
       {body}
-      {contextMenu && createPortal(
-        <div
-          ref={menuRef}
-          className="context-menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          <button
-            className="context-menu-item"
-            onClick={() => {
-              onOpenExplorer(
-                contextMenu.node.is_directory
-                  ? contextMenu.node.path
-                  : getParentDir(contextMenu.node.path),
-              );
-              setContextMenu(null);
-            }}
-          >
-            {contextMenu.node.is_directory ? "Open folder" : "Open containing folder"}
-          </button>
-          <button
-            className="context-menu-item"
-            onClick={() => {
-              if (navigator.clipboard) {
-                navigator.clipboard.writeText(contextMenu.node.path).catch((err: unknown) => {
-                  onCopyError(err instanceof Error ? err.message : "Failed to copy path.");
-                });
-              } else {
-                onCopyError("Clipboard is not available.");
-              }
-              setContextMenu(null);
-            }}
-          >
-            Copy path
-          </button>
-        </div>,
-        document.body,
+      {contextMenu && (
+        <SafeContextMenu
+          target={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onOpenExplorer={onOpenExplorer}
+          onSelectFile={onSelectFile}
+          onCopyError={onCopyError}
+        />
       )}
     </div>
   );
@@ -2755,6 +2853,8 @@ function App() {
                 rows={filteredTopDirs}
                 totalSize={data.summary.total_final_allocated}
                 basePath={selectedDir?.path}
+                onOpenExplorer={handleOpenExplorer}
+                onCopyError={handleCopyError}
                 title={
                   selectedDir && !isDriveRoot(selectedDir.path)
                     ? <>Top directories (scan results) under <span className="heading-path">{selectedDir.path}</span></>

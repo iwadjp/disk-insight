@@ -1368,7 +1368,7 @@ tbody tr:last-child td {
   border: 1px solid #d0d7de;
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-  min-width: 150px;
+  min-width: 196px;
   padding: 4px 0;
   font-size: 13px;
 }
@@ -1391,7 +1391,8 @@ tbody tr:last-child td {
   color: #0969da;
 }
 
-.direct-child-row--context {
+.direct-child-row--context,
+.subtree-result-row--context {
   background: #f0f6ff !important;
 }
 
