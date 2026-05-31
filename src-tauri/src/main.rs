@@ -127,6 +127,63 @@ fn load_scan_cache(
     }
 }
 
+/// Translate raw anyhow error strings from the scan path into user-readable messages.
+/// Strips localized Windows OS error details (e.g. Japanese "パラメーターが間違っています。").
+fn classify_scan_error(raw: String, drive: char) -> String {
+    let lower = raw.to_lowercase();
+    if lower.contains("not ntfs") {
+        return format!(
+            "Cannot scan {drive}: — this drive is not an NTFS volume. \
+             disk-insight currently supports NTFS volumes only."
+        );
+    }
+    if lower.contains("access is denied") || lower.contains("administrator") {
+        return format!(
+            "Access denied while scanning {drive}:. \
+             Please run disk-insight as administrator, or unlock the drive first."
+        );
+    }
+    raw
+}
+
+/// Pre-check: validate drive type and readiness before attempting raw NTFS volume access.
+/// Returns a user-readable Err for drives that cannot be scanned (network, not-ready).
+/// Non-NTFS drives fall through; get_mft_info reports a clear error at the FSCTL step.
+fn check_drive_before_scan(drive: char) -> Result<(), String> {
+    use windows::Win32::Storage::FileSystem::{GetDriveTypeW, GetVolumeInformationW};
+    use windows::core::PCWSTR;
+
+    let root = format!("{}:\\", drive);
+    let root_wide: Vec<u16> = root.encode_utf16().chain(std::iter::once(0)).collect();
+    let root_pcwstr = PCWSTR::from_raw(root_wide.as_ptr());
+
+    // Network drives cannot be opened as raw NTFS volumes.
+    let dt = unsafe { GetDriveTypeW(root_pcwstr) };
+    if dt == 4 {
+        return Err(format!(
+            "Drive {drive}: is a network drive. disk-insight requires \
+             direct NTFS volume access and cannot scan network drives."
+        ));
+    }
+
+    // GetVolumeInformationW does not require administrator rights on accessible volumes.
+    // Use it to detect not-ready (no media) states before attempting the raw volume open.
+    let mut serial = 0u32;
+    if let Err(e) = unsafe {
+        GetVolumeInformationW(root_pcwstr, None, Some(&mut serial), None, None, None)
+    } {
+        let msg = format!("{e}");
+        if msg.contains("(os error 21)") || msg.to_lowercase().contains("not ready") {
+            return Err(format!(
+                "Drive {drive}: is not ready. Please check that media is inserted."
+            ));
+        }
+        // Other pre-check failures (e.g. BitLocker-locked): let the scan proceed and report its own error.
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 async fn scan_drive(
     app: tauri::AppHandle,
@@ -144,6 +201,9 @@ async fn scan_drive(
         .filter(|c| c.is_ascii_alphabetic())
         .map(|c| c.to_ascii_uppercase())
         .ok_or_else(|| format!("invalid drive: {}", drive))?;
+
+    // Pre-check: detect unsupported or not-ready drives before attempting raw MFT access.
+    check_drive_before_scan(drive_char)?;
 
     let policy = match storage_policy.as_deref() {
         Some("wof_adjusted") => StoragePolicy::WofAdjusted,
@@ -202,7 +262,8 @@ async fn scan_drive(
     }
 
     let model = spawn_result
-        .map_err(|e| format!("scan task failed: {e}"))??;
+        .map_err(|e| format!("scan task failed: {e}"))?
+        .map_err(|raw| classify_scan_error(raw, drive_char))?;
 
     let spawn_ms = spawn_start.elapsed().as_millis();
     eprintln!(

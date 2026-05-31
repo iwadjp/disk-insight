@@ -211,6 +211,19 @@ function isDriveRoot(path: string): boolean {
   return /^[A-Za-z]:\\?$/.test(path);
 }
 
+// Returns true when the scan error likely requires administrator rights and no other
+// guidance is already present in the error message itself.
+function isAdminRequiredError(error: string | null): boolean {
+  if (!error) return true;
+  const lower = error.toLowerCase();
+  if (lower.includes("network drive")) return false;
+  if (lower.includes("not ready")) return false;
+  if (lower.includes("not ntfs") || lower.includes("not an ntfs")) return false;
+  // classify_scan_error already embeds admin guidance in the message
+  if (lower.includes("administrator")) return false;
+  return true; // Unknown error: show hint as fallback
+}
+
 function formatRelativePath(path: string, basePath?: string | null): string {
   if (!basePath || isDriveRoot(basePath)) return path;
   const base = basePath.endsWith("\\") ? basePath : basePath + "\\";
@@ -2609,11 +2622,19 @@ function App() {
       {error && (
         <div className="error">
           <div>{error}</div>
-          {isScanError && (
+          {isScanError && data && (
+            <div className="error-note">
+              Showing previous result for {data.summary.drive}.
+            </div>
+          )}
+          {isScanError && isTauriRuntime() && isAdminRequiredError(error) && (
             <div className="error-hint">
-              {isTauriRuntime()
-                ? "Please run the app as administrator (required for MFT access)."
-                : "Run `npm run tauri dev` or use the built app."}
+              Please run disk-insight as administrator (required for MFT access).
+            </div>
+          )}
+          {isScanError && !isTauriRuntime() && (
+            <div className="error-hint">
+              Run `npm run tauri dev` or use the built app.
             </div>
           )}
         </div>

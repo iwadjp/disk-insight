@@ -177,7 +177,7 @@ fn get_mft_info(drive: char) -> Result<MftInfo> {
             None, OPEN_EXISTING,
             FILE_FLAGS_AND_ATTRIBUTES(FILE_FLAG_SEQUENTIAL_SCAN_RAW), None,
         )
-    }.context("ドライブオープン失敗")?;
+    }.context("Failed to open volume (administrator access required)")?;
 
     // ボリューム情報取得
     let mut vol_data = NTFS_VOLUME_DATA_BUFFER::default();
@@ -192,7 +192,7 @@ fn get_mft_info(drive: char) -> Result<MftInfo> {
             Some(&mut bytes_returned),
             None,
         )
-    }.context("FSCTL_GET_NTFS_VOLUME_DATA失敗")?;
+    }.context("Volume is not NTFS (disk-insight requires an NTFS drive)")?;
 
     let bytes_per_cluster = vol_data.BytesPerCluster as u64;
     let bytes_per_record  = vol_data.BytesPerFileRecordSegment as u64;
@@ -214,7 +214,7 @@ fn get_mft_info(drive: char) -> Result<MftInfo> {
             Some(&mut bytes_returned),
             None,
         )
-    }.context("FSCTL_GET_NTFS_FILE_RECORD失敗")?;
+    }.context("Failed to read MFT file record")?;
 
     let record = &out_buf[12..12 + bytes_per_record as usize];
 

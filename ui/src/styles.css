@@ -316,6 +316,13 @@ tbody tr:last-child td {
   opacity: 0.85;
 }
 
+.error-note {
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.65;
+  font-style: italic;
+}
+
 .status-message {
   padding: 16px;
   border: 1px solid;
