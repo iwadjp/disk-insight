@@ -1021,6 +1021,8 @@ function SelectedFolderCard({
   reclaimableError,
   sourceKind,
   onOpenExplorer,
+  onRefreshAfterCleanup,
+  refreshAfterCleanupDisabled,
   onCopyError,
 }: {
   dir: DirectoryEntry;
@@ -1029,6 +1031,8 @@ function SelectedFolderCard({
   reclaimableError: string | null;
   sourceKind: SourceKind | null;
   onOpenExplorer: (path: string) => void;
+  onRefreshAfterCleanup: () => void;
+  refreshAfterCleanupDisabled: boolean;
   onCopyError: (msg: string) => void;
 }) {
   const confidenceClass = reclaimable
@@ -1047,6 +1051,15 @@ function SelectedFolderCard({
             Open folder
           </button>
           <CopyButton text={dir.path} onError={onCopyError} />
+          <button
+            className="btn"
+            onClick={onRefreshAfterCleanup}
+            disabled={refreshAfterCleanupDisabled}
+            title="Refresh scan after cleaning files in Explorer"
+            aria-label="Refresh scan after cleaning files in Explorer"
+          >
+            Refresh after cleanup
+          </button>
         </div>
       </div>
       <div className="selected-folder-stats">
@@ -2564,6 +2577,7 @@ function App() {
   }, []);
 
   const driveLabel = parseDriveLetter(driveInput) ?? driveInput.slice(0, 1).toUpperCase();
+  const scanDisabled = isLoading || parseDriveLetter(driveInput) === null;
   const currentFilterQ = currentFilterQuery.trim().toLowerCase();
   const selectedDirChildren = selectedDir ? childrenByParent[selectedDir.record_index] : undefined;
   const filteredChildrenCount = currentFilterQ && selectedDirChildren !== undefined
@@ -2661,7 +2675,7 @@ function App() {
               <button
                 className="btn btn-primary"
                 onClick={handleScan}
-                disabled={isLoading}
+                disabled={scanDisabled}
               >
                 Scan {driveLabel}:
               </button>
@@ -2808,6 +2822,8 @@ function App() {
                   reclaimableError={reclaimableError}
                   sourceKind={sourceKind}
                   onOpenExplorer={handleOpenExplorer}
+                  onRefreshAfterCleanup={handleScan}
+                  refreshAfterCleanupDisabled={scanDisabled}
                   onCopyError={handleCopyError}
                 />
               )}
