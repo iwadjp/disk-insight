@@ -468,9 +468,11 @@ fn select_in_explorer(path: String) -> Result<(), String> {
 
 #[tauri::command]
 fn show_properties(path: String) -> Result<(), String> {
-    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::Shell::{ShellExecuteExW, SHELLEXECUTEINFOW, SEE_MASK_INVOKEIDLIST};
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOW;
+    use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
     use windows::core::PCWSTR;
+    use std::mem;
 
     if path.is_empty() {
         return Err("path must not be empty".to_string());
@@ -482,24 +484,33 @@ fn show_properties(path: String) -> Result<(), String> {
     let path_wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
     let verb_wide: Vec<u16> = "properties".encode_utf16().chain(std::iter::once(0)).collect();
 
-    let result = unsafe {
-        ShellExecuteW(
-            None,
-            PCWSTR::from_raw(verb_wide.as_ptr()),
-            PCWSTR::from_raw(path_wide.as_ptr()),
-            PCWSTR(std::ptr::null()),
-            PCWSTR(std::ptr::null()),
-            SW_SHOW,
-        )
-    };
+    unsafe {
+        // SEE_MASK_INVOKEIDLIST routes through IContextMenu (bypasses file-association
+        // lookup that caused SE_ERR_NOASSOC with ShellExecuteW). Requires COM STA.
+        // S_FALSE = STA already active, refcount bumped — both are "init succeeded".
+        // RPC_E_CHANGED_MODE = MTA active on this thread — proceed without re-init.
+        let com_hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let com_init_ok = com_hr.is_ok();
 
-    // ShellExecuteW returns HINSTANCE; values > 32 indicate success
-    let code = result.0 as usize;
-    if code <= 32 {
-        Err(format!("Failed to show properties (error code {code})"))
-    } else {
-        Ok(())
+        let mut sei = SHELLEXECUTEINFOW {
+            cbSize: mem::size_of::<SHELLEXECUTEINFOW>() as u32,
+            fMask: SEE_MASK_INVOKEIDLIST,
+            lpVerb: PCWSTR::from_raw(verb_wide.as_ptr()),
+            lpFile: PCWSTR::from_raw(path_wide.as_ptr()),
+            nShow: SW_SHOW.0,
+            ..Default::default()
+        };
+
+        let result = ShellExecuteExW(&mut sei);
+
+        if com_init_ok {
+            CoUninitialize();
+        }
+
+        result.map_err(|e| format!("Failed to show properties: {e}"))?;
     }
+
+    Ok(())
 }
 
 #[tauri::command]
