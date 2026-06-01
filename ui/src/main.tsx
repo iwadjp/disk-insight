@@ -139,6 +139,11 @@ type CleanupRefreshDelta = {
   afterFreeBytes: number;
   deltaBytes: number;
 };
+type UnsupportedDriveCapacity = {
+  drive: string;
+  capacity: DriveCapacity;
+  note: string;
+};
 type DirectChildrenSortKey = "size" | "name" | "type";
 type SortDirection = "asc" | "desc";
 type ContextMenuTarget = {
@@ -620,6 +625,14 @@ function formatDriveFreeDelta(deltaBytes: number): string {
   return `Drive free space changed: ${sign}${formatBytes(Math.abs(deltaBytes))} since cleanup refresh`;
 }
 
+function unsupportedCapacityNote(scanError: string): string {
+  const lower = scanError.toLowerCase();
+  if (lower.includes("not ntfs") || lower.includes("not an ntfs")) {
+    return "Drive capacity is available, but file breakdown requires NTFS.";
+  }
+  return "Capacity is shown using Windows drive information. File breakdown scanning is unavailable until the scan issue is resolved.";
+}
+
 function formatPercent(bytes: number, total: number): string {
   if (total <= 0 || bytes <= 0) return "—";
   const pct = (bytes / total) * 100;
@@ -844,6 +857,26 @@ function CapacityCard({ capacity }: { capacity: DriveCapacity }) {
         <span title="Used space (total minus free)">{formatBytes(capacity.used_bytes)}{" "}used ({capacity.used_percent.toFixed(1)}%)</span>
         <span className="capacity-sep">·</span>
         <span title="Free space on the volume">{formatBytes(capacity.free_bytes)}{" "}free</span>
+      </div>
+    </div>
+  );
+}
+
+function UnsupportedDriveCapacityCard({ drive, capacity, note }: UnsupportedDriveCapacity) {
+  return (
+    <div className="capacity-card capacity-card--unsupported">
+      <span className="metric-label">Drive capacity</span>
+      <div>
+        <div className="capacity-card-stats">
+          <span title="Total volume capacity reported by Windows">{formatBytes(capacity.total_bytes)}{" "}total</span>
+          <span className="capacity-sep">·</span>
+          <span title="Used space (total minus free)">{formatBytes(capacity.used_bytes)}{" "}used ({capacity.used_percent.toFixed(1)}%)</span>
+          <span className="capacity-sep">·</span>
+          <span title="Free space on the volume">{formatBytes(capacity.free_bytes)}{" "}free</span>
+        </div>
+        <div className="capacity-note">
+          {drive}: {note}
+        </div>
       </div>
     </div>
   );
@@ -1717,6 +1750,8 @@ function App() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [cacheBanner, setCacheBanner] = useState<CacheBannerState | null>(null);
   const [cleanupRefreshDelta, setCleanupRefreshDelta] = useState<CleanupRefreshDelta | null>(null);
+  const [unsupportedDriveCapacity, setUnsupportedDriveCapacity] =
+    useState<UnsupportedDriveCapacity | null>(null);
   const [drives, setDrives] = useState<DriveInfo[]>([
     { letter: "C", root: "C:\\", display: "C:", drive_type: "unknown" },
   ]);
@@ -2003,6 +2038,7 @@ function App() {
     setIsScanError(false);
     setStatusMessage(null);
     setCleanupRefreshDelta(null);
+    setUnsupportedDriveCapacity(null);
     clearCacheBanner();
     setExpandedIds(new Set());
     setLoadingIds(new Set());
@@ -2029,6 +2065,7 @@ function App() {
         }
         setData(json);
         setSourceKind(kind);
+        setUnsupportedDriveCapacity(null);
         setLastUpdated(new Date());
         if (usedTopN !== undefined) setScanTopN(usedTopN);
         setSelectedDir(json.top_directories[0]);
@@ -2067,6 +2104,7 @@ function App() {
     setStatusMessage(null);
     setCancelMessage(null);
     setCleanupRefreshDelta(null);
+    setUnsupportedDriveCapacity(null);
     clearCacheBanner();
     scanRestoreRef.current =
       selectedDir && data
@@ -2154,6 +2192,7 @@ function App() {
       }
       setData(json);
       setSourceKind("live");
+      setUnsupportedDriveCapacity(null);
       setLastUpdated(new Date());
       setScanTopN(top);
       const restore = scanRestoreRef.current;
@@ -2186,6 +2225,18 @@ function App() {
         clearCacheBanner();
       }
       setIsLoading(false);
+      try {
+        const capacity = await getDriveCapacityNow(drive);
+        if (scanGenerationRef.current === generation) {
+          setUnsupportedDriveCapacity({
+            drive: `${drive}:`,
+            capacity,
+            note: unsupportedCapacityNote(message),
+          });
+        }
+      } catch (capacityErr: unknown) {
+        console.warn("[capacity-ui] unsupported drive capacity unavailable", capacityErr);
+      }
       return false;
     }
   }
@@ -2505,6 +2556,7 @@ function App() {
 
   useEffect(() => {
     setCleanupRefreshDelta(null);
+    setUnsupportedDriveCapacity(null);
   }, [driveInput]);
 
   // K-1b: log when scan data is first rendered to DOM
@@ -2799,6 +2851,14 @@ function App() {
             </div>
           )}
         </div>
+      )}
+
+      {unsupportedDriveCapacity && (
+        <UnsupportedDriveCapacityCard
+          drive={unsupportedDriveCapacity.drive}
+          capacity={unsupportedDriveCapacity.capacity}
+          note={unsupportedDriveCapacity.note}
+        />
       )}
 
       {statusMessage && (

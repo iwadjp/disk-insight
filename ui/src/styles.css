@@ -133,6 +133,17 @@ h2 {
   flex-shrink: 0;
 }
 
+.capacity-card--unsupported {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.capacity-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
 .table-section {
   margin-top: 18px;
   overflow: hidden;
