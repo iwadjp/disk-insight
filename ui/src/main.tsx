@@ -2915,6 +2915,16 @@ function App() {
                   onCopyError={handleCopyError}
                 />
               )}
+              {selectedDir && (
+                <SubtreeSearchPanel
+                  selectedDir={selectedDir}
+                  sourceKind={sourceKind}
+                  totalSize={data.summary.total_final_allocated}
+                  onOpenExplorer={handleOpenExplorer}
+                  onSelectFile={handleSelectFile}
+                  onCopyError={handleCopyError}
+                />
+              )}
               <DirectoriesTable
                 rows={filteredTopDirs}
                 totalSize={data.summary.total_final_allocated}
@@ -2940,16 +2950,6 @@ function App() {
                 onSelectFile={handleSelectFile}
                 onCopyError={handleCopyError}
               />
-              {selectedDir && (
-                <SubtreeSearchPanel
-                  selectedDir={selectedDir}
-                  sourceKind={sourceKind}
-                  totalSize={data.summary.total_final_allocated}
-                  onOpenExplorer={handleOpenExplorer}
-                  onSelectFile={handleSelectFile}
-                  onCopyError={handleCopyError}
-                />
-              )}
             </div>
           </div>
           {sourceKind === "live" && (
