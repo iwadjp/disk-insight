@@ -1918,6 +1918,41 @@ details[open] > .subtree-search-summary {
   white-space: nowrap;
   font-family: inherit;
   letter-spacing: 0.02em;
+  text-decoration: none;
+}
+
+.recycled-badge--table {
+  display: inline-block;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* ── Recycled state for TopDirs / TopFiles table rows ── */
+.table-row--recycled {
+  opacity: 0.65;
+}
+
+.table-row--recycled .path {
+  text-decoration: line-through;
+  color: #8a97a4;
+}
+
+.table-row--recycled .numeric {
+  color: #b0bbc5;
+}
+
+/* ── Recycled state for Search results rows ── */
+.subtree-result-row--recycled {
+  opacity: 0.65;
+}
+
+.subtree-result-row--recycled .subtree-result-path {
+  text-decoration: line-through;
+  color: #8a97a4;
+}
+
+.subtree-result-row--recycled .direct-child-size {
+  color: #b0bbc5;
 }
 
 .context-menu-item--disabled {

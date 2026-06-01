@@ -1509,6 +1509,7 @@ function DirectoriesTable({
   onOpenExplorer,
   onShowProperties,
   onRequestRecycle,
+  recycledItems,
   onCopyError,
 }: {
   rows: DirectoryEntry[];
@@ -1519,6 +1520,7 @@ function DirectoriesTable({
   onOpenExplorer: (path: string) => void;
   onShowProperties: (path: string) => void;
   onRequestRecycle: (target: ContextMenuTarget) => void;
+  recycledItems?: RecycledItem[];
   onCopyError: (msg: string) => void;
 }) {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
@@ -1544,34 +1546,43 @@ function DirectoriesTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr
-                key={row.record_index}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setCtxMenu({
-                    path: row.path,
-                    isDirectory: true,
-                    recordIndex: row.record_index,
-                    x: e.clientX,
-                    y: e.clientY,
-                    sizeBytes: row.subtree_size,
-                  });
-                }}
-              >
-                <td className="path" title={row.path}>{formatRelativePath(row.path, basePath)}</td>
-                <td className="numeric">
-                  {formatBytes(row.subtree_size)}
-                  {totalSize > 0 && <span className="size-pct"> · {formatPercent(row.subtree_size, totalSize)}</span>}
-                </td>
-                <td className="numeric">
-                  {formatBytes(row.direct_file_size)}
-                  {totalSize > 0 && row.direct_file_size > 0 && <span className="size-pct"> · {formatPercent(row.direct_file_size, totalSize)}</span>}
-                </td>
-                <td className="numeric">{formatNumber(row.child_count)}</td>
-              </tr>
-            ))}
+            {rows.map((row) => {
+              const rowIsRecycled = recycledItems
+                ? isItemRecycled(row.record_index, row.path, recycledItems)
+                : false;
+              return (
+                <tr
+                  key={row.record_index}
+                  className={rowIsRecycled ? "table-row--recycled" : undefined}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setCtxMenu({
+                      path: row.path,
+                      isDirectory: true,
+                      recordIndex: row.record_index,
+                      x: e.clientX,
+                      y: e.clientY,
+                      sizeBytes: row.subtree_size,
+                    });
+                  }}
+                >
+                  <td className="path" title={row.path}>
+                    {formatRelativePath(row.path, basePath)}
+                    {rowIsRecycled && <span className="recycled-badge recycled-badge--table">Recycled</span>}
+                  </td>
+                  <td className="numeric">
+                    {formatBytes(row.subtree_size)}
+                    {totalSize > 0 && <span className="size-pct"> · {formatPercent(row.subtree_size, totalSize)}</span>}
+                  </td>
+                  <td className="numeric">
+                    {formatBytes(row.direct_file_size)}
+                    {totalSize > 0 && row.direct_file_size > 0 && <span className="size-pct"> · {formatPercent(row.direct_file_size, totalSize)}</span>}
+                  </td>
+                  <td className="numeric">{formatNumber(row.child_count)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1583,6 +1594,9 @@ function DirectoriesTable({
           onShowProperties={onShowProperties}
           advancedMode={advancedMode}
           onRequestRecycle={onRequestRecycle}
+          isAlreadyRecycled={recycledItems
+            ? isItemRecycled(ctxMenu.recordIndex, ctxMenu.path, recycledItems)
+            : false}
           onCopyError={onCopyError}
         />
       )}
@@ -1600,6 +1614,7 @@ function FilesTable({
   onSelectFile,
   onShowProperties,
   onRequestRecycle,
+  recycledItems,
   onCopyError,
 }: {
   rows: FileEntry[];
@@ -1611,6 +1626,7 @@ function FilesTable({
   onSelectFile: (path: string) => void;
   onShowProperties: (path: string) => void;
   onRequestRecycle: (target: ContextMenuTarget) => void;
+  recycledItems?: RecycledItem[];
   onCopyError: (msg: string) => void;
 }) {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
@@ -1638,30 +1654,39 @@ function FilesTable({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.record_index}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setCtxMenu({
-                      path: row.path,
-                      isDirectory: false,
-                      recordIndex: row.record_index,
-                      x: e.clientX,
-                      y: e.clientY,
-                      displayName: getFileName(row.path),
-                      sizeBytes: row.final_allocated_size,
-                    });
-                  }}
-                >
-                  <td className="path" title={row.path}>{formatRelativePath(row.path, basePath)}</td>
-                  <td className="numeric">
-                    {formatBytes(row.final_allocated_size)}
-                    {totalSize > 0 && <span className="size-pct"> · {formatPercent(row.final_allocated_size, totalSize)}</span>}
-                  </td>
-                </tr>
-              ))}
+              {rows.map((row) => {
+                const rowIsRecycled = recycledItems
+                  ? isItemRecycled(row.record_index, row.path, recycledItems)
+                  : false;
+                return (
+                  <tr
+                    key={row.record_index}
+                    className={rowIsRecycled ? "table-row--recycled" : undefined}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setCtxMenu({
+                        path: row.path,
+                        isDirectory: false,
+                        recordIndex: row.record_index,
+                        x: e.clientX,
+                        y: e.clientY,
+                        displayName: getFileName(row.path),
+                        sizeBytes: row.final_allocated_size,
+                      });
+                    }}
+                  >
+                    <td className="path" title={row.path}>
+                      {formatRelativePath(row.path, basePath)}
+                      {rowIsRecycled && <span className="recycled-badge recycled-badge--table">Recycled</span>}
+                    </td>
+                    <td className="numeric">
+                      {formatBytes(row.final_allocated_size)}
+                      {totalSize > 0 && <span className="size-pct"> · {formatPercent(row.final_allocated_size, totalSize)}</span>}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -1675,6 +1700,9 @@ function FilesTable({
           onShowProperties={onShowProperties}
           advancedMode={advancedMode}
           onRequestRecycle={onRequestRecycle}
+          isAlreadyRecycled={recycledItems
+            ? isItemRecycled(ctxMenu.recordIndex, ctxMenu.path, recycledItems)
+            : false}
           onCopyError={onCopyError}
         />
       )}
@@ -1691,6 +1719,7 @@ function SubtreeSearchPanel({
   onSelectFile,
   onShowProperties,
   onRequestRecycle,
+  recycledItems,
   onCopyError,
 }: {
   selectedDir: DirectoryEntry;
@@ -1701,6 +1730,7 @@ function SubtreeSearchPanel({
   onSelectFile: (path: string) => void;
   onShowProperties: (path: string) => void;
   onRequestRecycle: (target: ContextMenuTarget) => void;
+  recycledItems?: RecycledItem[];
   onCopyError: (msg: string) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -1857,36 +1887,42 @@ function SubtreeSearchPanel({
               : `${formatNumber(results.length)} match${results.length !== 1 ? "es" : ""} in selected folder`}
           </div>
           <div className="subtree-search-list">
-            {results.map((node) => (
-              <div
-                key={node.record_index}
-                className={`subtree-result-row${ctxMenu?.recordIndex === node.record_index ? " subtree-result-row--context" : ""}`}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setCtxMenu({
-                    path: node.path,
-                    isDirectory: node.is_directory,
-                    recordIndex: node.record_index,
-                    x: e.clientX,
-                    y: e.clientY,
-                    displayName: node.name,
-                    sizeBytes: node.subtree_size,
-                  });
-                }}
-              >
-                <span className={`direct-child-badge direct-child-badge--${node.is_directory ? "dir" : "file"}`}>
-                  {node.is_directory ? "DIR" : "FILE"}
-                </span>
-                <span className="subtree-result-path" title={node.path}>
-                  {formatRelativePath(node.path, selectedDir.path)}
-                </span>
-                <span className="direct-child-size">
-                  {formatBytes(node.subtree_size)}
-                  {totalSize > 0 && <span className="size-pct"> · {formatPercent(node.subtree_size, totalSize)}</span>}
-                </span>
-              </div>
-            ))}
+            {results.map((node) => {
+              const nodeIsRecycled = recycledItems
+                ? isItemRecycled(node.record_index, node.path, recycledItems)
+                : false;
+              return (
+                <div
+                  key={node.record_index}
+                  className={`subtree-result-row${ctxMenu?.recordIndex === node.record_index ? " subtree-result-row--context" : ""}${nodeIsRecycled ? " subtree-result-row--recycled" : ""}`}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setCtxMenu({
+                      path: node.path,
+                      isDirectory: node.is_directory,
+                      recordIndex: node.record_index,
+                      x: e.clientX,
+                      y: e.clientY,
+                      displayName: node.name,
+                      sizeBytes: node.subtree_size,
+                    });
+                  }}
+                >
+                  <span className={`direct-child-badge direct-child-badge--${node.is_directory ? "dir" : "file"}`}>
+                    {node.is_directory ? "DIR" : "FILE"}
+                  </span>
+                  <span className="subtree-result-path" title={node.path}>
+                    {formatRelativePath(node.path, selectedDir.path)}
+                  </span>
+                  {nodeIsRecycled && <span className="recycled-badge">Recycled</span>}
+                  <span className="direct-child-size">
+                    {formatBytes(node.subtree_size)}
+                    {totalSize > 0 && <span className="size-pct"> · {formatPercent(node.subtree_size, totalSize)}</span>}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </>
       )}
@@ -1899,6 +1935,9 @@ function SubtreeSearchPanel({
           onShowProperties={onShowProperties}
           advancedMode={advancedMode}
           onRequestRecycle={onRequestRecycle}
+          isAlreadyRecycled={recycledItems
+            ? isItemRecycled(ctxMenu.recordIndex, ctxMenu.path, recycledItems)
+            : false}
           onCopyError={onCopyError}
         />
       )}
@@ -3407,7 +3446,7 @@ function App() {
               : `Moved to Recycle Bin: ${recycleSuccess.displayName}`}
           </strong>
           <div>Items in the Recycle Bin still occupy disk space until the bin is emptied.</div>
-          <div>The item is marked as moved in the tree and direct children until you refresh.</div>
+          <div>Moved items are marked in visible lists until you refresh.</div>
           <div>Use Refresh after cleanup when you are ready to update disk-insight.</div>
           <div className="recycle-success-actions">
             <button
@@ -3557,6 +3596,7 @@ function App() {
                   onShowProperties={handleShowProperties}
                   advancedMode={advancedMode}
                   onRequestRecycle={handleRequestRecycle}
+                  recycledItems={recycledItems}
                   onCopyError={handleCopyError}
                 />
               )}
@@ -3568,6 +3608,7 @@ function App() {
                 onOpenExplorer={handleOpenExplorer}
                 onShowProperties={handleShowProperties}
                 onRequestRecycle={handleRequestRecycle}
+                recycledItems={recycledItems}
                 onCopyError={handleCopyError}
                 title={
                   selectedDir && !isDriveRoot(selectedDir.path)
@@ -3589,6 +3630,7 @@ function App() {
                 onSelectFile={handleSelectFile}
                 onShowProperties={handleShowProperties}
                 onRequestRecycle={handleRequestRecycle}
+                recycledItems={recycledItems}
                 onCopyError={handleCopyError}
               />
             </div>
