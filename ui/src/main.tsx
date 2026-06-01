@@ -533,8 +533,8 @@ function SafeContextMenu({
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuWidth = 196;
-  // Height per item ~32px + 8px base padding; dir: 3 items, file: 4 items
-  const menuHeight = target.isDirectory ? 106 : 138;
+  // Height per item ~32px + 8px base padding; dir: 4 items, file: 5 items
+  const menuHeight = target.isDirectory ? 138 : 170;
   const x = Math.min(target.x, window.innerWidth - menuWidth - 4);
   const y = Math.min(target.y, window.innerHeight - menuHeight - 4);
 
@@ -561,6 +561,18 @@ function SafeContextMenu({
   function copyPath() {
     if (navigator.clipboard) {
       navigator.clipboard.writeText(target.path).catch((err: unknown) => {
+        onCopyError(err instanceof Error ? err.message : "Failed to copy path.");
+      });
+    } else {
+      onCopyError("Clipboard is not available.");
+    }
+    onClose();
+  }
+
+  function copyAsPath() {
+    const quoted = `"${target.path}"`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(quoted).catch((err: unknown) => {
         onCopyError(err instanceof Error ? err.message : "Failed to copy path.");
       });
     } else {
@@ -603,6 +615,9 @@ function SafeContextMenu({
       )}
       <button className="context-menu-item" onClick={copyPath}>
         Copy path
+      </button>
+      <button className="context-menu-item" onClick={copyAsPath}>
+        Copy as path
       </button>
     </div>,
     document.body,
