@@ -285,6 +285,17 @@ tbody tr:last-child td {
   border-color: #1649c0;
 }
 
+.btn-danger {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  color: #ffffff;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #991b1b;
+  border-color: #991b1b;
+}
+
 .btn-sm {
   padding: 3px 10px;
   font-size: 12px;
@@ -589,6 +600,39 @@ tbody tr:last-child td {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.advanced-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  background: #fff7f7;
+  color: #991b1b;
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.advanced-mode-toggle input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #b91c1c;
+}
+
+.advanced-mode-banner {
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .toolbar-separator {
@@ -1379,6 +1423,77 @@ details[open] > .reclaimable-summary::before {
   font-size: 11px;
   padding: 0 1px;
   user-select: none;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.modal-card {
+  width: min(520px, 100%);
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.24);
+}
+
+.advanced-mode-modal {
+  border-color: #fca5a5;
+}
+
+.modal-card h2 {
+  padding: 16px 18px 10px;
+  font-size: 18px;
+  color: #991b1b;
+}
+
+.modal-body {
+  padding: 0 18px;
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.modal-body p + p {
+  margin-top: 8px;
+}
+
+.modal-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 16px 18px 0;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  background: #fff7f7;
+  color: #7f1d1d;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.modal-checkbox input {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  margin: 2px 0 0;
+  accent-color: #b91c1c;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 18px 18px;
 }
 
 .context-menu {

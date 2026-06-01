@@ -516,6 +516,68 @@ function CopyButton({
   );
 }
 
+function AdvancedModeWarningModal({
+  onCancel,
+  onEnable,
+}: {
+  onCancel: () => void;
+  onEnable: () => void;
+}) {
+  const [understood, setUnderstood] = useState(false);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onCancel();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onCancel]);
+
+  return createPortal(
+    <div className="modal-backdrop" role="presentation">
+      <div
+        className="modal-card advanced-mode-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="advanced-mode-modal-title"
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        <h2 id="advanced-mode-modal-title">Enable Advanced Mode?</h2>
+        <div className="modal-body">
+          <p>Advanced Mode enables moving files and folders to the Recycle Bin.</p>
+          <p>
+            This operation is not permanent deletion, but it can still disrupt
+            your system if used on important folders.
+          </p>
+          <p>Protected system locations are blocked.</p>
+          <p>Use this mode carefully.</p>
+        </div>
+        <label className="modal-checkbox">
+          <input
+            type="checkbox"
+            checked={understood}
+            onChange={(e) => setUnderstood(e.target.checked)}
+          />
+          <span>I understand and want to enable Advanced Mode for this session.</span>
+        </label>
+        <div className="modal-actions">
+          <button className="btn" onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            className="btn btn-danger"
+            onClick={onEnable}
+            disabled={!understood}
+          >
+            Enable
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function SafeContextMenu({
   target,
   onClose,
@@ -1837,6 +1899,8 @@ function App() {
   const [treeContextMenu, setTreeContextMenu] = useState<ContextMenuTarget | null>(null);
   const [currentFilterQuery, setCurrentFilterQuery] = useState("");
   const [cancelMessage, setCancelMessage] = useState<string | null>(null);
+  const [advancedMode, setAdvancedMode] = useState(false);
+  const [advancedModeWarningOpen, setAdvancedModeWarningOpen] = useState(false);
   const scanRestoreRef = useRef<{ path: string; drive: string } | null>(null);
   const scanGenerationRef = useRef(0);
   const cancelMessageTimerRef = useRef<number | null>(null);
@@ -2595,6 +2659,24 @@ function App() {
     })();
   }
 
+  function handleAdvancedModeToggle(e: React.ChangeEvent<HTMLInputElement>) {
+    if (e.target.checked) {
+      setAdvancedModeWarningOpen(true);
+    } else {
+      setAdvancedMode(false);
+      setAdvancedModeWarningOpen(false);
+    }
+  }
+
+  function handleCancelAdvancedModeWarning() {
+    setAdvancedModeWarningOpen(false);
+  }
+
+  function handleEnableAdvancedMode() {
+    setAdvancedMode(true);
+    setAdvancedModeWarningOpen(false);
+  }
+
   useEffect(() => {
     savePreferences({
       drive: driveInput,
@@ -2792,6 +2874,14 @@ function App() {
                 <option value="wof_adjusted">WOF-adjusted</option>
               </select>
             </label>
+            <label className="advanced-mode-toggle">
+              <input
+                type="checkbox"
+                checked={advancedMode}
+                onChange={handleAdvancedModeToggle}
+              />
+              <span>Advanced Mode</span>
+            </label>
             <div className="toolbar-separator" />
             {import.meta.env.DEV && (
               <button
@@ -2828,6 +2918,12 @@ function App() {
           )}
         </div>
       </header>
+
+      {advancedMode && (
+        <div className="advanced-mode-banner" role="status">
+          Advanced Mode enabled
+        </div>
+      )}
 
       {/* Scanning strip: shown when a real scan is in progress (data may still be null on first scan) */}
       {isLoading && scanStartMsRef.current !== null && (
@@ -3072,6 +3168,12 @@ function App() {
             <PerfBreakdown summary={data.summary} invokeMs={scanInvokeMs} />
           )}
         </>
+      )}
+      {advancedModeWarningOpen && (
+        <AdvancedModeWarningModal
+          onCancel={handleCancelAdvancedModeWarning}
+          onEnable={handleEnableAdvancedMode}
+        />
       )}
     </main>
   );
