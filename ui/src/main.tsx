@@ -3562,77 +3562,76 @@ function App() {
                 )}
               </div>
               {selectedDir && (
-                <DirectChildrenPanel
-                  dir={selectedDir}
-                  children={childrenByParent[selectedDir.record_index]}
-                  isLoading={selectedChildrenLoading}
-                  error={selectedChildrenError}
-                  sourceKind={sourceKind}
-                  currentFilterQuery={currentFilterQuery}
+                <div className="folder-explore-section">
+                  <DirectChildrenPanel
+                    dir={selectedDir}
+                    children={childrenByParent[selectedDir.record_index]}
+                    isLoading={selectedChildrenLoading}
+                    error={selectedChildrenError}
+                    sourceKind={sourceKind}
+                    currentFilterQuery={currentFilterQuery}
+                    totalSize={data.summary.total_final_allocated}
+                    sortKey={directChildrenSortKey}
+                    sortDir={directChildrenSortDir}
+                    onSortKeyChange={setDirectChildrenSortKey}
+                    onSortDirChange={setDirectChildrenSortDir}
+                    ancestorDirs={selectedAncestorDirs}
+                    onNavigateToDir={handleNavigateToDir}
+                    onNavigate={handleSelectTreeNode}
+                    onOpenExplorer={handleOpenExplorer}
+                    onSelectFile={handleSelectFile}
+                    onShowProperties={handleShowProperties}
+                    advancedMode={advancedMode}
+                    onRequestRecycle={handleRequestRecycle}
+                    recycledItems={recycledItems}
+                    onCopyError={handleCopyError}
+                  />
+                  <SubtreeSearchPanel
+                    selectedDir={selectedDir}
+                    sourceKind={sourceKind}
+                    totalSize={data.summary.total_final_allocated}
+                    onOpenExplorer={handleOpenExplorer}
+                    onSelectFile={handleSelectFile}
+                    onShowProperties={handleShowProperties}
+                    advancedMode={advancedMode}
+                    onRequestRecycle={handleRequestRecycle}
+                    recycledItems={recycledItems}
+                    onCopyError={handleCopyError}
+                  />
+                </div>
+              )}
+              <div className="largest-items-section">
+                <div className="largest-items-header">
+                  {selectedDir && !isDriveRoot(selectedDir.path)
+                    ? <>Largest items under <span className="heading-path">{selectedDir.path}</span></>
+                    : "Largest items"}
+                </div>
+                <DirectoriesTable
+                  rows={filteredTopDirs}
                   totalSize={data.summary.total_final_allocated}
-                  sortKey={directChildrenSortKey}
-                  sortDir={directChildrenSortDir}
-                  onSortKeyChange={setDirectChildrenSortKey}
-                  onSortDirChange={setDirectChildrenSortDir}
-                  ancestorDirs={selectedAncestorDirs}
-                  onNavigateToDir={handleNavigateToDir}
-                  onNavigate={handleSelectTreeNode}
+                  basePath={selectedDir?.path}
+                  advancedMode={advancedMode}
                   onOpenExplorer={handleOpenExplorer}
+                  onShowProperties={handleShowProperties}
+                  onRequestRecycle={handleRequestRecycle}
+                  recycledItems={recycledItems}
+                  onCopyError={handleCopyError}
+                  title="Largest folders"
+                />
+                <FilesTable
+                  rows={filteredTopFiles}
+                  totalSize={data.summary.total_final_allocated}
+                  basePath={selectedDir?.path}
+                  advancedMode={advancedMode}
+                  title="Largest files"
+                  onOpenLocation={handleOpenExplorer}
                   onSelectFile={handleSelectFile}
                   onShowProperties={handleShowProperties}
-                  advancedMode={advancedMode}
                   onRequestRecycle={handleRequestRecycle}
                   recycledItems={recycledItems}
                   onCopyError={handleCopyError}
                 />
-              )}
-              {selectedDir && (
-                <SubtreeSearchPanel
-                  selectedDir={selectedDir}
-                  sourceKind={sourceKind}
-                  totalSize={data.summary.total_final_allocated}
-                  onOpenExplorer={handleOpenExplorer}
-                  onSelectFile={handleSelectFile}
-                  onShowProperties={handleShowProperties}
-                  advancedMode={advancedMode}
-                  onRequestRecycle={handleRequestRecycle}
-                  recycledItems={recycledItems}
-                  onCopyError={handleCopyError}
-                />
-              )}
-              <DirectoriesTable
-                rows={filteredTopDirs}
-                totalSize={data.summary.total_final_allocated}
-                basePath={selectedDir?.path}
-                advancedMode={advancedMode}
-                onOpenExplorer={handleOpenExplorer}
-                onShowProperties={handleShowProperties}
-                onRequestRecycle={handleRequestRecycle}
-                recycledItems={recycledItems}
-                onCopyError={handleCopyError}
-                title={
-                  selectedDir && !isDriveRoot(selectedDir.path)
-                    ? <>Top directories (scan results) under <span className="heading-path">{selectedDir.path}</span></>
-                    : "Top directories"
-                }
-              />
-              <FilesTable
-                rows={filteredTopFiles}
-                totalSize={data.summary.total_final_allocated}
-                basePath={selectedDir?.path}
-                advancedMode={advancedMode}
-                title={
-                  selectedDir && !isDriveRoot(selectedDir.path)
-                    ? <>Top files (scan results) under <span className="heading-path">{selectedDir.path}</span></>
-                    : "Top files"
-                }
-                onOpenLocation={handleOpenExplorer}
-                onSelectFile={handleSelectFile}
-                onShowProperties={handleShowProperties}
-                onRequestRecycle={handleRequestRecycle}
-                recycledItems={recycledItems}
-                onCopyError={handleCopyError}
-              />
+              </div>
             </div>
           </div>
           {sourceKind === "live" && (

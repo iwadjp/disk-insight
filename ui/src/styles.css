@@ -1880,6 +1880,47 @@ details[open] > .subtree-search-summary {
   background: #f5f7fa;
 }
 
+/* ── Folder explore section: DirectChildren + Search grouped as one card ── */
+.folder-explore-section {
+  margin-bottom: 16px;
+}
+
+.folder-explore-section .direct-children-panel {
+  margin-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.folder-explore-section .subtree-search-panel {
+  margin-bottom: 0;
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* ── Largest items section: clear visual separator before TopDirs/TopFiles ── */
+.largest-items-section {
+  margin-top: 4px;
+}
+
+.largest-items-header {
+  padding: 18px 2px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #465563;
+  letter-spacing: 0.05em;
+  border-top: 2px solid #d9e1e8;
+  margin-bottom: 0;
+}
+
+.largest-items-header .heading-path {
+  text-transform: none;
+  letter-spacing: 0;
+  color: #17202a;
+  font-size: 12px;
+}
+
 /* ── Recycled item visual state ── */
 .tree-row--recycled {
   opacity: 0.65;
