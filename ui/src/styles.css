@@ -1596,6 +1596,22 @@ details[open] > .reclaimable-summary::before {
   color: #0969da;
 }
 
+.context-menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: #e5e7eb;
+}
+
+.context-menu-item--danger {
+  color: #b91c1c;
+  font-weight: 650;
+}
+
+.context-menu-item--danger:hover {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
 .direct-child-row--context,
 .subtree-result-row--context {
   background: #f0f6ff !important;

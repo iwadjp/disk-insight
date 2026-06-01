@@ -152,6 +152,8 @@ type ContextMenuTarget = {
   recordIndex: number;
   x: number;
   y: number;
+  displayName?: string;
+  sizeBytes?: number | null;
 };
 type RecycleConfirmTarget = {
   path: string;
@@ -596,17 +598,21 @@ function getRecycleDisplayName(target: RecycleConfirmTarget): string {
 function RecycleConfirmModal({
   target,
   isRecycling,
+  confirmDisabled,
+  confirmDisabledReason,
   onCancel,
   onConfirm,
 }: {
   target: RecycleConfirmTarget;
   isRecycling: boolean;
+  confirmDisabled?: boolean;
+  confirmDisabledReason?: string;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
   const [understood, setUnderstood] = useState(false);
   const requiresAcknowledgement = target.requireAcknowledgement === true;
-  const moveDisabled = isRecycling || (requiresAcknowledgement && !understood);
+  const moveDisabled = confirmDisabled === true || isRecycling || (requiresAcknowledgement && !understood);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -682,7 +688,12 @@ function RecycleConfirmModal({
           <button className="btn" onClick={onCancel} disabled={isRecycling}>
             Cancel
           </button>
-          <button className="btn btn-danger" onClick={onConfirm} disabled={moveDisabled}>
+          <button
+            className="btn btn-danger"
+            onClick={onConfirm}
+            disabled={moveDisabled}
+            title={confirmDisabled && confirmDisabledReason ? confirmDisabledReason : undefined}
+          >
             {isRecycling ? "Moving..." : "Move to Recycle Bin"}
           </button>
         </div>
@@ -698,6 +709,8 @@ function SafeContextMenu({
   onOpenExplorer,
   onSelectFile,
   onShowProperties,
+  advancedMode,
+  onRequestRecycle,
   onCopyError,
 }: {
   target: ContextMenuTarget;
@@ -705,12 +718,16 @@ function SafeContextMenu({
   onOpenExplorer: (path: string) => void;
   onSelectFile?: (path: string) => void;
   onShowProperties?: (path: string) => void;
+  advancedMode?: boolean;
+  onRequestRecycle?: (target: ContextMenuTarget) => void;
   onCopyError: (msg: string) => void;
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuWidth = 196;
-  // Height per item ~32px + 8px base padding; dir: 4 items, file: 5 items
-  const menuHeight = target.isDirectory ? 138 : 170;
+  const showRecycleItem = advancedMode === true && onRequestRecycle !== undefined;
+  // Height per item ~32px + 8px base padding; dir: 4 items, file: 5 items.
+  // Advanced Mode adds one separator and one item.
+  const menuHeight = (target.isDirectory ? 138 : 170) + (showRecycleItem ? 43 : 0);
   const x = Math.min(target.x, window.innerWidth - menuWidth - 4);
   const y = Math.min(target.y, window.innerHeight - menuHeight - 4);
 
@@ -795,6 +812,20 @@ function SafeContextMenu({
       <button className="context-menu-item" onClick={copyAsPath}>
         Copy as path
       </button>
+      {showRecycleItem && (
+        <>
+          <div className="context-menu-separator" role="separator" />
+          <button
+            className="context-menu-item context-menu-item--danger"
+            onClick={() => {
+              onRequestRecycle(target);
+              onClose();
+            }}
+          >
+            Move to Recycle Bin
+          </button>
+        </>
+      )}
     </div>,
     document.body,
   );
@@ -1387,13 +1418,25 @@ function SelectedFolderCard({
   );
 }
 
-function DirectoriesTable({ rows, title, totalSize, basePath, onOpenExplorer, onShowProperties, onCopyError }: {
+function DirectoriesTable({
+  rows,
+  title,
+  totalSize,
+  basePath,
+  advancedMode,
+  onOpenExplorer,
+  onShowProperties,
+  onRequestRecycle,
+  onCopyError,
+}: {
   rows: DirectoryEntry[];
   title: React.ReactNode;
   totalSize: number;
   basePath?: string | null;
+  advancedMode: boolean;
   onOpenExplorer: (path: string) => void;
   onShowProperties: (path: string) => void;
+  onRequestRecycle: (target: ContextMenuTarget) => void;
   onCopyError: (msg: string) => void;
 }) {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
@@ -1425,7 +1468,14 @@ function DirectoriesTable({ rows, title, totalSize, basePath, onOpenExplorer, on
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  setCtxMenu({ path: row.path, isDirectory: true, recordIndex: row.record_index, x: e.clientX, y: e.clientY });
+                  setCtxMenu({
+                    path: row.path,
+                    isDirectory: true,
+                    recordIndex: row.record_index,
+                    x: e.clientX,
+                    y: e.clientY,
+                    sizeBytes: row.subtree_size,
+                  });
                 }}
               >
                 <td className="path" title={row.path}>{formatRelativePath(row.path, basePath)}</td>
@@ -1449,6 +1499,8 @@ function DirectoriesTable({ rows, title, totalSize, basePath, onOpenExplorer, on
           onClose={() => setCtxMenu(null)}
           onOpenExplorer={onOpenExplorer}
           onShowProperties={onShowProperties}
+          advancedMode={advancedMode}
+          onRequestRecycle={onRequestRecycle}
           onCopyError={onCopyError}
         />
       )}
@@ -1461,18 +1513,22 @@ function FilesTable({
   title,
   totalSize,
   basePath,
+  advancedMode,
   onOpenLocation,
   onSelectFile,
   onShowProperties,
+  onRequestRecycle,
   onCopyError,
 }: {
   rows: FileEntry[];
   title: React.ReactNode;
   totalSize: number;
   basePath?: string | null;
+  advancedMode: boolean;
   onOpenLocation: (path: string) => void;
   onSelectFile: (path: string) => void;
   onShowProperties: (path: string) => void;
+  onRequestRecycle: (target: ContextMenuTarget) => void;
   onCopyError: (msg: string) => void;
 }) {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
@@ -1506,7 +1562,15 @@ function FilesTable({
                   onContextMenu={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    setCtxMenu({ path: row.path, isDirectory: false, recordIndex: row.record_index, x: e.clientX, y: e.clientY });
+                    setCtxMenu({
+                      path: row.path,
+                      isDirectory: false,
+                      recordIndex: row.record_index,
+                      x: e.clientX,
+                      y: e.clientY,
+                      displayName: getFileName(row.path),
+                      sizeBytes: row.final_allocated_size,
+                    });
                   }}
                 >
                   <td className="path" title={row.path}>{formatRelativePath(row.path, basePath)}</td>
@@ -1527,6 +1591,8 @@ function FilesTable({
           onOpenExplorer={onOpenLocation}
           onSelectFile={onSelectFile}
           onShowProperties={onShowProperties}
+          advancedMode={advancedMode}
+          onRequestRecycle={onRequestRecycle}
           onCopyError={onCopyError}
         />
       )}
@@ -1538,17 +1604,21 @@ function SubtreeSearchPanel({
   selectedDir,
   sourceKind,
   totalSize,
+  advancedMode,
   onOpenExplorer,
   onSelectFile,
   onShowProperties,
+  onRequestRecycle,
   onCopyError,
 }: {
   selectedDir: DirectoryEntry;
   sourceKind: SourceKind | null;
   totalSize: number;
+  advancedMode: boolean;
   onOpenExplorer: (path: string) => void;
   onSelectFile: (path: string) => void;
   onShowProperties: (path: string) => void;
+  onRequestRecycle: (target: ContextMenuTarget) => void;
   onCopyError: (msg: string) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -1712,7 +1782,15 @@ function SubtreeSearchPanel({
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  setCtxMenu({ path: node.path, isDirectory: node.is_directory, recordIndex: node.record_index, x: e.clientX, y: e.clientY });
+                  setCtxMenu({
+                    path: node.path,
+                    isDirectory: node.is_directory,
+                    recordIndex: node.record_index,
+                    x: e.clientX,
+                    y: e.clientY,
+                    displayName: node.name,
+                    sizeBytes: node.subtree_size,
+                  });
                 }}
               >
                 <span className={`direct-child-badge direct-child-badge--${node.is_directory ? "dir" : "file"}`}>
@@ -1737,6 +1815,8 @@ function SubtreeSearchPanel({
           onOpenExplorer={onOpenExplorer}
           onSelectFile={onSelectFile}
           onShowProperties={onShowProperties}
+          advancedMode={advancedMode}
+          onRequestRecycle={onRequestRecycle}
           onCopyError={onCopyError}
         />
       )}
@@ -1762,6 +1842,8 @@ function DirectChildrenPanel({
   onOpenExplorer,
   onSelectFile,
   onShowProperties,
+  advancedMode,
+  onRequestRecycle,
   onCopyError,
 }: {
   dir: DirectoryEntry;
@@ -1781,6 +1863,8 @@ function DirectChildrenPanel({
   onOpenExplorer: (path: string) => void;
   onSelectFile: (path: string) => void;
   onShowProperties: (path: string) => void;
+  advancedMode: boolean;
+  onRequestRecycle: (target: ContextMenuTarget) => void;
   onCopyError: (msg: string) => void;
 }) {
 
@@ -1799,6 +1883,8 @@ function DirectChildrenPanel({
       recordIndex: node.record_index,
       x: e.clientX,
       y: e.clientY,
+      displayName: node.name,
+      sizeBytes: node.subtree_size,
     });
   }
 
@@ -1941,6 +2027,8 @@ function DirectChildrenPanel({
           onOpenExplorer={onOpenExplorer}
           onSelectFile={onSelectFile}
           onShowProperties={onShowProperties}
+          advancedMode={advancedMode}
+          onRequestRecycle={onRequestRecycle}
           onCopyError={onCopyError}
         />
       )}
@@ -2570,6 +2658,17 @@ function App() {
       recordIndex: node.record_index,
       x: e.clientX,
       y: e.clientY,
+      displayName: node.name,
+      sizeBytes: node.subtree_size,
+    });
+  }
+
+  function handleRequestRecycle(target: ContextMenuTarget) {
+    setRecycleConfirmTarget({
+      path: target.path,
+      isDirectory: target.isDirectory,
+      displayName: target.displayName,
+      sizeBytes: target.sizeBytes,
     });
   }
 
@@ -3181,6 +3280,8 @@ function App() {
                 onOpenExplorer={handleOpenExplorer}
                 onSelectFile={handleSelectFile}
                 onShowProperties={handleShowProperties}
+                advancedMode={advancedMode}
+                onRequestRecycle={handleRequestRecycle}
                 onCopyError={handleCopyError}
               />
             )}
@@ -3250,6 +3351,8 @@ function App() {
                   onOpenExplorer={handleOpenExplorer}
                   onSelectFile={handleSelectFile}
                   onShowProperties={handleShowProperties}
+                  advancedMode={advancedMode}
+                  onRequestRecycle={handleRequestRecycle}
                   onCopyError={handleCopyError}
                 />
               )}
@@ -3261,6 +3364,8 @@ function App() {
                   onOpenExplorer={handleOpenExplorer}
                   onSelectFile={handleSelectFile}
                   onShowProperties={handleShowProperties}
+                  advancedMode={advancedMode}
+                  onRequestRecycle={handleRequestRecycle}
                   onCopyError={handleCopyError}
                 />
               )}
@@ -3268,8 +3373,10 @@ function App() {
                 rows={filteredTopDirs}
                 totalSize={data.summary.total_final_allocated}
                 basePath={selectedDir?.path}
+                advancedMode={advancedMode}
                 onOpenExplorer={handleOpenExplorer}
                 onShowProperties={handleShowProperties}
+                onRequestRecycle={handleRequestRecycle}
                 onCopyError={handleCopyError}
                 title={
                   selectedDir && !isDriveRoot(selectedDir.path)
@@ -3281,6 +3388,7 @@ function App() {
                 rows={filteredTopFiles}
                 totalSize={data.summary.total_final_allocated}
                 basePath={selectedDir?.path}
+                advancedMode={advancedMode}
                 title={
                   selectedDir && !isDriveRoot(selectedDir.path)
                     ? <>Top files (scan results) under <span className="heading-path">{selectedDir.path}</span></>
@@ -3289,6 +3397,7 @@ function App() {
                 onOpenLocation={handleOpenExplorer}
                 onSelectFile={handleSelectFile}
                 onShowProperties={handleShowProperties}
+                onRequestRecycle={handleRequestRecycle}
                 onCopyError={handleCopyError}
               />
             </div>
@@ -3308,6 +3417,8 @@ function App() {
         <RecycleConfirmModal
           target={recycleConfirmTarget}
           isRecycling={isRecycling}
+          confirmDisabled={true}
+          confirmDisabledReason="Recycle execution is not wired yet."
           onCancel={handleCancelRecycleConfirm}
           onConfirm={handleConfirmRecycle}
         />
