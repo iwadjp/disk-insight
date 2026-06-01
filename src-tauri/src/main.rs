@@ -467,6 +467,42 @@ fn select_in_explorer(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn show_properties(path: String) -> Result<(), String> {
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOW;
+    use windows::core::PCWSTR;
+
+    if path.is_empty() {
+        return Err("path must not be empty".to_string());
+    }
+    if !Path::new(&path).exists() {
+        return Err(format!("path does not exist: {path}"));
+    }
+
+    let path_wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+    let verb_wide: Vec<u16> = "properties".encode_utf16().chain(std::iter::once(0)).collect();
+
+    let result = unsafe {
+        ShellExecuteW(
+            None,
+            PCWSTR::from_raw(verb_wide.as_ptr()),
+            PCWSTR::from_raw(path_wide.as_ptr()),
+            PCWSTR(std::ptr::null()),
+            PCWSTR(std::ptr::null()),
+            SW_SHOW,
+        )
+    };
+
+    // ShellExecuteW returns HINSTANCE; values > 32 indicate success
+    let code = result.0 as usize;
+    if code <= 32 {
+        Err(format!("Failed to show properties (error code {code})"))
+    } else {
+        Ok(())
+    }
+}
+
+#[tauri::command]
 fn list_drives() -> Vec<DriveInfo> {
     use windows::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives};
     use windows::core::PCWSTR;
@@ -507,6 +543,7 @@ fn main() {
             get_drive_capacity_now,
             open_in_explorer,
             select_in_explorer,
+            show_properties,
             get_children,
             search_subtree,
             get_reclaimable_summary,

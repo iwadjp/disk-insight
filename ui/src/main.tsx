@@ -308,6 +308,13 @@ async function selectInExplorer(path: string): Promise<void> {
   return invoke<void>("select_in_explorer", { path });
 }
 
+async function showProperties(path: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    throw new Error("Show properties is available only in the Tauri desktop app.");
+  }
+  return invoke<void>("show_properties", { path });
+}
+
 async function cancelScan(): Promise<void> {
   if (!isTauriRuntime()) return;
   return invoke<void>("cancel_scan");
@@ -514,17 +521,20 @@ function SafeContextMenu({
   onClose,
   onOpenExplorer,
   onSelectFile,
+  onShowProperties,
   onCopyError,
 }: {
   target: ContextMenuTarget;
   onClose: () => void;
   onOpenExplorer: (path: string) => void;
   onSelectFile?: (path: string) => void;
+  onShowProperties?: (path: string) => void;
   onCopyError: (msg: string) => void;
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuWidth = 196;
-  const menuHeight = target.isDirectory ? 74 : 106;
+  // Height per item ~32px + 8px base padding; dir: 3 items, file: 4 items
+  const menuHeight = target.isDirectory ? 106 : 138;
   const x = Math.min(target.x, window.innerWidth - menuWidth - 4);
   const y = Math.min(target.y, window.innerHeight - menuHeight - 4);
 
@@ -581,6 +591,14 @@ function SafeContextMenu({
           onClick={() => { onSelectFile(target.path); onClose(); }}
         >
           Select in Explorer
+        </button>
+      )}
+      {onShowProperties && (
+        <button
+          className="context-menu-item"
+          onClick={() => { onShowProperties(target.path); onClose(); }}
+        >
+          Show properties
         </button>
       )}
       <button className="context-menu-item" onClick={copyPath}>
@@ -1178,12 +1196,13 @@ function SelectedFolderCard({
   );
 }
 
-function DirectoriesTable({ rows, title, totalSize, basePath, onOpenExplorer, onCopyError }: {
+function DirectoriesTable({ rows, title, totalSize, basePath, onOpenExplorer, onShowProperties, onCopyError }: {
   rows: DirectoryEntry[];
   title: React.ReactNode;
   totalSize: number;
   basePath?: string | null;
   onOpenExplorer: (path: string) => void;
+  onShowProperties: (path: string) => void;
   onCopyError: (msg: string) => void;
 }) {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
@@ -1238,6 +1257,7 @@ function DirectoriesTable({ rows, title, totalSize, basePath, onOpenExplorer, on
           target={ctxMenu}
           onClose={() => setCtxMenu(null)}
           onOpenExplorer={onOpenExplorer}
+          onShowProperties={onShowProperties}
           onCopyError={onCopyError}
         />
       )}
@@ -1252,6 +1272,7 @@ function FilesTable({
   basePath,
   onOpenLocation,
   onSelectFile,
+  onShowProperties,
   onCopyError,
 }: {
   rows: FileEntry[];
@@ -1260,6 +1281,7 @@ function FilesTable({
   basePath?: string | null;
   onOpenLocation: (path: string) => void;
   onSelectFile: (path: string) => void;
+  onShowProperties: (path: string) => void;
   onCopyError: (msg: string) => void;
 }) {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
@@ -1313,6 +1335,7 @@ function FilesTable({
           onClose={() => setCtxMenu(null)}
           onOpenExplorer={onOpenLocation}
           onSelectFile={onSelectFile}
+          onShowProperties={onShowProperties}
           onCopyError={onCopyError}
         />
       )}
@@ -1326,6 +1349,7 @@ function SubtreeSearchPanel({
   totalSize,
   onOpenExplorer,
   onSelectFile,
+  onShowProperties,
   onCopyError,
 }: {
   selectedDir: DirectoryEntry;
@@ -1333,6 +1357,7 @@ function SubtreeSearchPanel({
   totalSize: number;
   onOpenExplorer: (path: string) => void;
   onSelectFile: (path: string) => void;
+  onShowProperties: (path: string) => void;
   onCopyError: (msg: string) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -1520,6 +1545,7 @@ function SubtreeSearchPanel({
           onClose={() => setCtxMenu(null)}
           onOpenExplorer={onOpenExplorer}
           onSelectFile={onSelectFile}
+          onShowProperties={onShowProperties}
           onCopyError={onCopyError}
         />
       )}
@@ -1544,6 +1570,7 @@ function DirectChildrenPanel({
   onNavigate,
   onOpenExplorer,
   onSelectFile,
+  onShowProperties,
   onCopyError,
 }: {
   dir: DirectoryEntry;
@@ -1562,6 +1589,7 @@ function DirectChildrenPanel({
   onNavigate: (node: TreeNode) => void;
   onOpenExplorer: (path: string) => void;
   onSelectFile: (path: string) => void;
+  onShowProperties: (path: string) => void;
   onCopyError: (msg: string) => void;
 }) {
 
@@ -1721,6 +1749,7 @@ function DirectChildrenPanel({
           onClose={() => setContextMenu(null)}
           onOpenExplorer={onOpenExplorer}
           onSelectFile={onSelectFile}
+          onShowProperties={onShowProperties}
           onCopyError={onCopyError}
         />
       )}
@@ -2458,6 +2487,13 @@ function App() {
     setIsScanError(false);
   }
 
+  function handleShowProperties(path: string) {
+    showProperties(path).catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : String(err));
+      setIsScanError(false);
+    });
+  }
+
   function showCancelMessage(msg: string) {
     if (cancelMessageTimerRef.current !== null) {
       window.clearTimeout(cancelMessageTimerRef.current);
@@ -2904,6 +2940,7 @@ function App() {
                 onClose={() => setTreeContextMenu(null)}
                 onOpenExplorer={handleOpenExplorer}
                 onSelectFile={handleSelectFile}
+                onShowProperties={handleShowProperties}
                 onCopyError={handleCopyError}
               />
             )}
@@ -2972,6 +3009,7 @@ function App() {
                   onNavigate={handleSelectTreeNode}
                   onOpenExplorer={handleOpenExplorer}
                   onSelectFile={handleSelectFile}
+                  onShowProperties={handleShowProperties}
                   onCopyError={handleCopyError}
                 />
               )}
@@ -2982,6 +3020,7 @@ function App() {
                   totalSize={data.summary.total_final_allocated}
                   onOpenExplorer={handleOpenExplorer}
                   onSelectFile={handleSelectFile}
+                  onShowProperties={handleShowProperties}
                   onCopyError={handleCopyError}
                 />
               )}
@@ -2990,6 +3029,7 @@ function App() {
                 totalSize={data.summary.total_final_allocated}
                 basePath={selectedDir?.path}
                 onOpenExplorer={handleOpenExplorer}
+                onShowProperties={handleShowProperties}
                 onCopyError={handleCopyError}
                 title={
                   selectedDir && !isDriveRoot(selectedDir.path)
@@ -3008,6 +3048,7 @@ function App() {
                 }
                 onOpenLocation={handleOpenExplorer}
                 onSelectFile={handleSelectFile}
+                onShowProperties={handleShowProperties}
                 onCopyError={handleCopyError}
               />
             </div>
