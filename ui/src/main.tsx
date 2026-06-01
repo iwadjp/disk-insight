@@ -1251,7 +1251,6 @@ function FilesTable({
                 <th className="numeric" title="Estimated allocated-style file size.">
                   Est. allocated
                 </th>
-                <th className="actions-col">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1268,23 +1267,6 @@ function FilesTable({
                   <td className="numeric">
                     {formatBytes(row.final_allocated_size)}
                     {totalSize > 0 && <span className="size-pct"> · {formatPercent(row.final_allocated_size, totalSize)}</span>}
-                  </td>
-                  <td className="actions-col">
-                    <div className="actions-cell">
-                      <button
-                        className="btn btn-sm"
-                        onClick={() => onOpenLocation(getParentDir(row.path))}
-                      >
-                        Open folder
-                      </button>
-                      <button
-                        className="btn btn-sm"
-                        onClick={() => onSelectFile(row.path)}
-                      >
-                        Select in Explorer
-                      </button>
-                      <CopyButton text={row.path} onError={onCopyError} />
-                    </div>
                   </td>
                 </tr>
               ))}
@@ -1494,20 +1476,6 @@ function SubtreeSearchPanel({
                   {formatBytes(node.subtree_size)}
                   {totalSize > 0 && <span className="size-pct"> · {formatPercent(node.subtree_size, totalSize)}</span>}
                 </span>
-                <div className="direct-child-actions" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    className="btn btn-sm"
-                    onClick={() => onOpenExplorer(node.is_directory ? node.path : getParentDir(node.path))}
-                  >
-                    Open folder
-                  </button>
-                  {!node.is_directory && (
-                    <button className="btn btn-sm" onClick={() => onSelectFile(node.path)}>
-                      Select file
-                    </button>
-                  )}
-                  <CopyButton text={node.path} onError={onCopyError} />
-                </div>
               </div>
             ))}
           </div>
@@ -1647,23 +1615,6 @@ function DirectChildrenPanel({
               {formatBytes(node.subtree_size)}
               {totalSize > 0 && <span className="size-pct"> · {formatPercent(node.subtree_size, totalSize)}</span>}
             </span>
-            {/* stopPropagation prevents action clicks from firing row navigation */}
-            <div className="direct-child-actions" onClick={(e) => e.stopPropagation()}>
-              <button
-                className="btn btn-sm"
-                onClick={() =>
-                  onOpenExplorer(node.is_directory ? node.path : getParentDir(node.path))
-                }
-              >
-                Open folder
-              </button>
-              {!node.is_directory && (
-                <button className="btn btn-sm" onClick={() => onSelectFile(node.path)}>
-                  Select file
-                </button>
-              )}
-              <CopyButton text={node.path} onError={onCopyError} />
-            </div>
           </div>
         ))}
       </div>

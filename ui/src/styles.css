@@ -279,26 +279,6 @@ tbody tr:last-child td {
   font-size: 12px;
 }
 
-.actions-col {
-  width: 260px;
-  white-space: nowrap;
-  vertical-align: middle;
-}
-
-.actions-cell {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-}
-
-.files-table tr:hover .actions-cell,
-.files-table tr:focus-within .actions-cell {
-  opacity: 1;
-  pointer-events: auto;
-}
 
 .error,
 .loading {
@@ -1278,22 +1258,6 @@ details[open] > .reclaimable-summary::before {
   white-space: nowrap;
 }
 
-.direct-child-actions {
-  flex-shrink: 0;
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-}
-
-.direct-child-row:hover .direct-child-actions,
-.direct-child-row:focus-within .direct-child-actions,
-.direct-child-row--context .direct-child-actions {
-  opacity: 1;
-  pointer-events: auto;
-}
 
 .direct-children-note {
   padding: 14px 16px;
@@ -1675,11 +1639,6 @@ details[open] > .subtree-search-summary {
   color: #17202a;
 }
 
-.subtree-result-row:hover .direct-child-actions,
-.subtree-result-row:focus-within .direct-child-actions {
-  opacity: 1;
-  pointer-events: auto;
-}
 
 .filter-input:disabled {
   opacity: 0.5;
