@@ -163,6 +163,21 @@ type RecycleConfirmTarget = {
   warnings?: string[];
   requireAcknowledgement?: boolean;
 };
+type RecycleTargetInfo = {
+  canonical_path: string;
+  display_name: string;
+  is_directory: boolean;
+  size_bytes?: number | null;
+  warnings: string[];
+  blocked_reason?: string | null;
+};
+type RecycleResult = {
+  target: RecycleTargetInfo;
+  moved_to_recycle_bin: boolean;
+};
+type RecycleSuccess = {
+  displayName: string;
+};
 
 const TOP_OPTIONS = [10, 30, 50, 100, 200, 500];
 const LARGE_FOLDER_THRESHOLD = 200;
@@ -270,6 +285,16 @@ function isTauriRuntime(): boolean {
   return Boolean(tauriWindow.__TAURI__ || tauriWindow.__TAURI_INTERNALS__);
 }
 
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+}
+
 async function loadSampleData(): Promise<DiskInsightOutput> {
   if (isTauriRuntime()) {
     return invoke<DiskInsightOutput>("load_sample_json");
@@ -323,6 +348,13 @@ async function showProperties(path: string): Promise<void> {
     throw new Error("Show properties is available only in the Tauri desktop app.");
   }
   return invoke<void>("show_properties", { path });
+}
+
+async function moveToRecycleBin(path: string): Promise<RecycleResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("Recycle Bin operations are available only in the Tauri desktop app.");
+  }
+  return invoke<RecycleResult>("move_to_recycle_bin", { path });
 }
 
 async function cancelScan(): Promise<void> {
@@ -600,6 +632,7 @@ function RecycleConfirmModal({
   isRecycling,
   confirmDisabled,
   confirmDisabledReason,
+  error,
   onCancel,
   onConfirm,
 }: {
@@ -607,8 +640,9 @@ function RecycleConfirmModal({
   isRecycling: boolean;
   confirmDisabled?: boolean;
   confirmDisabledReason?: string;
+  error?: string | null;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
 }) {
   const [understood, setUnderstood] = useState(false);
   const requiresAcknowledgement = target.requireAcknowledgement === true;
@@ -670,6 +704,11 @@ function RecycleConfirmModal({
                   <li key={warning}>{warning}</li>
                 ))}
               </ul>
+            </div>
+          )}
+          {error && (
+            <div className="recycle-modal-error" role="alert">
+              {error}
             </div>
           )}
         </div>
@@ -2105,6 +2144,8 @@ function App() {
   const [advancedModeWarningOpen, setAdvancedModeWarningOpen] = useState(false);
   const [recycleConfirmTarget, setRecycleConfirmTarget] = useState<RecycleConfirmTarget | null>(null);
   const [isRecycling, setIsRecycling] = useState(false);
+  const [recycleError, setRecycleError] = useState<string | null>(null);
+  const [recycleSuccess, setRecycleSuccess] = useState<RecycleSuccess | null>(null);
   const scanRestoreRef = useRef<{ path: string; drive: string } | null>(null);
   const scanGenerationRef = useRef(0);
   const cancelMessageTimerRef = useRef<number | null>(null);
@@ -2664,6 +2705,8 @@ function App() {
   }
 
   function handleRequestRecycle(target: ContextMenuTarget) {
+    setRecycleError(null);
+    setRecycleSuccess(null);
     setRecycleConfirmTarget({
       path: target.path,
       isDirectory: target.isDirectory,
@@ -2875,6 +2918,7 @@ function App() {
   }
 
   function handleAdvancedModeToggle(e: React.ChangeEvent<HTMLInputElement>) {
+    if (isRecycling) return;
     if (e.target.checked) {
       setAdvancedModeWarningOpen(true);
     } else {
@@ -2895,14 +2939,43 @@ function App() {
   function handleCancelRecycleConfirm() {
     if (isRecycling) return;
     setRecycleConfirmTarget(null);
+    setRecycleError(null);
     setIsRecycling(false);
   }
 
-  function handleConfirmRecycle() {
-    // v0.5.1-D only builds the confirmation UI foundation.
-    // The move_to_recycle_bin command is intentionally not invoked in this phase.
-    setRecycleConfirmTarget(null);
-    setIsRecycling(false);
+  async function handleConfirmRecycle() {
+    if (!recycleConfirmTarget || isRecycling) return;
+    if (!advancedMode) {
+      const msg = "Advanced Mode is no longer enabled.";
+      setRecycleError(msg);
+      setError(msg);
+      setIsScanError(false);
+      return;
+    }
+
+    setIsRecycling(true);
+    setRecycleError(null);
+    setError(null);
+    setIsScanError(false);
+
+    try {
+      const result = await moveToRecycleBin(recycleConfirmTarget.path);
+      if (!result.moved_to_recycle_bin) {
+        throw new Error("The operation did not complete.");
+      }
+      setRecycleConfirmTarget(null);
+      setRecycleSuccess({
+        displayName: result.target.display_name || getRecycleDisplayName(recycleConfirmTarget),
+      });
+      setStatusMessage(null);
+    } catch (err: unknown) {
+      const msg = errorMessage(err);
+      setRecycleError(msg);
+      setError(msg);
+      setIsScanError(false);
+    } finally {
+      setIsRecycling(false);
+    }
   }
 
   useEffect(() => {
@@ -3106,6 +3179,7 @@ function App() {
               <input
                 type="checkbox"
                 checked={advancedMode}
+                disabled={isRecycling}
                 onChange={handleAdvancedModeToggle}
               />
               <span>Advanced Mode</span>
@@ -3238,6 +3312,14 @@ function App() {
 
       {statusMessage && (
         <div className="status-message status-message--success">{statusMessage}</div>
+      )}
+
+      {recycleSuccess && (
+        <div className="status-message status-message--success recycle-success-message" role="status">
+          <strong>Moved to Recycle Bin: {recycleSuccess.displayName}</strong>
+          <div>Items in the Recycle Bin still occupy disk space until the bin is emptied.</div>
+          <div>Use Refresh after cleanup when you are ready to update disk-insight.</div>
+        </div>
       )}
 
       {cancelMessage && (
@@ -3417,8 +3499,7 @@ function App() {
         <RecycleConfirmModal
           target={recycleConfirmTarget}
           isRecycling={isRecycling}
-          confirmDisabled={true}
-          confirmDisabledReason="Recycle execution is not wired yet."
+          error={recycleError}
           onCancel={handleCancelRecycleConfirm}
           onConfirm={handleConfirmRecycle}
         />
