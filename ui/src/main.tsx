@@ -159,10 +159,17 @@ type ContextMenuTarget = {
 type RecycleConfirmTarget = {
   path: string;
   isDirectory: boolean;
+  recordIndex?: number;
   displayName?: string;
   sizeBytes?: number | null;
   warnings?: string[];
   requireAcknowledgement?: boolean;
+};
+type RecycledItem = {
+  recordIndex: number | null;
+  path: string;
+  name: string;
+  isDirectory: boolean;
 };
 type RecycleTargetInfo = {
   canonical_path: string;
@@ -753,6 +760,7 @@ function SafeContextMenu({
   onShowProperties,
   advancedMode,
   onRequestRecycle,
+  isAlreadyRecycled,
   onCopyError,
 }: {
   target: ContextMenuTarget;
@@ -762,6 +770,7 @@ function SafeContextMenu({
   onShowProperties?: (path: string) => void;
   advancedMode?: boolean;
   onRequestRecycle?: (target: ContextMenuTarget) => void;
+  isAlreadyRecycled?: boolean;
   onCopyError: (msg: string) => void;
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -858,13 +867,15 @@ function SafeContextMenu({
         <>
           <div className="context-menu-separator" role="separator" />
           <button
-            className="context-menu-item context-menu-item--danger"
-            onClick={() => {
+            className={`context-menu-item context-menu-item--danger${isAlreadyRecycled ? " context-menu-item--disabled" : ""}`}
+            disabled={isAlreadyRecycled}
+            onClick={isAlreadyRecycled ? undefined : () => {
               onRequestRecycle(target);
               onClose();
             }}
+            title={isAlreadyRecycled ? "Already moved to Recycle Bin" : undefined}
           >
-            Move to Recycle Bin
+            {isAlreadyRecycled ? "Already moved to Recycle Bin" : "Move to Recycle Bin"}
           </button>
         </>
       )}
@@ -896,6 +907,19 @@ function formatBytes(bytes: number): string {
   return unitIndex === 0
     ? `${value} ${units[unitIndex]}`
     : `${value.toFixed(1)} ${units[unitIndex]}`;
+}
+
+function isItemRecycled(
+  recordIndex: number,
+  path: string,
+  recycledItems: RecycledItem[],
+): boolean {
+  const lp = path.toLowerCase();
+  return recycledItems.some(
+    (item) =>
+      (item.recordIndex !== null && item.recordIndex === recordIndex) ||
+      item.path.toLowerCase() === lp,
+  );
 }
 
 function formatDriveFreeDelta(deltaBytes: number, recycleContext = false): string {
@@ -1173,6 +1197,7 @@ type TreeRowProps = {
   loadingIds: Set<number>;
   selectedRecordIndex: number | undefined;
   focusedRecordIndex: number | null;
+  isRecycled?: boolean;
   onToggleExpand: (node: TreeNode) => void;
   onSelect: (node: TreeNode) => void;
   onContextMenu: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
@@ -1186,6 +1211,7 @@ function TreeNodeRow({
   loadingIds,
   selectedRecordIndex,
   focusedRecordIndex,
+  isRecycled,
   onToggleExpand,
   onSelect,
   onContextMenu,
@@ -1204,7 +1230,8 @@ function TreeNodeRow({
     + (isSelected ? " tree-row--active" : "")
     + (isFocused ? " tree-row--keyboard-focused" : "")
     + (isDir ? "" : " tree-row--file")
-    + (isLoading ? " tree-row--loading" : "");
+    + (isLoading ? " tree-row--loading" : "")
+    + (isRecycled ? " tree-row--recycled" : "");
 
   return (
     <div
@@ -1238,6 +1265,7 @@ function TreeNodeRow({
           title={node.path}
         >
           <span className="tree-name">{displayName}</span>
+          {isRecycled && <span className="recycled-badge">Recycled</span>}
           <span className="tree-size">
             {formatBytes(node.subtree_size)}
             {totalSize > 0 && <span className="size-pct"> · {formatPercent(node.subtree_size, totalSize)}</span>}
@@ -1246,6 +1274,7 @@ function TreeNodeRow({
       ) : (
         <div className="tree-label tree-label--file" title={node.path}>
           <span className="tree-name">{displayName}</span>
+          {isRecycled && <span className="recycled-badge">Recycled</span>}
           <span className="tree-size">
             {formatBytes(node.subtree_size)}
             {totalSize > 0 && <span className="size-pct"> · {formatPercent(node.subtree_size, totalSize)}</span>}
@@ -1266,6 +1295,7 @@ function TreeView({
   focusedRecordIndex,
   treeError,
   sourceKind,
+  recycledItems,
   onToggleExpand,
   onSelect,
   onContextMenu,
@@ -1280,6 +1310,7 @@ function TreeView({
   focusedRecordIndex: number | null;
   treeError: string | null;
   sourceKind: SourceKind | null;
+  recycledItems?: RecycledItem[];
   onToggleExpand: (node: TreeNode) => void;
   onSelect: (node: TreeNode) => void;
   onContextMenu: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
@@ -1339,6 +1370,7 @@ function TreeView({
                 loadingIds={loadingIds}
                 selectedRecordIndex={selectedRecordIndex}
                 focusedRecordIndex={focusedRecordIndex}
+                isRecycled={recycledItems ? isItemRecycled(row.node.record_index, row.node.path, recycledItems) : false}
                 onToggleExpand={onToggleExpand}
                 onSelect={onSelect}
                 onContextMenu={onContextMenu}
@@ -1894,6 +1926,7 @@ function DirectChildrenPanel({
   onShowProperties,
   advancedMode,
   onRequestRecycle,
+  recycledItems,
   onCopyError,
 }: {
   dir: DirectoryEntry;
@@ -1915,6 +1948,7 @@ function DirectChildrenPanel({
   onShowProperties: (path: string) => void;
   advancedMode: boolean;
   onRequestRecycle: (target: ContextMenuTarget) => void;
+  recycledItems?: RecycledItem[];
   onCopyError: (msg: string) => void;
 }) {
 
@@ -1980,31 +2014,37 @@ function DirectChildrenPanel({
   } else {
     body = (
       <div className="direct-children-list">
-        {sorted.map((node) => (
-          <div
-            key={node.record_index}
-            className={`direct-child-row${node.is_directory ? " direct-child-row--dir" : ""}${contextMenu?.recordIndex === node.record_index ? " direct-child-row--context" : ""}`}
-            onClick={node.is_directory ? () => onNavigate(node) : undefined}
-            onContextMenu={(e) => handleContextMenu(e, node)}
-            title={node.is_directory ? `Open ${node.path}` : undefined}
-          >
-            <span
-              className={`direct-child-badge direct-child-badge--${node.is_directory ? "dir" : "file"}`}
+        {sorted.map((node) => {
+          const nodeIsRecycled = recycledItems
+            ? isItemRecycled(node.record_index, node.path, recycledItems)
+            : false;
+          return (
+            <div
+              key={node.record_index}
+              className={`direct-child-row${node.is_directory ? " direct-child-row--dir" : ""}${contextMenu?.recordIndex === node.record_index ? " direct-child-row--context" : ""}${nodeIsRecycled ? " direct-child-row--recycled" : ""}`}
+              onClick={node.is_directory ? () => onNavigate(node) : undefined}
+              onContextMenu={(e) => handleContextMenu(e, node)}
+              title={node.is_directory ? `Open ${node.path}` : undefined}
             >
-              {node.is_directory ? "DIR" : "FILE"}
-            </span>
-            <span className="direct-child-name">
-              {node.name || node.path}
-            </span>
-            <span
-              className="direct-child-size"
-              title="Estimated allocated-style size."
-            >
-              {formatBytes(node.subtree_size)}
-              {totalSize > 0 && <span className="size-pct"> · {formatPercent(node.subtree_size, totalSize)}</span>}
-            </span>
-          </div>
-        ))}
+              <span
+                className={`direct-child-badge direct-child-badge--${node.is_directory ? "dir" : "file"}`}
+              >
+                {node.is_directory ? "DIR" : "FILE"}
+              </span>
+              <span className="direct-child-name">
+                {node.name || node.path}
+              </span>
+              {nodeIsRecycled && <span className="recycled-badge">Recycled</span>}
+              <span
+                className="direct-child-size"
+                title="Estimated allocated-style size."
+              >
+                {formatBytes(node.subtree_size)}
+                {totalSize > 0 && <span className="size-pct"> · {formatPercent(node.subtree_size, totalSize)}</span>}
+              </span>
+            </div>
+          );
+        })}
       </div>
     );
   }
@@ -2079,6 +2119,9 @@ function DirectChildrenPanel({
           onShowProperties={onShowProperties}
           advancedMode={advancedMode}
           onRequestRecycle={onRequestRecycle}
+          isAlreadyRecycled={recycledItems
+            ? isItemRecycled(contextMenu.recordIndex, contextMenu.path, recycledItems)
+            : false}
           onCopyError={onCopyError}
         />
       )}
@@ -2157,6 +2200,7 @@ function App() {
   const [isRecycling, setIsRecycling] = useState(false);
   const [recycleError, setRecycleError] = useState<string | null>(null);
   const [recycleSuccess, setRecycleSuccess] = useState<RecycleSuccess | null>(null);
+  const [recycledItems, setRecycledItems] = useState<RecycledItem[]>([]);
   const scanRestoreRef = useRef<{ path: string; drive: string } | null>(null);
   const scanGenerationRef = useRef(0);
   const cancelMessageTimerRef = useRef<number | null>(null);
@@ -2418,6 +2462,7 @@ function App() {
     setReclaimableLoading(false);
     setReclaimableError(null);
     setFocusedRecordIndex(null);
+    setRecycledItems([]);
     loader()
       .then((json) => {
         if (isScan && scanTimingRef.current) {
@@ -2475,6 +2520,7 @@ function App() {
     setCleanupRefreshDelta(null);
     setUnsupportedDriveCapacity(null);
     clearCacheBanner();
+    setRecycledItems([]);
     scanRestoreRef.current =
       selectedDir && data
         ? { path: selectedDir.path, drive: data.summary.drive }
@@ -2726,6 +2772,7 @@ function App() {
     setRecycleConfirmTarget({
       path: target.path,
       isDirectory: target.isDirectory,
+      recordIndex: target.recordIndex,
       displayName: target.displayName,
       sizeBytes: target.sizeBytes,
     });
@@ -2992,6 +3039,15 @@ function App() {
         displayName: result.target.display_name || getRecycleDisplayName(recycleConfirmTarget),
         itemCount: 1,
       });
+      setRecycledItems((prev) => [
+        ...prev,
+        {
+          recordIndex: recycleConfirmTarget.recordIndex ?? null,
+          path: result.target.canonical_path || recycleConfirmTarget.path,
+          name: result.target.display_name || getRecycleDisplayName(recycleConfirmTarget),
+          isDirectory: recycleConfirmTarget.isDirectory,
+        },
+      ]);
       recycleRefreshPendingRef.current = true;
       setStatusMessage(null);
     } catch (err: unknown) {
@@ -3019,6 +3075,7 @@ function App() {
     setRecycleSuccess(null);
     recycleRefreshPendingRef.current = false;
     setUnsupportedDriveCapacity(null);
+    setRecycledItems([]);
   }, [driveInput]);
 
   // K-1b: log when scan data is first rendered to DOM
@@ -3350,7 +3407,7 @@ function App() {
               : `Moved to Recycle Bin: ${recycleSuccess.displayName}`}
           </strong>
           <div>Items in the Recycle Bin still occupy disk space until the bin is emptied.</div>
-          <div>This view may be stale until you refresh.</div>
+          <div>The item is marked as moved in the tree and direct children until you refresh.</div>
           <div>Use Refresh after cleanup when you are ready to update disk-insight.</div>
           <div className="recycle-success-actions">
             <button
@@ -3399,6 +3456,7 @@ function App() {
               focusedRecordIndex={focusedRecordIndex}
               treeError={treeError}
               sourceKind={sourceKind}
+              recycledItems={recycledItems}
               onToggleExpand={handleToggleExpand}
               onSelect={handleSelectTreeNode}
               onContextMenu={handleTreeContextMenu}
@@ -3413,6 +3471,7 @@ function App() {
                 onShowProperties={handleShowProperties}
                 advancedMode={advancedMode}
                 onRequestRecycle={handleRequestRecycle}
+                isAlreadyRecycled={isItemRecycled(treeContextMenu.recordIndex, treeContextMenu.path, recycledItems)}
                 onCopyError={handleCopyError}
               />
             )}
@@ -3484,6 +3543,7 @@ function App() {
                   onShowProperties={handleShowProperties}
                   advancedMode={advancedMode}
                   onRequestRecycle={handleRequestRecycle}
+                  recycledItems={recycledItems}
                   onCopyError={handleCopyError}
                 />
               )}

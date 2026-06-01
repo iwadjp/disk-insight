@@ -1879,3 +1879,53 @@ details[open] > .subtree-search-summary {
   cursor: not-allowed;
   background: #f5f7fa;
 }
+
+/* ── Recycled item visual state ── */
+.tree-row--recycled {
+  opacity: 0.65;
+}
+
+.tree-row--recycled .tree-name {
+  text-decoration: line-through;
+  color: #8a97a4;
+}
+
+.tree-row--recycled .tree-size {
+  color: #b0bbc5;
+}
+
+.direct-child-row--recycled {
+  opacity: 0.65;
+}
+
+.direct-child-row--recycled .direct-child-name {
+  text-decoration: line-through;
+  color: #8a97a4;
+}
+
+.direct-child-row--recycled .direct-child-size {
+  color: #b0bbc5;
+}
+
+.recycled-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #f1f5f9;
+  color: #64748b;
+  white-space: nowrap;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+}
+
+.context-menu-item--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.context-menu-item--disabled:hover {
+  background: transparent;
+  color: #b91c1c;
+}
