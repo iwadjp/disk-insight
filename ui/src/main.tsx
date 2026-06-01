@@ -680,6 +680,13 @@ function StatusBar({
     ? storagePolicyDisplayName(data.summary.storage_policy)
     : null;
 
+  const scanTimeLabel =
+    sourceKind === "live"
+      ? `Scanned in ${formatElapsed(data.summary.total_time_ms)}`
+      : sourceKind === "cached"
+        ? `Last scan ${formatElapsed(data.summary.total_time_ms)}`
+        : null;
+
   return (
     <div className="status-bar">
       <span className={`source-badge source-badge--${sourceKind}`}>{sourceLabel}</span>
@@ -690,6 +697,7 @@ function StatusBar({
         <span className="source-badge source-badge--experimental">{policyLabel}</span>
       )}
       <span className="status-meta">{updatedLabel}</span>
+      {scanTimeLabel && <span className="status-meta">{scanTimeLabel}</span>}
       {isLoading && <span className="status-meta status-updating">(updating…)</span>}
     </div>
   );
