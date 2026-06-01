@@ -6,7 +6,8 @@ use disk_insight::mft_probe::{
     ArenaCache, DriveCapacity, JsonTreeNode, JsonTreeOutput, ReclaimableSummary, StoragePolicy,
 };
 use std::collections::HashMap;
-use std::path::Path;
+use std::os::windows::fs::MetadataExt;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{Emitter, State};
@@ -26,6 +27,22 @@ struct CachedScanResponse {
     cache_path: String,
     cache_file_size_bytes: u64,
     cache_load_ms: u64,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct RecycleTargetInfo {
+    canonical_path: String,
+    display_name: String,
+    is_directory: bool,
+    size_bytes: Option<u64>,
+    warnings: Vec<String>,
+    blocked_reason: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+struct RecycleResult {
+    target: RecycleTargetInfo,
+    moved_to_recycle_bin: bool,
 }
 
 const SAMPLE_JSON: &str = include_str!("../../public/sample/probe7.sample.json");
@@ -436,6 +453,255 @@ fn get_reclaimable_summary(
     Ok(compute_reclaimable_summary(&path, current, wof_adjusted, wof_ratio, None))
 }
 
+fn normalize_path_for_compare(path: &Path) -> String {
+    let mut s = path.to_string_lossy().replace('/', "\\");
+    if let Some(stripped) = s.strip_prefix(r"\\?\") {
+        s = stripped.to_string();
+    } else if let Some(stripped) = s.strip_prefix(r"\??\") {
+        s = stripped.to_string();
+    }
+    while s.len() > 3 && s.ends_with('\\') {
+        s.pop();
+    }
+    s
+}
+
+fn normalize_raw_path_for_compare(path: &str) -> String {
+    let mut s = path.replace('/', "\\");
+    if let Some(stripped) = s.strip_prefix(r"\\?\") {
+        s = stripped.to_string();
+    } else if let Some(stripped) = s.strip_prefix(r"\??\") {
+        s = stripped.to_string();
+    }
+    while s.len() > 3 && s.ends_with('\\') {
+        s.pop();
+    }
+    s
+}
+
+fn normalize_existing_or_raw(path: PathBuf) -> String {
+    match std::fs::canonicalize(&path) {
+        Ok(canonical) => normalize_path_for_compare(&canonical),
+        Err(_) => normalize_path_for_compare(&path),
+    }
+}
+
+fn normalized_env_path(name: &str) -> Option<String> {
+    std::env::var_os(name)
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .map(normalize_existing_or_raw)
+}
+
+fn drive_root_from_normalized(path: &str) -> Option<String> {
+    let bytes = path.as_bytes();
+    if bytes.len() >= 3
+        && bytes[1] == b':'
+        && (bytes[2] == b'\\' || bytes[2] == b'/')
+        && bytes[0].is_ascii_alphabetic()
+    {
+        Some(format!("{}:\\", (bytes[0] as char).to_ascii_uppercase()))
+    } else {
+        None
+    }
+}
+
+fn path_depth_after_drive_root(path: &str) -> Option<usize> {
+    let root = drive_root_from_normalized(path)?;
+    let rest = path[root.len()..].trim_matches('\\');
+    if rest.is_empty() {
+        Some(0)
+    } else {
+        Some(rest.split('\\').filter(|part| !part.is_empty()).count())
+    }
+}
+
+fn is_same_path(a: &str, b: &str) -> bool {
+    normalize_raw_path_for_compare(a).to_lowercase()
+        == normalize_raw_path_for_compare(b).to_lowercase()
+}
+
+fn is_same_or_child_path(target: &str, base: &str) -> bool {
+    let target = normalize_raw_path_for_compare(target).to_lowercase();
+    let base = normalize_raw_path_for_compare(base).to_lowercase();
+    target == base || target.starts_with(&format!("{base}\\"))
+}
+
+fn block_reason_for_recycle_target(normalized_path: &str, attributes: u32) -> Option<String> {
+    use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_SYSTEM;
+
+    let drive_root = drive_root_from_normalized(normalized_path)?;
+    let depth = path_depth_after_drive_root(normalized_path).unwrap_or(0);
+
+    if depth == 0 {
+        return Some("Drive root cannot be moved to the Recycle Bin.".to_string());
+    }
+
+    if depth < 2 {
+        return Some("This path is too close to the drive root.".to_string());
+    }
+
+    if attributes & FILE_ATTRIBUTE_SYSTEM.0 != 0 {
+        return Some("System-protected files and folders are blocked.".to_string());
+    }
+
+    let mut protected_subtrees = Vec::new();
+    for env_name in ["SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)", "ProgramData"] {
+        if let Some(path) = normalized_env_path(env_name) {
+            protected_subtrees.push(path);
+        }
+    }
+    protected_subtrees.push(format!("{drive_root}$Recycle.Bin"));
+    protected_subtrees.push(format!("{drive_root}System Volume Information"));
+
+    for protected in protected_subtrees {
+        if is_same_or_child_path(normalized_path, &protected) {
+            return Some(format!("{protected} is a protected system location."));
+        }
+    }
+
+    let mut users_roots = Vec::new();
+    if let Some(user_profile) = normalized_env_path("USERPROFILE") {
+        if let Some(parent) = Path::new(&user_profile).parent() {
+            users_roots.push(normalize_path_for_compare(parent));
+        }
+        if is_same_path(normalized_path, &user_profile) {
+            return Some("The current user profile root is blocked.".to_string());
+        }
+    }
+    if let Some(system_drive) = std::env::var_os("SystemDrive").filter(|v| !v.is_empty()) {
+        let mut root = system_drive.to_string_lossy().replace('/', "\\");
+        if !root.ends_with('\\') {
+            root.push('\\');
+        }
+        users_roots.push(format!("{root}Users"));
+    }
+    users_roots.push(format!("{drive_root}Users"));
+
+    users_roots.sort_by_key(|s| s.to_lowercase());
+    users_roots.dedup_by(|a, b| is_same_path(a, b));
+
+    for users_root in users_roots {
+        if is_same_path(normalized_path, &users_root) {
+            return Some("The Users profile root is blocked.".to_string());
+        }
+        let user_root_prefix = format!("{}\\", normalize_raw_path_for_compare(&users_root));
+        let target = normalize_raw_path_for_compare(normalized_path);
+        if target.to_lowercase().starts_with(&user_root_prefix.to_lowercase()) {
+            let rest = &target[user_root_prefix.len()..];
+            if !rest.is_empty() && !rest.contains('\\') {
+                return Some("User profile roots are blocked.".to_string());
+            }
+        }
+    }
+
+    None
+}
+
+fn validate_recycle_target(path: &Path) -> Result<RecycleTargetInfo, String> {
+    use windows::Win32::Storage::FileSystem::{
+        FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_READONLY,
+    };
+
+    if path.as_os_str().is_empty() {
+        return Err("path must not be empty".to_string());
+    }
+
+    let canonical = std::fs::canonicalize(path)
+        .map_err(|e| format!("path does not exist or cannot be resolved: {e}"))?;
+    let metadata = std::fs::metadata(&canonical)
+        .map_err(|e| format!("failed to read target metadata: {e}"))?;
+    let canonical_path = normalize_path_for_compare(&canonical);
+
+    if drive_root_from_normalized(&canonical_path).is_none() {
+        return Err("Only local drive paths are supported for Recycle Bin operations.".to_string());
+    }
+
+    let attributes = metadata.file_attributes();
+    if let Some(reason) = block_reason_for_recycle_target(&canonical_path, attributes) {
+        return Err(format!("Recycle Bin operation blocked: {reason}"));
+    }
+
+    let mut warnings = Vec::new();
+    if attributes & FILE_ATTRIBUTE_HIDDEN.0 != 0 {
+        warnings.push("Target has the hidden attribute.".to_string());
+    }
+    if attributes & FILE_ATTRIBUTE_READONLY.0 != 0 {
+        warnings.push("Target has the read-only attribute.".to_string());
+    }
+
+    let display_name = canonical
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(&canonical_path)
+        .to_string();
+    let is_directory = metadata.is_dir();
+    let size_bytes = if is_directory { None } else { Some(metadata.len()) };
+
+    Ok(RecycleTargetInfo {
+        canonical_path,
+        display_name,
+        is_directory,
+        size_bytes,
+        warnings,
+        blocked_reason: None,
+    })
+}
+
+#[tauri::command]
+fn move_to_recycle_bin(path: String) -> Result<RecycleResult, String> {
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
+        COINIT_APARTMENTTHREADED, IBindCtx,
+    };
+    use windows::Win32::UI::Shell::{
+        FileOperation, IFileOperation, IFileOperationProgressSink, IShellItem,
+        SHCreateItemFromParsingName, FOFX_EARLYFAILURE, FOFX_RECYCLEONDELETE, FOF_ALLOWUNDO,
+    };
+    use windows::core::{IUnknown, PCWSTR};
+
+    let target = validate_recycle_target(Path::new(&path))?;
+    let path_wide: Vec<u16> = target
+        .canonical_path
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+
+    unsafe {
+        let com_hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let com_init_ok = com_hr.is_ok();
+
+        let result = (|| -> windows::core::Result<()> {
+            let op: IFileOperation =
+                CoCreateInstance(&FileOperation, None::<&IUnknown>, CLSCTX_INPROC_SERVER)?;
+            op.SetOperationFlags(FOF_ALLOWUNDO | FOFX_RECYCLEONDELETE | FOFX_EARLYFAILURE)?;
+
+            let item: IShellItem = SHCreateItemFromParsingName(
+                PCWSTR::from_raw(path_wide.as_ptr()),
+                None::<&IBindCtx>,
+            )?;
+            op.DeleteItem(&item, None::<&IFileOperationProgressSink>)?;
+            op.PerformOperations()?;
+
+            if op.GetAnyOperationsAborted()?.as_bool() {
+                return Err(windows::core::Error::from_win32());
+            }
+            Ok(())
+        })();
+
+        if com_init_ok {
+            CoUninitialize();
+        }
+
+        result.map_err(|e| format!("Failed to move target to the Recycle Bin: {e}"))?;
+    }
+
+    Ok(RecycleResult {
+        target,
+        moved_to_recycle_bin: true,
+    })
+}
+
 #[tauri::command]
 fn open_in_explorer(path: String) -> Result<(), String> {
     if path.is_empty() {
@@ -552,6 +818,7 @@ fn main() {
             scan_drive,
             cancel_scan,
             get_drive_capacity_now,
+            move_to_recycle_bin,
             open_in_explorer,
             select_in_explorer,
             show_properties,
