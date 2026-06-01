@@ -153,6 +153,14 @@ type ContextMenuTarget = {
   x: number;
   y: number;
 };
+type RecycleConfirmTarget = {
+  path: string;
+  isDirectory: boolean;
+  displayName?: string;
+  sizeBytes?: number | null;
+  warnings?: string[];
+  requireAcknowledgement?: boolean;
+};
 
 const TOP_OPTIONS = [10, 30, 50, 100, 200, 500];
 const LARGE_FOLDER_THRESHOLD = 200;
@@ -570,6 +578,112 @@ function AdvancedModeWarningModal({
             disabled={!understood}
           >
             Enable
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function getRecycleDisplayName(target: RecycleConfirmTarget): string {
+  if (target.displayName) return target.displayName;
+  const trimmed = target.path.replace(/[\\\/]+$/, "");
+  const idx = Math.max(trimmed.lastIndexOf("\\"), trimmed.lastIndexOf("/"));
+  return idx >= 0 ? trimmed.slice(idx + 1) : trimmed || target.path;
+}
+
+function RecycleConfirmModal({
+  target,
+  isRecycling,
+  onCancel,
+  onConfirm,
+}: {
+  target: RecycleConfirmTarget;
+  isRecycling: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const [understood, setUnderstood] = useState(false);
+  const requiresAcknowledgement = target.requireAcknowledgement === true;
+  const moveDisabled = isRecycling || (requiresAcknowledgement && !understood);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && !isRecycling) onCancel();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isRecycling, onCancel]);
+
+  return createPortal(
+    <div className="modal-backdrop" role="presentation">
+      <div
+        className="modal-card recycle-confirm-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="recycle-confirm-modal-title"
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        <h2 id="recycle-confirm-modal-title">Move to Recycle Bin?</h2>
+        <div className="modal-body recycle-confirm-body">
+          <dl className="recycle-target-details">
+            <div>
+              <dt>Type</dt>
+              <dd>{target.isDirectory ? "Folder" : "File"}</dd>
+            </div>
+            <div>
+              <dt>Name</dt>
+              <dd>{getRecycleDisplayName(target)}</dd>
+            </div>
+            <div>
+              <dt>Path</dt>
+              <dd className="recycle-target-path">{target.path}</dd>
+            </div>
+            {target.sizeBytes != null && (
+              <div>
+                <dt>Size</dt>
+                <dd>{formatBytes(target.sizeBytes)}</dd>
+              </div>
+            )}
+          </dl>
+          <div className="recycle-confirm-copy">
+            <p>This will move the item to the Recycle Bin.</p>
+            <p>
+              It will not be permanently deleted and can be restored from the Recycle Bin.
+            </p>
+            <p>
+              Items in the Recycle Bin still occupy disk space until the bin is emptied.
+            </p>
+          </div>
+          {target.warnings && target.warnings.length > 0 && (
+            <div className="recycle-warning-list" role="alert">
+              <strong>Warnings</strong>
+              <ul>
+                {target.warnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+        {requiresAcknowledgement && (
+          <label className="modal-checkbox">
+            <input
+              type="checkbox"
+              checked={understood}
+              disabled={isRecycling}
+              onChange={(e) => setUnderstood(e.target.checked)}
+            />
+            <span>I understand this target may be high risk.</span>
+          </label>
+        )}
+        <div className="modal-actions">
+          <button className="btn" onClick={onCancel} disabled={isRecycling}>
+            Cancel
+          </button>
+          <button className="btn btn-danger" onClick={onConfirm} disabled={moveDisabled}>
+            {isRecycling ? "Moving..." : "Move to Recycle Bin"}
           </button>
         </div>
       </div>
@@ -1901,6 +2015,8 @@ function App() {
   const [cancelMessage, setCancelMessage] = useState<string | null>(null);
   const [advancedMode, setAdvancedMode] = useState(false);
   const [advancedModeWarningOpen, setAdvancedModeWarningOpen] = useState(false);
+  const [recycleConfirmTarget, setRecycleConfirmTarget] = useState<RecycleConfirmTarget | null>(null);
+  const [isRecycling, setIsRecycling] = useState(false);
   const scanRestoreRef = useRef<{ path: string; drive: string } | null>(null);
   const scanGenerationRef = useRef(0);
   const cancelMessageTimerRef = useRef<number | null>(null);
@@ -2677,6 +2793,19 @@ function App() {
     setAdvancedModeWarningOpen(false);
   }
 
+  function handleCancelRecycleConfirm() {
+    if (isRecycling) return;
+    setRecycleConfirmTarget(null);
+    setIsRecycling(false);
+  }
+
+  function handleConfirmRecycle() {
+    // v0.5.1-D only builds the confirmation UI foundation.
+    // The move_to_recycle_bin command is intentionally not invoked in this phase.
+    setRecycleConfirmTarget(null);
+    setIsRecycling(false);
+  }
+
   useEffect(() => {
     savePreferences({
       drive: driveInput,
@@ -3173,6 +3302,14 @@ function App() {
         <AdvancedModeWarningModal
           onCancel={handleCancelAdvancedModeWarning}
           onEnable={handleEnableAdvancedMode}
+        />
+      )}
+      {recycleConfirmTarget && (
+        <RecycleConfirmModal
+          target={recycleConfirmTarget}
+          isRecycling={isRecycling}
+          onCancel={handleCancelRecycleConfirm}
+          onConfirm={handleConfirmRecycle}
         />
       )}
     </main>
