@@ -138,6 +138,7 @@ type CleanupRefreshDelta = {
   beforeFreeBytes: number;
   afterFreeBytes: number;
   deltaBytes: number;
+  recycleContext?: boolean;
 };
 type UnsupportedDriveCapacity = {
   drive: string;
@@ -177,6 +178,7 @@ type RecycleResult = {
 };
 type RecycleSuccess = {
   displayName: string;
+  itemCount: number;
 };
 
 const TOP_OPTIONS = [10, 30, 50, 100, 200, 500];
@@ -185,6 +187,7 @@ const LARGE_TREE_THRESHOLD = 1000;
 const PREF_KEY = "disk-insight.preferences.v1";
 const PHASE_COMPLETION_LATCH_MS = 600;
 const UPDATED_BANNER_DISMISS_MS = 4000;
+const NEAR_ZERO_FREE_DELTA_BYTES = 1024 * 1024;
 
 type AppPreferences = {
   drive?: string;
@@ -895,10 +898,11 @@ function formatBytes(bytes: number): string {
     : `${value.toFixed(1)} ${units[unitIndex]}`;
 }
 
-function formatDriveFreeDelta(deltaBytes: number): string {
-  const nearZeroThreshold = 1024 * 1024;
-  if (Math.abs(deltaBytes) < nearZeroThreshold) {
-    return "Drive free space unchanged since cleanup refresh";
+function formatDriveFreeDelta(deltaBytes: number, recycleContext = false): string {
+  if (Math.abs(deltaBytes) < NEAR_ZERO_FREE_DELTA_BYTES) {
+    return recycleContext
+      ? "Drive free space unchanged."
+      : "Drive free space unchanged since cleanup refresh";
   }
   const sign = deltaBytes > 0 ? "+" : "-";
   return `Drive free space changed: ${sign}${formatBytes(Math.abs(deltaBytes))} since cleanup refresh`;
@@ -1408,8 +1412,15 @@ function SelectedFolderCard({
       </div>
       {cleanupRefreshDelta && (
         <div className="selected-folder-note selected-folder-note--cleanup-delta">
-          {formatDriveFreeDelta(cleanupRefreshDelta.deltaBytes)}
+          {formatDriveFreeDelta(
+            cleanupRefreshDelta.deltaBytes,
+            cleanupRefreshDelta.recycleContext === true,
+          )}
           <span>May include changes from other apps.</span>
+          {cleanupRefreshDelta.recycleContext === true &&
+            Math.abs(cleanupRefreshDelta.deltaBytes) < NEAR_ZERO_FREE_DELTA_BYTES && (
+              <span>Recycled items still occupy disk space until the Recycle Bin is emptied.</span>
+            )}
         </div>
       )}
       <div className="selected-folder-stats">
@@ -2149,6 +2160,7 @@ function App() {
   const scanRestoreRef = useRef<{ path: string; drive: string } | null>(null);
   const scanGenerationRef = useRef(0);
   const cancelMessageTimerRef = useRef<number | null>(null);
+  const recycleRefreshPendingRef = useRef(false);
 
   const visibleRows = useMemo(
     () => buildVisibleRows(data?.root_children ?? [], expandedIds, childrenByParent, childrenErrors),
@@ -2390,6 +2402,8 @@ function App() {
     setError(null);
     setIsScanError(false);
     setStatusMessage(null);
+    setRecycleSuccess(null);
+    recycleRefreshPendingRef.current = false;
     setCleanupRefreshDelta(null);
     setUnsupportedDriveCapacity(null);
     clearCacheBanner();
@@ -2456,6 +2470,8 @@ function App() {
     setIsScanError(false);
     setStatusMessage(null);
     setCancelMessage(null);
+    setRecycleSuccess(null);
+    recycleRefreshPendingRef.current = false;
     setCleanupRefreshDelta(null);
     setUnsupportedDriveCapacity(null);
     clearCacheBanner();
@@ -2892,6 +2908,8 @@ function App() {
       handleScan();
       return;
     }
+    const refreshWasAfterRecycle = recycleSuccess !== null || recycleRefreshPendingRef.current;
+    setRecycleSuccess(null);
     void (async () => {
       let beforeFreeBytes: number | null = null;
       try {
@@ -2901,7 +2919,10 @@ function App() {
       }
 
       const scanSucceeded = await beginScanForDrive(drive);
-      if (!scanSucceeded || beforeFreeBytes === null) return;
+      if (!scanSucceeded || beforeFreeBytes === null) {
+        recycleRefreshPendingRef.current = false;
+        return;
+      }
 
       try {
         const after = await getDriveCapacityNow(drive);
@@ -2910,8 +2931,11 @@ function App() {
           beforeFreeBytes,
           afterFreeBytes: after.free_bytes,
           deltaBytes: after.free_bytes - beforeFreeBytes,
+          recycleContext: refreshWasAfterRecycle,
         });
+        recycleRefreshPendingRef.current = false;
       } catch (err: unknown) {
+        recycleRefreshPendingRef.current = false;
         console.warn("[cleanup-refresh] after capacity unavailable", err);
       }
     })();
@@ -2966,7 +2990,9 @@ function App() {
       setRecycleConfirmTarget(null);
       setRecycleSuccess({
         displayName: result.target.display_name || getRecycleDisplayName(recycleConfirmTarget),
+        itemCount: 1,
       });
+      recycleRefreshPendingRef.current = true;
       setStatusMessage(null);
     } catch (err: unknown) {
       const msg = errorMessage(err);
@@ -2990,6 +3016,8 @@ function App() {
 
   useEffect(() => {
     setCleanupRefreshDelta(null);
+    setRecycleSuccess(null);
+    recycleRefreshPendingRef.current = false;
     setUnsupportedDriveCapacity(null);
   }, [driveInput]);
 
@@ -3316,9 +3344,30 @@ function App() {
 
       {recycleSuccess && (
         <div className="status-message status-message--success recycle-success-message" role="status">
-          <strong>Moved to Recycle Bin: {recycleSuccess.displayName}</strong>
+          <strong>
+            {recycleSuccess.itemCount > 1
+              ? `Moved ${recycleSuccess.itemCount} items to Recycle Bin`
+              : `Moved to Recycle Bin: ${recycleSuccess.displayName}`}
+          </strong>
           <div>Items in the Recycle Bin still occupy disk space until the bin is emptied.</div>
+          <div>This view may be stale until you refresh.</div>
           <div>Use Refresh after cleanup when you are ready to update disk-insight.</div>
+          <div className="recycle-success-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={handleRefreshAfterCleanup}
+              disabled={scanDisabled}
+            >
+              Refresh after cleanup
+            </button>
+            <button
+              className="btn btn-sm"
+              onClick={() => setRecycleSuccess(null)}
+              disabled={isLoading}
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
 

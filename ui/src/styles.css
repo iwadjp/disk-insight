@@ -345,7 +345,14 @@ tbody tr:last-child td {
 
 .recycle-success-message {
   display: grid;
-  gap: 4px;
+  gap: 6px;
+}
+
+.recycle-success-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
 }
 
 /* ── Status bar ── */
