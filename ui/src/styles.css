@@ -669,7 +669,7 @@ tbody tr:last-child td {
 
 /* ── Folder navigation (left pane) ── */
 .folder-nav {
-  width: 360px;
+  width: 420px;
   flex-shrink: 0;
   background: #ffffff;
   border: 1px solid #d9e1e8;
@@ -677,8 +677,8 @@ tbody tr:last-child td {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 240px);
-  min-height: 200px;
+  max-height: calc(100vh - 200px);
+  min-height: 280px;
 }
 
 .folder-nav:focus-visible {
@@ -912,8 +912,8 @@ tbody tr:last-child td {
   background: #ffffff;
   border: 1px solid #d9e1e8;
   border-radius: 8px;
-  padding: 14px 16px;
-  margin-bottom: 16px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
 }
 
 .selected-folder-header {
@@ -1179,10 +1179,10 @@ details[open] > .reclaimable-summary::before {
 }
 
 .direct-children-title {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
-  color: #465563;
+  color: #5e6b78;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1923,7 +1923,7 @@ details[open] > .subtree-search-summary {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 18px 2px 8px;
+  padding: 12px 2px 8px;
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;

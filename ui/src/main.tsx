@@ -1389,7 +1389,7 @@ function TreeView({
 
   return (
     <aside className="folder-nav" tabIndex={0} onKeyDown={onKeyDown}>
-      <div className="folder-nav-header">Folders</div>
+      <div className="folder-nav-header">Folder tree</div>
       <div className="folder-nav-list" ref={listRef} role="tree">
         {visibleRows.length === 0 ? (
           <p className="empty-note">
@@ -2169,10 +2169,7 @@ function DirectChildrenPanel({
   return (
     <div className="direct-children-panel">
       <div className="direct-children-header">
-        <span className="direct-children-title">
-          Direct children of{" "}
-          <span className="heading-path">{dir.path}</span>
-        </span>
+        <span className="direct-children-title">Selected folder contents</span>
         <div className="direct-children-controls">
           {children !== undefined && (
             <span className="direct-children-count">
