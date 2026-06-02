@@ -3,7 +3,8 @@ use disk_insight::mft_probe::{
     compute_reclaimable_summary,
     get_drive_capacity_now as read_drive_capacity_now,
     load_minimal_scan_cache,
-    ArenaCache, DriveCapacity, JsonTreeNode, JsonTreeOutput, ReclaimableSummary, StoragePolicy,
+    ArenaCache, DriveCapacity, JsonTreeNode, JsonTreeOutput, LargestItemsResult, ReclaimableSummary,
+    StoragePolicy,
 };
 use std::collections::HashMap;
 use std::os::windows::fs::MetadataExt;
@@ -429,6 +430,46 @@ fn search_subtree(
     Ok(cache.search_subtree(parent_record_index, q, max))
 }
 
+/// Response wrapper for get_largest_items_under. Includes elapsed_ms for
+/// performance measurement before UI integration (v0.5.5-B).
+#[derive(serde::Serialize)]
+struct LargestItemsResponse {
+    folders:    Vec<JsonTreeNode>,
+    files:      Vec<JsonTreeNode>,
+    elapsed_ms: f64,
+    limit:      usize,
+}
+
+#[tauri::command]
+fn get_largest_items_under(
+    state: State<'_, AppState>,
+    record_index: u64,
+    limit: Option<usize>,
+) -> Result<LargestItemsResponse, String> {
+    let limit = limit.unwrap_or(50).min(200).max(1);
+    let t0 = std::time::Instant::now();
+    let guard = state.arena_cache.lock()
+        .map_err(|e| format!("state lock poisoned: {e}"))?;
+    let cache = guard.as_ref()
+        .ok_or_else(|| "Largest items requires live scan data. Run Scan first.".to_string())?;
+    let result: LargestItemsResult = cache.largest_items_under(record_index, limit);
+    let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
+    eprintln!(
+        "[perf] get_largest_items_under record_index={} limit={} folders={} files={} elapsed_ms={:.1}",
+        record_index,
+        limit,
+        result.folders.len(),
+        result.files.len(),
+        elapsed_ms,
+    );
+    Ok(LargestItemsResponse {
+        folders: result.folders,
+        files: result.files,
+        elapsed_ms,
+        limit,
+    })
+}
+
 #[tauri::command]
 fn get_reclaimable_summary(
     state: State<'_, AppState>,
@@ -824,6 +865,7 @@ fn main() {
             show_properties,
             get_children,
             search_subtree,
+            get_largest_items_under,
             get_reclaimable_summary,
             list_drives,
         ])

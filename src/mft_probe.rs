@@ -2878,6 +2878,93 @@ impl ArenaCache {
 
         results
     }
+
+    /// Return the largest folders (by subtree_size) and largest files (by
+    /// final_alloc) under `parent_frn`, via BFS over dir_children.
+    ///
+    /// Path reconstruction is deferred: only the top-N winners have their
+    /// paths built, keeping cost proportional to `limit` rather than subtree
+    /// size. `parent_frn` itself is NOT included in the results.
+    pub fn largest_items_under(
+        &self,
+        parent_frn: u64,
+        limit: usize,
+    ) -> LargestItemsResult {
+        use std::collections::BinaryHeap;
+        use std::cmp::Reverse;
+
+        // Min-heaps (size capped at `limit`) for folders and files.
+        // Each entry: (sort_key, node_index).
+        // We keep the *largest* items, so we evict the smallest when full.
+        let mut dir_heap:  BinaryHeap<(Reverse<u64>, usize)> = BinaryHeap::new();
+        let mut file_heap: BinaryHeap<(Reverse<u64>, usize)> = BinaryHeap::new();
+
+        let mut queue: std::collections::VecDeque<u64> = std::collections::VecDeque::new();
+        queue.push_back(parent_frn);
+
+        while let Some(dir_frn) = queue.pop_front() {
+            let child_indices = match self.dir_children.get(&dir_frn) {
+                Some(v) => v,
+                None => continue,
+            };
+            for &ci in child_indices {
+                let node = &self.nodes[ci];
+                if node.is_dir {
+                    let key = node.subtree_size;
+                    if dir_heap.len() < limit {
+                        dir_heap.push((Reverse(key), ci));
+                    } else if let Some(&(Reverse(min_key), _)) = dir_heap.peek() {
+                        if key > min_key {
+                            dir_heap.pop();
+                            dir_heap.push((Reverse(key), ci));
+                        }
+                    }
+                    queue.push_back(node.frn);
+                } else {
+                    let key = node.final_alloc;
+                    if file_heap.len() < limit {
+                        file_heap.push((Reverse(key), ci));
+                    } else if let Some(&(Reverse(min_key), _)) = file_heap.peek() {
+                        if key > min_key {
+                            file_heap.pop();
+                            file_heap.push((Reverse(key), ci));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort descending and reconstruct paths only for winners.
+        let mut dirs: Vec<(u64, usize)> = dir_heap
+            .into_iter()
+            .map(|(Reverse(k), ci)| (k, ci))
+            .collect();
+        dirs.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+
+        let mut files: Vec<(u64, usize)> = file_heap
+            .into_iter()
+            .map(|(Reverse(k), ci)| (k, ci))
+            .collect();
+        files.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+
+        let folders: Vec<JsonTreeNode> = dirs.into_iter().map(|(_, ci)| self.build_node(ci)).collect();
+        let result_files: Vec<JsonTreeNode> = files.into_iter().map(|(_, ci)| self.build_node(ci)).collect();
+
+        LargestItemsResult {
+            folders,
+            files: result_files,
+        }
+    }
+}
+
+/// Result of `ArenaCache::largest_items_under`. Folders ranked by subtree_size
+/// desc, files by final_alloc desc. Both lists have at most `limit` entries.
+/// `record_index` and `path` on each node are suitable for recycled-state
+/// matching via `isItemRecycled`.
+#[derive(serde::Serialize)]
+pub struct LargestItemsResult {
+    pub folders: Vec<JsonTreeNode>,
+    pub files:   Vec<JsonTreeNode>,
 }
 
 // Richer model returned to callers (Tauri layer). `output` is what the UI
