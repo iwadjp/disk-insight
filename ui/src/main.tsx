@@ -188,6 +188,13 @@ type RecycleSuccess = {
   itemCount: number;
 };
 
+type LargestItemsResponse = {
+  folders: TreeNode[];
+  files: TreeNode[];
+  elapsed_ms: number;
+  limit: number;
+};
+
 const TOP_OPTIONS = [10, 30, 50, 100, 200, 500];
 const LARGE_FOLDER_THRESHOLD = 200;
 const LARGE_TREE_THRESHOLD = 1000;
@@ -401,6 +408,16 @@ async function getReclaimableSummary(
   return invoke<ReclaimableSummary>("get_reclaimable_summary", { recordIndex, path, drive });
 }
 
+async function getLargestItemsUnder(
+  recordIndex: number,
+  limit: number,
+): Promise<LargestItemsResponse> {
+  if (!isTauriRuntime()) {
+    throw new Error("Largest items is available only in the Tauri desktop app.");
+  }
+  return invoke<LargestItemsResponse>("get_largest_items_under", { recordIndex, limit });
+}
+
 function treeNodeToDirEntry(node: TreeNode): DirectoryEntry {
   return {
     path: node.path,
@@ -408,6 +425,16 @@ function treeNodeToDirEntry(node: TreeNode): DirectoryEntry {
     subtree_size: node.subtree_size,
     direct_file_size: node.direct_file_size,
     child_count: node.child_count,
+  };
+}
+
+// For files from LargestItemsResult: subtree_size = final_alloc (set during arena build)
+function treeNodeToFileEntry(node: TreeNode): FileEntry {
+  return {
+    path: node.path,
+    record_index: node.record_index,
+    parent_frn: node.parent_record_index,
+    final_allocated_size: node.subtree_size,
   };
 }
 
@@ -2240,6 +2267,9 @@ function App() {
   const [recycleError, setRecycleError] = useState<string | null>(null);
   const [recycleSuccess, setRecycleSuccess] = useState<RecycleSuccess | null>(null);
   const [recycledItems, setRecycledItems] = useState<RecycledItem[]>([]);
+  const [selectedLargestItems, setSelectedLargestItems] = useState<LargestItemsResponse | null>(null);
+  const [largestItemsLoading, setLargestItemsLoading] = useState(false);
+  const [largestItemsError, setLargestItemsError] = useState<string | null>(null);
   const scanRestoreRef = useRef<{ path: string; drive: string } | null>(null);
   const scanGenerationRef = useRef(0);
   const cancelMessageTimerRef = useRef<number | null>(null);
@@ -2459,6 +2489,43 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDir?.record_index, selectedDir?.path, data?.summary.drive, sourceKind]);
 
+  useEffect(() => {
+    if (!selectedDir || sourceKind !== "live") {
+      setSelectedLargestItems(null);
+      setLargestItemsError(null);
+      setLargestItemsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    let debounceId: number | null = null;
+    setLargestItemsLoading(true);
+    setLargestItemsError(null);
+    debounceId = window.setTimeout(() => {
+      debounceId = null;
+      getLargestItemsUnder(selectedDir.record_index, 50)
+        .then((result) => {
+          if (cancelled) return;
+          setSelectedLargestItems(result);
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          setSelectedLargestItems(null);
+          setLargestItemsError(String(err));
+        })
+        .finally(() => {
+          if (!cancelled) setLargestItemsLoading(false);
+        });
+    }, 200);
+    return () => {
+      cancelled = true;
+      if (debounceId !== null) {
+        window.clearTimeout(debounceId);
+        setLargestItemsLoading(false);
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDir?.record_index, sourceKind]);
+
   function runLoad(
     loader: () => Promise<DiskInsightOutput>,
     msg: string,
@@ -2500,6 +2567,9 @@ function App() {
     setReclaimable(null);
     setReclaimableLoading(false);
     setReclaimableError(null);
+    setSelectedLargestItems(null);
+    setLargestItemsLoading(false);
+    setLargestItemsError(null);
     setFocusedRecordIndex(null);
     setRecycledItems([]);
     loader()
@@ -2574,6 +2644,9 @@ function App() {
     setReclaimable(null);
     setReclaimableLoading(false);
     setReclaimableError(null);
+    setSelectedLargestItems(null);
+    setLargestItemsLoading(false);
+    setLargestItemsError(null);
     setFocusedRecordIndex(null);
 
     let showedCachedResult = false;
@@ -3598,6 +3671,53 @@ function App() {
                     recycledItems={recycledItems}
                     onCopyError={handleCopyError}
                   />
+                </div>
+              )}
+              {selectedDir && (
+                <div className="true-largest-section">
+                  <div className="true-largest-header">
+                    {isDriveRoot(selectedDir.path)
+                      ? <>Largest items on <span className="heading-path">{selectedDir.path}</span></>
+                      : <>Largest items in <span className="heading-path">{selectedDir.path}</span></>}
+                    {selectedLargestItems?.elapsed_ms !== undefined && !largestItemsLoading && (
+                      <span className="true-largest-timing">Computed in {selectedLargestItems.elapsed_ms.toFixed(0)} ms</span>
+                    )}
+                  </div>
+                  {sourceKind !== "live" ? (
+                    <div className="true-largest-note">Largest items require a live scan.</div>
+                  ) : largestItemsLoading ? (
+                    <div className="true-largest-loading">Loading largest items…</div>
+                  ) : largestItemsError ? (
+                    <div className="true-largest-error">{largestItemsError}</div>
+                  ) : selectedLargestItems ? (
+                    <>
+                      <DirectoriesTable
+                        rows={selectedLargestItems.folders.map(treeNodeToDirEntry)}
+                        title="Largest folders in this folder"
+                        totalSize={data.summary.total_final_allocated}
+                        basePath={selectedDir.path}
+                        advancedMode={advancedMode}
+                        onOpenExplorer={handleOpenExplorer}
+                        onShowProperties={handleShowProperties}
+                        onRequestRecycle={handleRequestRecycle}
+                        recycledItems={recycledItems}
+                        onCopyError={handleCopyError}
+                      />
+                      <FilesTable
+                        rows={selectedLargestItems.files.map(treeNodeToFileEntry)}
+                        title="Largest files in this folder"
+                        totalSize={data.summary.total_final_allocated}
+                        basePath={selectedDir.path}
+                        advancedMode={advancedMode}
+                        onOpenLocation={handleOpenExplorer}
+                        onSelectFile={handleSelectFile}
+                        onShowProperties={handleShowProperties}
+                        onRequestRecycle={handleRequestRecycle}
+                        recycledItems={recycledItems}
+                        onCopyError={handleCopyError}
+                      />
+                    </>
+                  ) : null}
                 </div>
               )}
               <div className="largest-items-section">

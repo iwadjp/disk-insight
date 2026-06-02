@@ -1898,6 +1898,60 @@ details[open] > .subtree-search-summary {
   border-top-right-radius: 0;
 }
 
+/* ── True largest items section (get_largest_items_under) ── */
+.true-largest-section {
+  margin-bottom: 4px;
+}
+
+.true-largest-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 18px 2px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #465563;
+  letter-spacing: 0.05em;
+  border-top: 2px solid #d9e1e8;
+}
+
+.true-largest-header .heading-path {
+  text-transform: none;
+  letter-spacing: 0;
+  color: #17202a;
+  font-size: 12px;
+}
+
+.true-largest-timing {
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #a0adb8;
+  font-style: italic;
+  margin-left: auto;
+}
+
+.true-largest-note {
+  font-size: 11px;
+  color: #a0adb8;
+  font-style: italic;
+  padding: 4px 2px 8px;
+}
+
+.true-largest-loading {
+  font-size: 11px;
+  color: #8a97a4;
+  padding: 4px 2px 8px;
+}
+
+.true-largest-error {
+  font-size: 11px;
+  color: #c0392b;
+  padding: 4px 2px 8px;
+}
+
 /* ── Largest items section: clear visual separator before TopDirs/TopFiles ── */
 .largest-items-section {
   margin-top: 4px;
