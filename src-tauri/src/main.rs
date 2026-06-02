@@ -837,6 +837,61 @@ fn show_properties(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_terminal_at(path: String, is_dir: bool) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    // Required for GUI apps: without CREATE_NEW_CONSOLE the child process
+    // inherits the parent's (non-existent) console and opens no visible window.
+    const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+
+    eprintln!("[terminal] received  path={path:?}  is_dir={is_dir}");
+
+    if path.is_empty() {
+        return Err("path must not be empty".to_string());
+    }
+    let input = Path::new(&path);
+    if !input.exists() {
+        return Err(format!("path does not exist: {path}"));
+    }
+    let canonical = std::fs::canonicalize(input)
+        .map_err(|e| format!("cannot resolve path: {e}"))?;
+    let canonical_str = normalize_path_for_compare(&canonical);
+    eprintln!("[terminal] canonical={canonical_str:?}");
+
+    if drive_root_from_normalized(&canonical_str).is_none() {
+        return Err("Only local drive paths are supported.".to_string());
+    }
+    let working_dir = if is_dir {
+        canonical.clone()
+    } else {
+        canonical
+            .parent()
+            .ok_or_else(|| "cannot determine parent directory for this path".to_string())?
+            .to_path_buf()
+    };
+    if !working_dir.is_dir() {
+        return Err(format!(
+            "working directory is not a folder: {}",
+            working_dir.display()
+        ));
+    }
+    eprintln!("[terminal] working_dir={}  spawning powershell.exe", working_dir.display());
+
+    let result = std::process::Command::new("powershell.exe")
+        .arg("-NoExit")
+        .current_dir(&working_dir)
+        .creation_flags(CREATE_NEW_CONSOLE)
+        .spawn();
+
+    match &result {
+        Ok(child) => eprintln!("[terminal] spawn ok  pid={}", child.id()),
+        Err(e)    => eprintln!("[terminal] spawn error: {e}"),
+    }
+
+    result.map_err(|e| format!("failed to open PowerShell: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
 fn list_drives() -> Vec<DriveInfo> {
     use windows::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives};
     use windows::core::PCWSTR;
@@ -879,6 +934,7 @@ fn main() {
             open_in_explorer,
             select_in_explorer,
             show_properties,
+            open_terminal_at,
             get_children,
             get_children_limited,
             search_subtree,

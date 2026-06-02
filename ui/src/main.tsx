@@ -373,6 +373,13 @@ async function selectInExplorer(path: string): Promise<void> {
   return invoke<void>("select_in_explorer", { path });
 }
 
+async function openTerminalAt(path: string, isDir: boolean): Promise<void> {
+  if (!isTauriRuntime()) {
+    throw new Error("Terminal is available only in the Tauri desktop app.");
+  }
+  return invoke<void>("open_terminal_at", { path, isDir });
+}
+
 async function showProperties(path: string): Promise<void> {
   if (!isTauriRuntime()) {
     throw new Error("Show properties is available only in the Tauri desktop app.");
@@ -826,11 +833,11 @@ function SafeContextMenu({
   onCopyError: (msg: string) => void;
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const menuWidth = 220;
+  const menuWidth = 250;
   const showRecycleItem = advancedMode === true && onRequestRecycle !== undefined;
-  // 4 safe items (~30px each) + 8px base padding = 128px base.
+  // 5 safe items (~30px each) + 8px base padding = 158px base.
   // Advanced section adds separator(9) + section label(20) + item(30) = 59px.
-  const menuHeight = 128 + (showRecycleItem ? 59 : 0);
+  const menuHeight = 158 + (showRecycleItem ? 59 : 0);
   const x = Math.min(target.x, window.innerWidth - menuWidth - 4);
   const y = Math.min(target.y, window.innerHeight - menuHeight - 4);
 
@@ -899,6 +906,17 @@ function SafeContextMenu({
         }}
       >
         Show in Explorer
+      </button>
+      <button
+        className="context-menu-item"
+        onClick={() => {
+          openTerminalAt(target.path, target.isDirectory).catch((err: unknown) => {
+            onCopyError(err instanceof Error ? err.message : String(err));
+          });
+          onClose();
+        }}
+      >
+        Open terminal here
       </button>
       {onShowProperties && (
         <button
