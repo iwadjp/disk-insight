@@ -826,11 +826,11 @@ function SafeContextMenu({
   onCopyError: (msg: string) => void;
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const menuWidth = 196;
+  const menuWidth = 220;
   const showRecycleItem = advancedMode === true && onRequestRecycle !== undefined;
-  // Height per item ~32px + 8px base padding; dir: 4 items, file: 5 items.
-  // Advanced Mode adds one separator and one item.
-  const menuHeight = (target.isDirectory ? 138 : 170) + (showRecycleItem ? 43 : 0);
+  // 4 safe items (~30px each) + 8px base padding = 128px base.
+  // Advanced section adds separator(9) + section label(20) + item(30) = 59px.
+  const menuHeight = 128 + (showRecycleItem ? 59 : 0);
   const x = Math.min(target.x, window.innerWidth - menuWidth - 4);
   const y = Math.min(target.y, window.innerHeight - menuHeight - 4);
 
@@ -884,23 +884,22 @@ function SafeContextMenu({
       style={{ left: x, top: y }}
       onContextMenu={(e) => e.preventDefault()}
     >
+      {/* Explorer handoff: dirs = open, files = reveal/select */}
       <button
         className="context-menu-item"
         onClick={() => {
-          onOpenExplorer(target.isDirectory ? target.path : getParentDir(target.path));
+          if (target.isDirectory) {
+            onOpenExplorer(target.path);
+          } else if (onSelectFile) {
+            onSelectFile(target.path);
+          } else {
+            onOpenExplorer(getParentDir(target.path));
+          }
           onClose();
         }}
       >
-        {target.isDirectory ? "Open folder" : "Open containing folder"}
+        Show in Explorer
       </button>
-      {!target.isDirectory && onSelectFile && (
-        <button
-          className="context-menu-item"
-          onClick={() => { onSelectFile(target.path); onClose(); }}
-        >
-          Select in Explorer
-        </button>
-      )}
       {onShowProperties && (
         <button
           className="context-menu-item"
@@ -918,6 +917,7 @@ function SafeContextMenu({
       {showRecycleItem && (
         <>
           <div className="context-menu-separator" role="separator" />
+          <div className="context-menu-section-label">Advanced</div>
           <button
             className={`context-menu-item context-menu-item--danger${isAlreadyRecycled ? " context-menu-item--disabled" : ""}`}
             disabled={isAlreadyRecycled}
@@ -927,7 +927,7 @@ function SafeContextMenu({
             }}
             title={isAlreadyRecycled ? "Already moved to Recycle Bin" : undefined}
           >
-            {isAlreadyRecycled ? "Already moved to Recycle Bin" : "Move to Recycle Bin"}
+            {isAlreadyRecycled ? "Already in Recycle Bin" : "Move to Recycle Bin"}
           </button>
         </>
       )}

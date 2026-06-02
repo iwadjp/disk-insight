@@ -1640,6 +1640,17 @@ details[open] > .reclaimable-summary::before {
   background: #e5e7eb;
 }
 
+.context-menu-section-label {
+  padding: 3px 14px 2px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #8b949e;
+  pointer-events: none;
+  user-select: none;
+}
+
 .context-menu-item--danger {
   color: #b91c1c;
   font-weight: 650;
