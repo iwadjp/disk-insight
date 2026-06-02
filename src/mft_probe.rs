@@ -2842,6 +2842,20 @@ impl ArenaCache {
             .unwrap_or_default()
     }
 
+    /// Like get_children_for but returns only the top `limit` entries (already
+    /// sorted by subtree_size desc in dir_children) plus the true total count.
+    /// Path reconstruction runs for at most `limit` nodes — not the full list.
+    pub fn get_children_for_limited(&self, parent_frn: u64, limit: usize) -> ChildrenLimitedResult {
+        match self.dir_children.get(&parent_frn) {
+            None => ChildrenLimitedResult { nodes: vec![], total_count: 0 },
+            Some(v) => {
+                let total_count = v.len();
+                let nodes = v.iter().take(limit).map(|&ci| self.build_node(ci)).collect();
+                ChildrenLimitedResult { nodes, total_count }
+            }
+        }
+    }
+
     /// Search descendants of `parent_frn` for nodes whose name contains `query`
     /// (case-insensitive). Returns up to `max_results` matching nodes via BFS.
     /// `parent_frn` itself is not included in results. Paths are reconstructed
@@ -2965,6 +2979,14 @@ impl ArenaCache {
 pub struct LargestItemsResult {
     pub folders: Vec<JsonTreeNode>,
     pub files:   Vec<JsonTreeNode>,
+}
+
+/// Result of `ArenaCache::get_children_for_limited`. Contains the top `limit`
+/// children (subtree_size desc) plus the true total count for display.
+#[derive(serde::Serialize)]
+pub struct ChildrenLimitedResult {
+    pub nodes:       Vec<JsonTreeNode>,
+    pub total_count: usize,
 }
 
 // Richer model returned to callers (Tauri layer). `output` is what the UI

@@ -195,6 +195,11 @@ type LargestItemsResponse = {
   limit: number;
 };
 
+type ChildrenLimitedResult = {
+  nodes: TreeNode[];
+  total_count: number;
+};
+
 const TOP_OPTIONS = [10, 30, 50, 100, 200, 500];
 const LARGE_FOLDER_THRESHOLD = 200;
 const LARGE_TREE_THRESHOLD = 1000;
@@ -417,6 +422,16 @@ async function getLargestItemsUnder(
     throw new Error("Largest items is available only in the Tauri desktop app.");
   }
   return invoke<LargestItemsResponse>("get_largest_items_under", { recordIndex, limit });
+}
+
+async function getChildrenLimited(
+  parentRecordIndex: number,
+  limit: number,
+): Promise<ChildrenLimitedResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("Children API is available only in the Tauri desktop app.");
+  }
+  return invoke<ChildrenLimitedResult>("get_children_limited", { parentRecordIndex, limit });
 }
 
 function treeNodeToDirEntry(node: TreeNode): DirectoryEntry {
@@ -1986,6 +2001,7 @@ function SubtreeSearchPanel({
 function DirectChildrenPanel({
   dir,
   children,
+  totalCount,
   isLoading,
   error,
   sourceKind,
@@ -2008,6 +2024,7 @@ function DirectChildrenPanel({
 }: {
   dir: DirectoryEntry;
   children: TreeNode[] | undefined;
+  totalCount?: number;
   isLoading: boolean;
   error: string | null;
   sourceKind: SourceKind | null;
@@ -2125,9 +2142,9 @@ function DirectChildrenPanel({
             </div>
           );
         })}
-        {sorted.length > DIRECT_CHILDREN_DISPLAY_LIMIT && (
+        {totalCount !== undefined && totalCount > displayEntries.length && (
           <div className="direct-children-truncation-note">
-            Showing top {formatNumber(DIRECT_CHILDREN_DISPLAY_LIMIT)} of {formatNumber(sorted.length)} entries
+            Showing top {formatNumber(displayEntries.length)} of {formatNumber(totalCount)} entries
           </div>
         )}
       </div>
@@ -2270,8 +2287,9 @@ function App() {
   const [childrenErrors, setChildrenErrors] = useState<Record<number, string>>({});
   const [treeError, setTreeError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [selectedChildrenLoading, setSelectedChildrenLoading] = useState(false);
-  const [selectedChildrenError, setSelectedChildrenError] = useState<string | null>(null);
+  const [selectedDirLimited, setSelectedDirLimited] = useState<ChildrenLimitedResult | null>(null);
+  const [selectedDirLimitedLoading, setSelectedDirLimitedLoading] = useState(false);
+  const [selectedDirLimitedError, setSelectedDirLimitedError] = useState<string | null>(null);
   const [reclaimable, setReclaimable] = useState<ReclaimableSummary | null>(null);
   const [reclaimableLoading, setReclaimableLoading] = useState(false);
   const [reclaimableError, setReclaimableError] = useState<string | null>(null);
@@ -2444,39 +2462,38 @@ function App() {
 
   useEffect(() => {
     if (!selectedDir || sourceKind !== "live") {
-      setSelectedChildrenLoading(false);
-      setSelectedChildrenError(null);
+      setSelectedDirLimited(null);
+      setSelectedDirLimitedLoading(false);
+      setSelectedDirLimitedError(null);
       return;
     }
-    const id = selectedDir.record_index;
-    if (childrenByParent[id] !== undefined) {
-      setSelectedChildrenLoading(false);
-      setSelectedChildrenError(null);
-      return;
-    }
-    // Drive root: use already-loaded root_children instead of a Tauri call
+    // Drive root: use already-loaded root_children directly (no IPC needed)
     if (isDriveRoot(selectedDir.path) && data?.root_children !== undefined) {
-      setChildrenByParent((prev) => ({ ...prev, [id]: data.root_children! }));
-      setSelectedChildrenLoading(false);
-      setSelectedChildrenError(null);
+      const rc = data.root_children;
+      setSelectedDirLimited({
+        nodes: rc.slice(0, DIRECT_CHILDREN_DISPLAY_LIMIT),
+        total_count: rc.length,
+      });
+      setSelectedDirLimitedLoading(false);
+      setSelectedDirLimitedError(null);
       return;
     }
     let cancelled = false;
-    setSelectedChildrenLoading(true);
-    setSelectedChildrenError(null);
-    getChildren(id)
-      .then((kids) => {
+    setSelectedDirLimitedLoading(true);
+    setSelectedDirLimitedError(null);
+    getChildrenLimited(selectedDir.record_index, DIRECT_CHILDREN_DISPLAY_LIMIT)
+      .then((result) => {
         if (cancelled) return;
-        setChildrenByParent((prev) => ({ ...prev, [id]: kids }));
-        setSelectedChildrenLoading(false);
+        setSelectedDirLimited(result);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setSelectedChildrenError(err instanceof Error ? err.message : String(err));
-        setSelectedChildrenLoading(false);
+        setSelectedDirLimitedError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setSelectedDirLimitedLoading(false);
       });
     return () => { cancelled = true; };
-    // childrenByParent intentionally omitted: cache check at effect start is sufficient
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDir, sourceKind]);
 
@@ -2581,8 +2598,9 @@ function App() {
     setChildrenByParent({});
     setChildrenErrors({});
     setTreeError(null);
-    setSelectedChildrenLoading(false);
-    setSelectedChildrenError(null);
+    setSelectedDirLimited(null);
+    setSelectedDirLimitedLoading(false);
+    setSelectedDirLimitedError(null);
     setReclaimable(null);
     setReclaimableLoading(false);
     setReclaimableError(null);
@@ -2658,8 +2676,9 @@ function App() {
     setChildrenByParent({});
     setChildrenErrors({});
     setTreeError(null);
-    setSelectedChildrenLoading(false);
-    setSelectedChildrenError(null);
+    setSelectedDirLimited(null);
+    setSelectedDirLimitedLoading(false);
+    setSelectedDirLimitedError(null);
     setReclaimable(null);
     setReclaimableLoading(false);
     setReclaimableError(null);
@@ -3315,13 +3334,12 @@ function App() {
   const driveLabel = parseDriveLetter(driveInput) ?? driveInput.slice(0, 1).toUpperCase();
   const scanDisabled = isLoading || parseDriveLetter(driveInput) === null;
   const currentFilterQ = currentFilterQuery.trim().toLowerCase();
-  const selectedDirChildren = selectedDir ? childrenByParent[selectedDir.record_index] : undefined;
   const filteredChildrenCount = useMemo(() => {
-    if (!currentFilterQ || selectedDirChildren === undefined) return null;
-    return selectedDirChildren.filter(
+    if (!currentFilterQ || !selectedDirLimited) return null;
+    return selectedDirLimited.nodes.filter(
       (n) => n.name.toLowerCase().includes(currentFilterQ) || n.path.toLowerCase().includes(currentFilterQ)
     ).length;
-  }, [selectedDirChildren, currentFilterQ]);
+  }, [selectedDirLimited, currentFilterQ]);
   const scanPhaseText = scanProgress ? phaseLabel(scanProgress.phase) : "Starting scan";
   const scanElapsedMs = scanProgress ? scanProgress.elapsed_ms : localElapsedMs;
   const scanDriveLabel = scanProgress?.drive ?? `${driveLabel}:`;
@@ -3646,8 +3664,8 @@ function App() {
                 {currentFilterQ && (
                   <div className="top-search-count">
                     Showing{" "}
-                    {selectedDirChildren !== undefined && filteredChildrenCount !== null && (
-                      <>{formatNumber(filteredChildrenCount)} / {formatNumber(selectedDirChildren.length)} children,{" "}</>
+                    {selectedDirLimited !== null && filteredChildrenCount !== null && (
+                      <>{formatNumber(filteredChildrenCount)} / {formatNumber(selectedDirLimited.total_count)} children,{" "}</>
                     )}
                     {formatNumber(filteredTopDirs.length)} / {formatNumber(topDirsBase.length)} dirs,{" "}
                     {formatNumber(filteredTopFiles.length)} / {formatNumber(topFilesBase.length)} files
@@ -3658,9 +3676,10 @@ function App() {
                 <div className="folder-explore-section">
                   <DirectChildrenPanel
                     dir={selectedDir}
-                    children={childrenByParent[selectedDir.record_index]}
-                    isLoading={selectedChildrenLoading}
-                    error={selectedChildrenError}
+                    children={selectedDirLimited?.nodes}
+                    totalCount={selectedDirLimited?.total_count}
+                    isLoading={selectedDirLimitedLoading}
+                    error={selectedDirLimitedError}
                     sourceKind={sourceKind}
                     currentFilterQuery={currentFilterQuery}
                     totalSize={data.summary.total_final_allocated}

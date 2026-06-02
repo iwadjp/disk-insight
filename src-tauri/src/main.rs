@@ -3,8 +3,8 @@ use disk_insight::mft_probe::{
     compute_reclaimable_summary,
     get_drive_capacity_now as read_drive_capacity_now,
     load_minimal_scan_cache,
-    ArenaCache, DriveCapacity, JsonTreeNode, JsonTreeOutput, LargestItemsResult, ReclaimableSummary,
-    StoragePolicy,
+    ArenaCache, ChildrenLimitedResult, DriveCapacity, JsonTreeNode, JsonTreeOutput,
+    LargestItemsResult, ReclaimableSummary, StoragePolicy,
 };
 use std::collections::HashMap;
 use std::os::windows::fs::MetadataExt;
@@ -405,6 +405,22 @@ fn get_children(
     }
 
     Ok(children)
+}
+
+/// Like get_children but returns only the top `limit` entries plus total_count.
+/// No lazy cache — path reconstruction is O(limit), not O(total), so already fast.
+#[tauri::command]
+fn get_children_limited(
+    state: State<'_, AppState>,
+    parent_record_index: u64,
+    limit: Option<usize>,
+) -> Result<ChildrenLimitedResult, String> {
+    let limit = limit.unwrap_or(300).min(1000).max(1);
+    let guard = state.arena_cache.lock()
+        .map_err(|e| format!("state lock poisoned: {e}"))?;
+    let cache = guard.as_ref()
+        .ok_or_else(|| "No live scan data. Run Scan first.".to_string())?;
+    Ok(cache.get_children_for_limited(parent_record_index, limit))
 }
 
 #[tauri::command]
@@ -864,6 +880,7 @@ fn main() {
             select_in_explorer,
             show_properties,
             get_children,
+            get_children_limited,
             search_subtree,
             get_largest_items_under,
             get_reclaimable_summary,
