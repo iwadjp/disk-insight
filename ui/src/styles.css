@@ -1921,6 +1921,16 @@ details[open] > .subtree-search-summary {
   font-size: 12px;
 }
 
+.largest-items-note {
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #8a97a4;
+  font-style: italic;
+}
+
 /* ── Recycled item visual state ── */
 .tree-row--recycled {
   opacity: 0.65;

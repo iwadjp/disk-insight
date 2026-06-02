@@ -3603,8 +3603,11 @@ function App() {
               <div className="largest-items-section">
                 <div className="largest-items-header">
                   {selectedDir && !isDriveRoot(selectedDir.path)
-                    ? <>Largest items under <span className="heading-path">{selectedDir.path}</span></>
-                    : "Largest items"}
+                    ? <>Top scan results under <span className="heading-path">{selectedDir.path}</span></>
+                    : "Top scan results"}
+                  <div className="largest-items-note">
+                    Filtered from the global Top N scan results, not a full subtree ranking.
+                  </div>
                 </div>
                 <DirectoriesTable
                   rows={filteredTopDirs}
@@ -3616,14 +3619,14 @@ function App() {
                   onRequestRecycle={handleRequestRecycle}
                   recycledItems={recycledItems}
                   onCopyError={handleCopyError}
-                  title="Largest folders"
+                  title="Top folders from scan results"
                 />
                 <FilesTable
                   rows={filteredTopFiles}
                   totalSize={data.summary.total_final_allocated}
                   basePath={selectedDir?.path}
                   advancedMode={advancedMode}
-                  title="Largest files"
+                  title="Top files from scan results"
                   onOpenLocation={handleOpenExplorer}
                   onSelectFile={handleSelectFile}
                   onShowProperties={handleShowProperties}
