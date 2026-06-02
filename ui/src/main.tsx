@@ -1274,6 +1274,7 @@ type TreeRowProps = {
   onToggleExpand: (node: TreeNode) => void;
   onSelect: (node: TreeNode) => void;
   onContextMenu: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
+  onKeyDown: (e: React.KeyboardEvent) => void;
 };
 
 function TreeNodeRow({
@@ -1288,12 +1289,13 @@ function TreeNodeRow({
   onToggleExpand,
   onSelect,
   onContextMenu,
+  onKeyDown,
 }: TreeRowProps) {
   const isDir       = node.is_directory;
   const isExpanded  = expandedIds.has(node.record_index);
   const isLoading   = loadingIds.has(node.record_index);
   const isSelected  = selectedRecordIndex === node.record_index;
-  const isFocused   = isDir && focusedRecordIndex === node.record_index;
+  const isFocused   = focusedRecordIndex === node.record_index; // files and dirs
   const indent      = 8 + depth * 16;
   const displayName = node.name || node.path;
   const barPct      = totalSize > 0 ? Math.min(100, (node.subtree_size / totalSize) * 100) : 0;
@@ -1312,7 +1314,9 @@ function TreeNodeRow({
       style={{ paddingLeft: indent }}
       data-record-index={node.record_index}
       role="treeitem"
+      tabIndex={isFocused ? 0 : -1}
       aria-expanded={isDir ? isExpanded : undefined}
+      onKeyDown={onKeyDown}
       onContextMenu={(e) => onContextMenu(e, node)}
     >
       {barPct > 0 && <div className="tree-size-bar" style={{ width: `${barPct}%` }} />}
@@ -1373,6 +1377,7 @@ function TreeView({
   onSelect,
   onContextMenu,
   onKeyDown,
+  navRef,
 }: {
   rootCount: number;
   visibleRows: VisibleTreeRow[];
@@ -1388,6 +1393,7 @@ function TreeView({
   onSelect: (node: TreeNode) => void;
   onContextMenu: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
+  navRef?: React.RefObject<HTMLElement | null>;
 }) {
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -1409,7 +1415,7 @@ function TreeView({
   }, [focusedRecordIndex]);
 
   return (
-    <aside className="folder-nav" tabIndex={0} onKeyDown={onKeyDown}>
+    <aside ref={navRef} className="folder-nav" tabIndex={0} onKeyDown={onKeyDown}>
       <div className="folder-nav-header">Folder tree</div>
       <div className="folder-nav-list" ref={listRef} role="tree">
         {visibleRows.length === 0 ? (
@@ -1457,6 +1463,7 @@ function TreeView({
                 onToggleExpand={onToggleExpand}
                 onSelect={onSelect}
                 onContextMenu={onContextMenu}
+                onKeyDown={onKeyDown}
               />
             )
           )
@@ -2359,6 +2366,7 @@ function App() {
   const scanGenerationRef = useRef(0);
   const cancelMessageTimerRef = useRef<number | null>(null);
   const recycleRefreshPendingRef = useRef(false);
+  const treeNavRef = useRef<HTMLElement | null>(null);
 
   const visibleRows = useMemo(() => {
     const t0 = performance.now();
@@ -2878,61 +2886,53 @@ function App() {
     const navKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "Enter"];
     if (!navKeys.includes(e.key)) return;
     e.preventDefault();
+    e.stopPropagation(); // prevent double-fire when called from both row div and folder-nav
 
-    const folderRows = visibleRows.filter(
-      (r) => !r.isEmpty && !r.nodeError && r.treeTruncated === undefined && r.node.is_directory,
+    const allRows = visibleRows.filter(
+      (r) => !r.isEmpty && !r.nodeError && r.treeTruncated === undefined,
     );
-    if (folderRows.length === 0) return;
+    if (allRows.length === 0) return;
 
     const currentIdx =
       focusedRecordIndex !== null
-        ? folderRows.findIndex((r) => r.node.record_index === focusedRecordIndex)
+        ? allRows.findIndex((r) => r.node.record_index === focusedRecordIndex)
         : -1;
-    const currentRow = currentIdx >= 0 ? folderRows[currentIdx] : null;
+    const currentRow = currentIdx >= 0 ? allRows[currentIdx] : null;
 
-    function moveTo(idx: number) {
-      const row = folderRows[Math.max(0, Math.min(folderRows.length - 1, idx))];
+    function moveToRow(idx: number) {
+      const row = allRows[Math.max(0, Math.min(allRows.length - 1, idx))];
       setFocusedRecordIndex(row.node.record_index);
-      handleSelectTreeNode(row.node);
+      if (row.node.is_directory) handleSelectTreeNode(row.node);
     }
 
     switch (e.key) {
       case "ArrowDown":
-        moveTo(currentIdx < 0 ? 0 : Math.min(folderRows.length - 1, currentIdx + 1));
+        moveToRow(currentIdx < 0 ? 0 : Math.min(allRows.length - 1, currentIdx + 1));
         break;
       case "ArrowUp":
-        moveTo(currentIdx < 0 ? 0 : Math.max(0, currentIdx - 1));
+        moveToRow(currentIdx < 0 ? 0 : Math.max(0, currentIdx - 1));
         break;
       case "Home":
-        moveTo(0);
+        moveToRow(0);
         break;
       case "End":
-        moveTo(folderRows.length - 1);
+        moveToRow(allRows.length - 1);
         break;
       case "Enter":
-        if (currentRow) handleSelectTreeNode(currentRow.node);
+        if (currentRow && currentRow.node.is_directory) handleSelectTreeNode(currentRow.node);
         break;
       case "ArrowRight": {
-        if (!currentRow) { moveTo(0); break; }
+        if (!currentRow) { moveToRow(0); break; }
+        if (!currentRow.node.is_directory) break; // files don't expand
         const curId = currentRow.node.record_index;
         if (!expandedIds.has(curId)) {
-          handleToggleExpand(currentRow.node);
+          handleToggleExpand(currentRow.node); // uses getChildrenLimited — WinSxS-safe
         } else {
-          // Find first directory child in visibleRows after the current node
-          const curVisIdx = visibleRows.findIndex(
-            (r) =>
-              !r.isEmpty && !r.nodeError && r.treeTruncated === undefined &&
-              r.node.record_index === curId,
-          );
-          for (let i = curVisIdx + 1; i < visibleRows.length; i++) {
-            const r = visibleRows[i];
-            if (r.isEmpty || r.nodeError || r.treeTruncated !== undefined) continue;
-            if (r.depth <= currentRow.depth) break; // exited subtree
-            if (r.node.is_directory) {
-              setFocusedRecordIndex(r.node.record_index);
-              handleSelectTreeNode(r.node);
-              break;
-            }
+          // Move to first child row (any type)
+          for (let i = currentIdx + 1; i < allRows.length; i++) {
+            if (allRows[i].depth <= currentRow.depth) break; // exited subtree
+            moveToRow(i);
+            break;
           }
         }
         break;
@@ -2940,13 +2940,14 @@ function App() {
       case "ArrowLeft": {
         if (!currentRow) break;
         const curId = currentRow.node.record_index;
-        if (expandedIds.has(curId)) {
-          handleToggleExpand(currentRow.node);
+        if (currentRow.node.is_directory && expandedIds.has(curId)) {
+          handleToggleExpand(currentRow.node); // collapse
         } else {
-          const parentIdx = folderRows.findIndex(
+          // Move to parent folder
+          const parentIdx = allRows.findIndex(
             (r) => r.node.record_index === currentRow.node.parent_record_index,
           );
-          if (parentIdx >= 0) moveTo(parentIdx);
+          if (parentIdx >= 0) moveToRow(parentIdx);
         }
         break;
       }
@@ -3375,6 +3376,15 @@ function App() {
     return () => document.removeEventListener("contextmenu", handler);
   }, []);
 
+  // Auto-focus the tree when scan data loads so arrow keys work immediately.
+  // Skip if the user is actively typing in an input or select.
+  useEffect(() => {
+    if (!data || !treeNavRef.current) return;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && (active.tagName === "INPUT" || active.tagName === "SELECT")) return;
+    treeNavRef.current.focus({ preventScroll: true });
+  }, [data]);
+
   useEffect(() => {
     if (!isLoading || scanStartMsRef.current === null) return;
     const t0 = scanStartMsRef.current;
@@ -3711,6 +3721,7 @@ function App() {
               onSelect={handleSelectTreeNode}
               onContextMenu={handleTreeContextMenu}
               onKeyDown={handleTreeKeyDown}
+              navRef={treeNavRef}
             />
             {treeContextMenu && (
               <SafeContextMenu
