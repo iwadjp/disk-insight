@@ -766,10 +766,10 @@ tbody tr:last-child td {
   outline-offset: -2px;
 }
 
-/* When a row is both selected and keyboard-focused, the outline competes with
-   the left accent; tone it down so the selection styling stays dominant. */
+/* When a row is both selected (active) and keyboard-focused, the blue background
+   is sufficient; suppress the outline so there's only one visual indicator. */
 .tree-row--active.tree-row--keyboard-focused {
-  outline-color: rgba(26, 86, 219, 0.35);
+  outline: none;
 }
 
 .tree-row--file {

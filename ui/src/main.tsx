@@ -1294,8 +1294,13 @@ function TreeNodeRow({
   const isDir       = node.is_directory;
   const isExpanded  = expandedIds.has(node.record_index);
   const isLoading   = loadingIds.has(node.record_index);
-  const isSelected  = selectedRecordIndex === node.record_index;
-  const isFocused   = focusedRecordIndex === node.record_index; // files and dirs
+  // In keyboard mode (focusedRecordIndex set), selection follows the focused row
+  // so the blue highlight and the focus indicator always land on the same row.
+  // In mouse-only mode (focusedRecordIndex null), fall back to selectedDir.
+  const isSelected  = focusedRecordIndex !== null
+    ? focusedRecordIndex === node.record_index
+    : selectedRecordIndex === node.record_index;
+  const isFocused   = focusedRecordIndex === node.record_index; // drives tabIndex
   const indent      = 8 + depth * 16;
   const displayName = node.name || node.path;
   const barPct      = totalSize > 0 ? Math.min(100, (node.subtree_size / totalSize) * 100) : 0;
