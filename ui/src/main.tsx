@@ -205,6 +205,12 @@ const LARGE_FOLDER_THRESHOLD = 200;
 const LARGE_TREE_THRESHOLD = 1000;
 const DIRECT_CHILDREN_DISPLAY_LIMIT = 300;
 const PREF_KEY = "disk-insight.preferences.v1";
+
+// Performance instrumentation — set to false before release
+const PERF_LOG = true;
+function perfLog(...args: unknown[]): void {
+  if (PERF_LOG) console.log("[perf]", ...args);
+}
 const PHASE_COMPLETION_LATCH_MS = 600;
 const UPDATED_BANNER_DISMISS_MS = 4000;
 const NEAR_ZERO_FREE_DELTA_BYTES = 1024 * 1024;
@@ -2052,6 +2058,12 @@ function DirectChildrenPanel({
     setContextMenu(null);
   }, [dir.record_index]);
 
+  useEffect(() => {
+    if (children !== undefined) {
+      perfLog(`DirectChildrenPanel update  path=${dir.path}  nodes=${children.length}  totalCount=${totalCount ?? "?"}  isLoading=${isLoading}`);
+    }
+  }, [children, totalCount, isLoading, dir.path]);
+
   function handleContextMenu(e: React.MouseEvent<HTMLDivElement>, node: TreeNode) {
     e.preventDefault();
     e.stopPropagation();
@@ -2312,10 +2324,12 @@ function App() {
   const cancelMessageTimerRef = useRef<number | null>(null);
   const recycleRefreshPendingRef = useRef(false);
 
-  const visibleRows = useMemo(
-    () => buildVisibleRows(data?.root_children ?? [], expandedIds, childrenByParent, childrenErrors),
-    [data?.root_children, expandedIds, childrenByParent, childrenErrors],
-  );
+  const visibleRows = useMemo(() => {
+    const t0 = performance.now();
+    const rows = buildVisibleRows(data?.root_children ?? [], expandedIds, childrenByParent, childrenErrors);
+    perfLog(`visible-rows  count=${rows.length}  t=${(performance.now() - t0).toFixed(1)}ms`);
+    return rows;
+  }, [data?.root_children, expandedIds, childrenByParent, childrenErrors]);
 
   const selectedAncestorDirs = useMemo(
     (): DirectoryEntry[] =>
@@ -2470,6 +2484,7 @@ function App() {
     // Drive root: use already-loaded root_children directly (no IPC needed)
     if (isDriveRoot(selectedDir.path) && data?.root_children !== undefined) {
       const rc = data.root_children;
+      perfLog(`direct-children root  from root_children  count=${rc.length}`);
       setSelectedDirLimited({
         nodes: rc.slice(0, DIRECT_CHILDREN_DISPLAY_LIMIT),
         total_count: rc.length,
@@ -2478,16 +2493,20 @@ function App() {
       setSelectedDirLimitedError(null);
       return;
     }
+    const dcT0 = performance.now();
+    perfLog(`direct-children START  path=${selectedDir.path}  record_index=${selectedDir.record_index}`);
     let cancelled = false;
     setSelectedDirLimitedLoading(true);
     setSelectedDirLimitedError(null);
     getChildrenLimited(selectedDir.record_index, DIRECT_CHILDREN_DISPLAY_LIMIT)
       .then((result) => {
         if (cancelled) return;
+        perfLog(`direct-children DONE  path=${selectedDir.path}  t=${(performance.now() - dcT0).toFixed(0)}ms  nodes=${result.nodes.length}  total_count=${result.total_count}`);
         setSelectedDirLimited(result);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
+        perfLog(`direct-children ERROR  path=${selectedDir.path}  t=${(performance.now() - dcT0).toFixed(0)}ms`);
         setSelectedDirLimitedError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
@@ -2504,17 +2523,20 @@ function App() {
       setReclaimableLoading(false);
       return;
     }
+    const recT0 = performance.now();
+    perfLog(`reclaimable START  path=${selectedDir.path}`);
     let cancelled = false;
     setReclaimableLoading(true);
     setReclaimableError(null);
     getReclaimableSummary(selectedDir.record_index, selectedDir.path, data.summary.drive)
       .then((summary) => {
         if (cancelled) return;
-        console.log("[reclaimable-ui] received", summary.confidence, summary.basis);
+        perfLog(`reclaimable DONE  path=${selectedDir.path}  t=${(performance.now() - recT0).toFixed(0)}ms  confidence=${summary.confidence}`);
         setReclaimable(summary);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
+        perfLog(`reclaimable ERROR  path=${selectedDir.path}  t=${(performance.now() - recT0).toFixed(0)}ms`);
         setReclaimable(null);
         setReclaimableError(String(err));
       })
@@ -2538,13 +2560,17 @@ function App() {
     setLargestItemsError(null);
     debounceId = window.setTimeout(() => {
       debounceId = null;
+      const liT0 = performance.now();
+      perfLog(`largest-items START  path=${selectedDir.path}  record_index=${selectedDir.record_index}`);
       getLargestItemsUnder(selectedDir.record_index, 50)
         .then((result) => {
           if (cancelled) return;
+          perfLog(`largest-items DONE  path=${selectedDir.path}  round-trip=${(performance.now() - liT0).toFixed(0)}ms  rust=${result.elapsed_ms.toFixed(0)}ms  folders=${result.folders.length}  files=${result.files.length}`);
           setSelectedLargestItems(result);
         })
         .catch((err: unknown) => {
           if (cancelled) return;
+          perfLog(`largest-items ERROR  path=${selectedDir.path}  t=${(performance.now() - liT0).toFixed(0)}ms`);
           setSelectedLargestItems(null);
           setLargestItemsError(String(err));
         })
@@ -2887,6 +2913,7 @@ function App() {
 
   function handleSelectTreeNode(node: TreeNode) {
     if (!node.is_directory) return;
+    perfLog(`select-node  path=${node.path}  record_index=${node.record_index}`);
     // During a refresh, keep scanRestoreRef current with the latest user
     // selection so fresh result restore uses it instead of the pre-scan snapshot.
     if (isLoading && data) {
@@ -2987,8 +3014,11 @@ function App() {
       return next;
     });
 
+    const expandT0 = performance.now();
+    perfLog(`tree-expand START  path=${node.path}  record_index=${id}`);
     getChildren(id)
       .then((children) => {
+        perfLog(`tree-expand DONE  path=${node.path}  t=${(performance.now() - expandT0).toFixed(0)}ms  count=${children.length}`);
         setChildrenByParent((prev) => ({ ...prev, [id]: children }));
         setExpandedIds((prev) => {
           const next = new Set(prev);
@@ -2997,6 +3027,7 @@ function App() {
         });
       })
       .catch((err: unknown) => {
+        perfLog(`tree-expand ERROR  path=${node.path}  t=${(performance.now() - expandT0).toFixed(0)}ms`);
         setChildrenErrors((prev) => ({
           ...prev,
           [id]: err instanceof Error ? err.message : String(err),
