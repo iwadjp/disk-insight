@@ -231,7 +231,7 @@ tbody tr:last-child td {
 }
 
 .size-pct {
-  opacity: 0.55;
+  opacity: 0.72;
   font-size: 0.9em;
 }
 
@@ -697,8 +697,9 @@ tbody tr:last-child td {
 }
 
 .folder-nav:focus-visible {
-  outline: 2px solid #1a56db;
-  outline-offset: 1px;
+  /* Subtle container focus ring; individual rows show their own focus state */
+  outline: 2px solid rgba(26, 86, 219, 0.22);
+  outline-offset: 0;
 }
 
 .folder-nav-header {
@@ -763,6 +764,12 @@ tbody tr:last-child td {
 .tree-row--keyboard-focused {
   outline: 2px solid #1a56db;
   outline-offset: -2px;
+}
+
+/* When a row is both selected and keyboard-focused, the outline competes with
+   the left accent; tone it down so the selection styling stays dominant. */
+.tree-row--active.tree-row--keyboard-focused {
+  outline-color: rgba(26, 86, 219, 0.35);
 }
 
 .tree-row--file {
@@ -842,6 +849,7 @@ tbody tr:last-child td {
   min-width: 0;
   font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
   font-size: 12px;
+  font-weight: 500;
   line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -849,17 +857,24 @@ tbody tr:last-child td {
   color: inherit;
 }
 
+/* File rows: normal weight (dirs keep 500 for visual hierarchy) */
+.tree-row--file .tree-name {
+  font-weight: 400;
+}
+
 .tree-row--active .tree-name {
-  color: #1a56db;
-  font-weight: 600;
+  color: #1649c0;
+  font-weight: 650;
 }
 
 .tree-size {
   font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
   color: #5e6b78;
   white-space: nowrap;
   flex-shrink: 0;
+  padding-right: 4px;
 }
 
 .tree-empty {
