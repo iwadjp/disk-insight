@@ -843,7 +843,9 @@ fn open_terminal_at(path: String, is_dir: bool) -> Result<(), String> {
     // inherits the parent's (non-existent) console and opens no visible window.
     const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
 
-    eprintln!("[terminal] received  path={path:?}  is_dir={is_dir}");
+    if cfg!(debug_assertions) {
+        eprintln!("[terminal] received  path={path:?}  is_dir={is_dir}");
+    }
 
     if path.is_empty() {
         return Err("path must not be empty".to_string());
@@ -855,7 +857,9 @@ fn open_terminal_at(path: String, is_dir: bool) -> Result<(), String> {
     let canonical = std::fs::canonicalize(input)
         .map_err(|e| format!("cannot resolve path: {e}"))?;
     let canonical_str = normalize_path_for_compare(&canonical);
-    eprintln!("[terminal] canonical={canonical_str:?}");
+    if cfg!(debug_assertions) {
+        eprintln!("[terminal] canonical={canonical_str:?}");
+    }
 
     if drive_root_from_normalized(&canonical_str).is_none() {
         return Err("Only local drive paths are supported.".to_string());
@@ -874,7 +878,9 @@ fn open_terminal_at(path: String, is_dir: bool) -> Result<(), String> {
             working_dir.display()
         ));
     }
-    eprintln!("[terminal] working_dir={}  spawning powershell.exe", working_dir.display());
+    if cfg!(debug_assertions) {
+        eprintln!("[terminal] working_dir={}  spawning powershell.exe", working_dir.display());
+    }
 
     let result = std::process::Command::new("powershell.exe")
         .arg("-NoExit")
@@ -882,9 +888,11 @@ fn open_terminal_at(path: String, is_dir: bool) -> Result<(), String> {
         .creation_flags(CREATE_NEW_CONSOLE)
         .spawn();
 
-    match &result {
-        Ok(child) => eprintln!("[terminal] spawn ok  pid={}", child.id()),
-        Err(e)    => eprintln!("[terminal] spawn error: {e}"),
+    if cfg!(debug_assertions) {
+        match &result {
+            Ok(child) => eprintln!("[terminal] spawn ok  pid={}", child.id()),
+            Err(e)    => eprintln!("[terminal] spawn error: {e}"),
+        }
     }
 
     result.map_err(|e| format!("failed to open PowerShell: {e}"))?;

@@ -1042,9 +1042,8 @@ details[open] > .reclaimable-summary::before {
 
 .reclaimable-title {
   font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: #465563;
+  font-weight: 600;
+  color: #5e6b78;
 }
 
 .reclaimable-estimate {
@@ -1909,7 +1908,7 @@ details[open] > .subtree-search-summary {
 
 /* ── Folder explore section: DirectChildren + Search grouped as one card ── */
 .folder-explore-section {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .folder-explore-section .direct-children-panel {
@@ -1940,7 +1939,7 @@ details[open] > .subtree-search-summary {
   text-transform: uppercase;
   color: #465563;
   letter-spacing: 0.05em;
-  border-top: 2px solid #d9e1e8;
+  border-top: 1px solid #d9e1e8;
 }
 
 .true-largest-header .heading-path {

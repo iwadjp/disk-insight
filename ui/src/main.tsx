@@ -207,8 +207,8 @@ const DIRECT_CHILDREN_DISPLAY_LIMIT = 300;
 const TREE_EXPAND_LIMIT = 300;
 const PREF_KEY = "disk-insight.preferences.v1";
 
-// Performance instrumentation — set to false before release
-const PERF_LOG = true;
+// Performance instrumentation — set to true to enable, false for normal use
+const PERF_LOG = false;
 function perfLog(...args: unknown[]): void {
   if (PERF_LOG) console.log("[perf]", ...args);
 }
