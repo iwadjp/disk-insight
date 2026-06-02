@@ -3720,15 +3720,17 @@ function App() {
                   ) : null}
                 </div>
               )}
-              <div className="largest-items-section">
-                <div className="largest-items-header">
-                  {selectedDir && !isDriveRoot(selectedDir.path)
-                    ? <>Top scan results under <span className="heading-path">{selectedDir.path}</span></>
-                    : "Top scan results"}
-                  <div className="largest-items-note">
-                    Filtered from the global Top N scan results, not a full subtree ranking.
-                  </div>
-                </div>
+              <details className="largest-items-section">
+                <summary className="largest-items-summary">
+                  <span className="largest-items-summary-label">
+                    {selectedDir && !isDriveRoot(selectedDir.path)
+                      ? <>Top scan results under <span className="heading-path">{selectedDir.path}</span></>
+                      : "Top scan results"}
+                  </span>
+                  <span className="largest-items-note">
+                    Filtered from the global Top N scan results.
+                  </span>
+                </summary>
                 <DirectoriesTable
                   rows={filteredTopDirs}
                   totalSize={data.summary.total_final_allocated}
@@ -3754,7 +3756,7 @@ function App() {
                   recycledItems={recycledItems}
                   onCopyError={handleCopyError}
                 />
-              </div>
+              </details>
             </div>
           </div>
           {sourceKind === "live" && (

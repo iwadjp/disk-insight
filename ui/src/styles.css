@@ -1952,36 +1952,57 @@ details[open] > .subtree-search-summary {
   padding: 4px 2px 8px;
 }
 
-/* ── Largest items section: clear visual separator before TopDirs/TopFiles ── */
+/* ── Top scan results: collapsible secondary section ── */
 .largest-items-section {
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
-.largest-items-header {
-  padding: 18px 2px 8px;
-  font-size: 12px;
-  font-weight: 700;
+.largest-items-summary {
+  list-style: none;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
-  color: #465563;
+  color: #7a8a96;
   letter-spacing: 0.05em;
-  border-top: 2px solid #d9e1e8;
-  margin-bottom: 0;
+  border-top: 1px solid #e2e8f0;
+  cursor: pointer;
+  user-select: none;
 }
 
-.largest-items-header .heading-path {
+.largest-items-summary::-webkit-details-marker {
+  display: none;
+}
+
+.largest-items-summary::before {
+  content: "▶";
+  font-size: 8px;
+  color: #b0bbc5;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+details.largest-items-section[open] > .largest-items-summary::before {
+  content: "▼";
+}
+
+.largest-items-summary .heading-path {
   text-transform: none;
   letter-spacing: 0;
-  color: #17202a;
-  font-size: 12px;
+  color: #7a8a96;
+  font-size: 11px;
 }
 
 .largest-items-note {
-  margin-top: 3px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 400;
   text-transform: none;
   letter-spacing: 0;
-  color: #8a97a4;
+  color: #a0adb8;
   font-style: italic;
 }
 
