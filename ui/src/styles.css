@@ -1008,17 +1008,17 @@ tbody tr:last-child td {
 
 .selected-folder-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .selected-folder-actions {
   display: flex;
   gap: 6px;
   flex-shrink: 0;
-  align-items: flex-start;
+  align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -1028,16 +1028,32 @@ tbody tr:last-child td {
   font-weight: 700;
   text-transform: uppercase;
   color: #465563;
-  margin-bottom: 6px;
+  white-space: nowrap;
 }
 
 .selected-folder-path {
+  min-width: 0;
+  margin-bottom: 8px;
+}
+
+.selected-folder-basename {
   font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   color: #17202a;
-  overflow-wrap: anywhere;
-  word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.selected-folder-parentpath {
+  font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-size: 11px;
+  color: #8a97a4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
 }
 
 .selected-folder-stats {

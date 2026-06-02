@@ -1512,10 +1512,7 @@ function SelectedFolderCard({
   return (
     <div className="selected-folder-card">
       <div className="selected-folder-header">
-        <div>
-          <div className="selected-folder-label">Selected folder</div>
-          <div className="selected-folder-path">{dir.path}</div>
-        </div>
+        <span className="selected-folder-label">Selected folder</span>
         <div className="selected-folder-actions">
           <button className="btn" onClick={() => onOpenExplorer(dir.path)}>
             Open folder
@@ -1531,6 +1528,20 @@ function SelectedFolderCard({
             Refresh after cleanup
           </button>
         </div>
+      </div>
+      <div className="selected-folder-path" title={dir.path}>
+        {isDriveRoot(dir.path) ? (
+          <span className="selected-folder-basename">{dir.path}</span>
+        ) : (
+          <>
+            <div className="selected-folder-basename">
+              {dir.path.slice(dir.path.lastIndexOf("\\") + 1) || dir.path}
+            </div>
+            <div className="selected-folder-parentpath">
+              {dir.path.slice(0, dir.path.lastIndexOf("\\") + 1)}
+            </div>
+          </>
+        )}
       </div>
       {cleanupRefreshDelta && (
         <div className="selected-folder-note selected-folder-note--cleanup-delta">
