@@ -685,7 +685,7 @@ tbody tr:last-child td {
 /* ── Folder navigation (left pane) ── */
 .folder-nav {
   flex: 1;
-  min-width: 380px;
+  min-width: 400px;
   background: #ffffff;
   border: 1px solid #d9e1e8;
   border-radius: 8px;
@@ -918,9 +918,9 @@ tbody tr:last-child td {
 
 /* ── Right pane ── */
 .content-right {
-  width: 360px;
-  flex-shrink: 1;
-  min-width: 280px;
+  flex: 0 1 500px;
+  min-width: 440px;
+  max-width: 540px;
 }
 
 /* ── Selected folder summary ── */
@@ -947,7 +947,6 @@ tbody tr:last-child td {
   align-items: flex-start;
   flex-wrap: wrap;
   justify-content: flex-end;
-  max-width: 200px;
 }
 
 .selected-folder-label {
@@ -1953,7 +1952,8 @@ details[open] > .subtree-search-summary {
 .true-largest-header {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 6px 10px;
   padding: 12px 2px 8px;
   font-size: 12px;
   font-weight: 700;
