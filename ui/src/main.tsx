@@ -198,6 +198,7 @@ type LargestItemsResponse = {
 const TOP_OPTIONS = [10, 30, 50, 100, 200, 500];
 const LARGE_FOLDER_THRESHOLD = 200;
 const LARGE_TREE_THRESHOLD = 1000;
+const DIRECT_CHILDREN_DISPLAY_LIMIT = 300;
 const PREF_KEY = "disk-insight.preferences.v1";
 const PHASE_COMPLETION_LATCH_MS = 600;
 const UPDATED_BANNER_DISMISS_MS = 4000;
@@ -1347,9 +1348,19 @@ function TreeView({
 
   useEffect(() => {
     if (focusedRecordIndex === null) return;
-    listRef.current
-      ?.querySelector<HTMLElement>(`[data-record-index="${focusedRecordIndex}"]`)
-      ?.scrollIntoView({ block: "nearest" });
+    const container = listRef.current;
+    if (!container) return;
+    const el = container.querySelector<HTMLElement>(`[data-record-index="${focusedRecordIndex}"]`);
+    if (!el) return;
+    // Scroll only within folder-nav-list, not any ancestor scroll container.
+    // element.scrollIntoView() would also scroll <main>, causing page-level jumps.
+    const cr = container.getBoundingClientRect();
+    const er = el.getBoundingClientRect();
+    if (er.top < cr.top) {
+      container.scrollTop += er.top - cr.top;
+    } else if (er.bottom > cr.bottom) {
+      container.scrollTop += er.bottom - cr.bottom;
+    }
   }, [focusedRecordIndex]);
 
   return (
@@ -2078,9 +2089,12 @@ function DirectChildrenPanel({
       </p>
     );
   } else {
+    const displayEntries = sorted.length > DIRECT_CHILDREN_DISPLAY_LIMIT
+      ? sorted.slice(0, DIRECT_CHILDREN_DISPLAY_LIMIT)
+      : sorted;
     body = (
       <div className="direct-children-list">
-        {sorted.map((node) => {
+        {displayEntries.map((node) => {
           const nodeIsRecycled = recycledItems
             ? isItemRecycled(node.record_index, node.path, recycledItems)
             : false;
@@ -2111,6 +2125,11 @@ function DirectChildrenPanel({
             </div>
           );
         })}
+        {sorted.length > DIRECT_CHILDREN_DISPLAY_LIMIT && (
+          <div className="direct-children-truncation-note">
+            Showing top {formatNumber(DIRECT_CHILDREN_DISPLAY_LIMIT)} of {formatNumber(sorted.length)} entries
+          </div>
+        )}
       </div>
     );
   }
@@ -3297,11 +3316,12 @@ function App() {
   const scanDisabled = isLoading || parseDriveLetter(driveInput) === null;
   const currentFilterQ = currentFilterQuery.trim().toLowerCase();
   const selectedDirChildren = selectedDir ? childrenByParent[selectedDir.record_index] : undefined;
-  const filteredChildrenCount = currentFilterQ && selectedDirChildren !== undefined
-    ? selectedDirChildren.filter(
-        (n) => n.name.toLowerCase().includes(currentFilterQ) || n.path.toLowerCase().includes(currentFilterQ)
-      ).length
-    : null;
+  const filteredChildrenCount = useMemo(() => {
+    if (!currentFilterQ || selectedDirChildren === undefined) return null;
+    return selectedDirChildren.filter(
+      (n) => n.name.toLowerCase().includes(currentFilterQ) || n.path.toLowerCase().includes(currentFilterQ)
+    ).length;
+  }, [selectedDirChildren, currentFilterQ]);
   const scanPhaseText = scanProgress ? phaseLabel(scanProgress.phase) : "Starting scan";
   const scanElapsedMs = scanProgress ? scanProgress.elapsed_ms : localElapsedMs;
   const scanDriveLabel = scanProgress?.drive ?? `${driveLabel}:`;

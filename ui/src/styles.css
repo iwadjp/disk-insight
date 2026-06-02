@@ -1337,6 +1337,14 @@ details[open] > .reclaimable-summary::before {
   color: #9b1c1c;
 }
 
+.direct-children-truncation-note {
+  padding: 6px 14px 8px;
+  font-size: 11px;
+  color: #a0adb8;
+  font-style: italic;
+  border-top: 1px solid #f0f4f8;
+}
+
 .direct-children-filter-row {
   display: flex;
   align-items: center;
