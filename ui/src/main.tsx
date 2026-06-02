@@ -58,7 +58,7 @@ type VisibleTreeRow = {
   depth: number;
   isEmpty?: true;
   nodeError?: string;
-  largeWarning?: number;
+  treeTruncated?: { shown: number; total: number };
 };
 
 type DriveCapacity = {
@@ -204,6 +204,7 @@ const TOP_OPTIONS = [10, 30, 50, 100, 200, 500];
 const LARGE_FOLDER_THRESHOLD = 200;
 const LARGE_TREE_THRESHOLD = 1000;
 const DIRECT_CHILDREN_DISPLAY_LIMIT = 300;
+const TREE_EXPAND_LIMIT = 300;
 const PREF_KEY = "disk-insight.preferences.v1";
 
 // Performance instrumentation — set to false before release
@@ -523,6 +524,7 @@ function buildVisibleRows(
   expandedIds: Set<number>,
   childrenByParent: Record<number, TreeNode[]>,
   childrenErrors: Record<number, string>,
+  treeExpandedTotalCount: Record<number, number>,
 ): VisibleTreeRow[] {
   const rows: VisibleTreeRow[] = [];
   function visit(nodes: TreeNode[], depth: number) {
@@ -536,10 +538,11 @@ function buildVisibleRows(
             if (children.length === 0) {
               rows.push({ node, depth: depth + 1, isEmpty: true });
             } else {
-              if (children.length > LARGE_FOLDER_THRESHOLD) {
-                rows.push({ node, depth: depth + 1, largeWarning: children.length });
-              }
               visit(children, depth + 1);
+              const total = treeExpandedTotalCount[id];
+              if (total !== undefined && total > children.length) {
+                rows.push({ node, depth: depth + 1, treeTruncated: { shown: children.length, total } });
+              }
             }
           }
         } else if (childrenErrors[id]) {
@@ -1410,14 +1413,14 @@ function TreeView({
               >
                 Failed to load children: {row.nodeError}
               </div>
-            ) : row.largeWarning !== undefined ? (
+            ) : row.treeTruncated !== undefined ? (
               <div
-                key={`large-${row.node.record_index}`}
-                className="tree-large-warning"
+                key={`trunc-${row.node.record_index}`}
+                className="tree-truncated-note"
                 style={{ paddingLeft: 8 + row.depth * 16 }}
               >
-                Large folder: {formatNumber(row.largeWarning)} children loaded.
-                Virtual scrolling is not enabled yet.
+                Showing top {formatNumber(row.treeTruncated.shown)} of {formatNumber(row.treeTruncated.total)}.{" "}
+                Use <em>Selected folder contents</em> or search for more.
               </div>
             ) : (
               <TreeNodeRow
@@ -2297,6 +2300,7 @@ function App() {
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
   const [childrenByParent, setChildrenByParent] = useState<Record<number, TreeNode[]>>({});
   const [childrenErrors, setChildrenErrors] = useState<Record<number, string>>({});
+  const [treeExpandedTotalCount, setTreeExpandedTotalCount] = useState<Record<number, number>>({});
   const [treeError, setTreeError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [selectedDirLimited, setSelectedDirLimited] = useState<ChildrenLimitedResult | null>(null);
@@ -2326,10 +2330,10 @@ function App() {
 
   const visibleRows = useMemo(() => {
     const t0 = performance.now();
-    const rows = buildVisibleRows(data?.root_children ?? [], expandedIds, childrenByParent, childrenErrors);
+    const rows = buildVisibleRows(data?.root_children ?? [], expandedIds, childrenByParent, childrenErrors, treeExpandedTotalCount);
     perfLog(`visible-rows  count=${rows.length}  t=${(performance.now() - t0).toFixed(1)}ms`);
     return rows;
-  }, [data?.root_children, expandedIds, childrenByParent, childrenErrors]);
+  }, [data?.root_children, expandedIds, childrenByParent, childrenErrors, treeExpandedTotalCount]);
 
   const selectedAncestorDirs = useMemo(
     (): DirectoryEntry[] =>
@@ -2623,6 +2627,7 @@ function App() {
     setLoadingIds(new Set());
     setChildrenByParent({});
     setChildrenErrors({});
+    setTreeExpandedTotalCount({});
     setTreeError(null);
     setSelectedDirLimited(null);
     setSelectedDirLimitedLoading(false);
@@ -2701,6 +2706,7 @@ function App() {
     setLoadingIds(new Set());
     setChildrenByParent({});
     setChildrenErrors({});
+    setTreeExpandedTotalCount({});
     setTreeError(null);
     setSelectedDirLimited(null);
     setSelectedDirLimitedLoading(false);
@@ -2838,7 +2844,7 @@ function App() {
     e.preventDefault();
 
     const folderRows = visibleRows.filter(
-      (r) => !r.isEmpty && !r.nodeError && r.largeWarning === undefined && r.node.is_directory,
+      (r) => !r.isEmpty && !r.nodeError && r.treeTruncated === undefined && r.node.is_directory,
     );
     if (folderRows.length === 0) return;
 
@@ -2879,12 +2885,12 @@ function App() {
           // Find first directory child in visibleRows after the current node
           const curVisIdx = visibleRows.findIndex(
             (r) =>
-              !r.isEmpty && !r.nodeError && r.largeWarning === undefined &&
+              !r.isEmpty && !r.nodeError && r.treeTruncated === undefined &&
               r.node.record_index === curId,
           );
           for (let i = curVisIdx + 1; i < visibleRows.length; i++) {
             const r = visibleRows[i];
-            if (r.isEmpty || r.nodeError || r.largeWarning !== undefined) continue;
+            if (r.isEmpty || r.nodeError || r.treeTruncated !== undefined) continue;
             if (r.depth <= currentRow.depth) break; // exited subtree
             if (r.node.is_directory) {
               setFocusedRecordIndex(r.node.record_index);
@@ -3016,10 +3022,13 @@ function App() {
 
     const expandT0 = performance.now();
     perfLog(`tree-expand START  path=${node.path}  record_index=${id}`);
-    getChildren(id)
-      .then((children) => {
-        perfLog(`tree-expand DONE  path=${node.path}  t=${(performance.now() - expandT0).toFixed(0)}ms  count=${children.length}`);
-        setChildrenByParent((prev) => ({ ...prev, [id]: children }));
+    getChildrenLimited(id, TREE_EXPAND_LIMIT)
+      .then((result) => {
+        perfLog(`tree-expand DONE  path=${node.path}  t=${(performance.now() - expandT0).toFixed(0)}ms  count=${result.nodes.length}  total_count=${result.total_count}`);
+        setChildrenByParent((prev) => ({ ...prev, [id]: result.nodes }));
+        if (result.total_count > result.nodes.length) {
+          setTreeExpandedTotalCount((prev) => ({ ...prev, [id]: result.total_count }));
+        }
         setExpandedIds((prev) => {
           const next = new Set(prev);
           next.add(id);

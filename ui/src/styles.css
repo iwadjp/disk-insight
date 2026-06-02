@@ -893,6 +893,14 @@ tbody tr:last-child td {
   border-bottom: 1px solid #fde68a;
 }
 
+.tree-truncated-note {
+  padding: 3px 8px 4px;
+  font-size: 11px;
+  color: #a0adb8;
+  font-style: italic;
+  border-top: 1px solid #f0f4f8;
+}
+
 /* ── Right pane ── */
 .content-right {
   flex: 1;
