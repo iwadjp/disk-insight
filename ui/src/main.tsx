@@ -821,6 +821,7 @@ function SafeContextMenu({
   onRequestRecycle,
   isAlreadyRecycled,
   onCopyError,
+  onExternalHandoff,
 }: {
   target: ContextMenuTarget;
   onClose: () => void;
@@ -831,6 +832,7 @@ function SafeContextMenu({
   onRequestRecycle?: (target: ContextMenuTarget) => void;
   isAlreadyRecycled?: boolean;
   onCopyError: (msg: string) => void;
+  onExternalHandoff?: () => void;
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuWidth = 250;
@@ -910,6 +912,7 @@ function SafeContextMenu({
       <button
         className="context-menu-item"
         onClick={() => {
+          onExternalHandoff?.();
           openTerminalAt(target.path, target.isDirectory).catch((err: unknown) => {
             onCopyError(err instanceof Error ? err.message : String(err));
           });
@@ -1591,6 +1594,7 @@ function DirectoriesTable({
   onRequestRecycle,
   recycledItems,
   onCopyError,
+  onExternalHandoff,
 }: {
   rows: DirectoryEntry[];
   title: React.ReactNode;
@@ -1602,6 +1606,7 @@ function DirectoriesTable({
   onRequestRecycle: (target: ContextMenuTarget) => void;
   recycledItems?: RecycledItem[];
   onCopyError: (msg: string) => void;
+  onExternalHandoff?: () => void;
 }) {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
 
@@ -1678,6 +1683,7 @@ function DirectoriesTable({
             ? isItemRecycled(ctxMenu.recordIndex, ctxMenu.path, recycledItems)
             : false}
           onCopyError={onCopyError}
+          onExternalHandoff={onExternalHandoff}
         />
       )}
     </section>
@@ -1696,6 +1702,7 @@ function FilesTable({
   onRequestRecycle,
   recycledItems,
   onCopyError,
+  onExternalHandoff,
 }: {
   rows: FileEntry[];
   title: React.ReactNode;
@@ -1708,6 +1715,7 @@ function FilesTable({
   onRequestRecycle: (target: ContextMenuTarget) => void;
   recycledItems?: RecycledItem[];
   onCopyError: (msg: string) => void;
+  onExternalHandoff?: () => void;
 }) {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
 
@@ -1784,6 +1792,7 @@ function FilesTable({
             ? isItemRecycled(ctxMenu.recordIndex, ctxMenu.path, recycledItems)
             : false}
           onCopyError={onCopyError}
+          onExternalHandoff={onExternalHandoff}
         />
       )}
     </section>
@@ -1801,6 +1810,7 @@ function SubtreeSearchPanel({
   onRequestRecycle,
   recycledItems,
   onCopyError,
+  onExternalHandoff,
 }: {
   selectedDir: DirectoryEntry;
   sourceKind: SourceKind | null;
@@ -1812,6 +1822,7 @@ function SubtreeSearchPanel({
   onRequestRecycle: (target: ContextMenuTarget) => void;
   recycledItems?: RecycledItem[];
   onCopyError: (msg: string) => void;
+  onExternalHandoff?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<TreeNode[] | null>(null);
@@ -2019,6 +2030,7 @@ function SubtreeSearchPanel({
             ? isItemRecycled(ctxMenu.recordIndex, ctxMenu.path, recycledItems)
             : false}
           onCopyError={onCopyError}
+          onExternalHandoff={onExternalHandoff}
         />
       )}
     </details>
@@ -2048,6 +2060,7 @@ function DirectChildrenPanel({
   onRequestRecycle,
   recycledItems,
   onCopyError,
+  onExternalHandoff,
 }: {
   dir: DirectoryEntry;
   children: TreeNode[] | undefined;
@@ -2071,6 +2084,7 @@ function DirectChildrenPanel({
   onRequestRecycle: (target: ContextMenuTarget) => void;
   recycledItems?: RecycledItem[];
   onCopyError: (msg: string) => void;
+  onExternalHandoff?: () => void;
 }) {
 
   const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null);
@@ -2255,6 +2269,7 @@ function DirectChildrenPanel({
             ? isItemRecycled(contextMenu.recordIndex, contextMenu.path, recycledItems)
             : false}
           onCopyError={onCopyError}
+          onExternalHandoff={onExternalHandoff}
         />
       )}
     </div>
@@ -2338,6 +2353,7 @@ function App() {
   const [selectedLargestItems, setSelectedLargestItems] = useState<LargestItemsResponse | null>(null);
   const [largestItemsLoading, setLargestItemsLoading] = useState(false);
   const [largestItemsError, setLargestItemsError] = useState<string | null>(null);
+  const [handoffNotice, setHandoffNotice] = useState(false);
   const scanRestoreRef = useRef<{ path: string; drive: string } | null>(null);
   const scanGenerationRef = useRef(0);
   const cancelMessageTimerRef = useRef<number | null>(null);
@@ -2638,6 +2654,7 @@ function App() {
     setCleanupRefreshDelta(null);
     setUnsupportedDriveCapacity(null);
     clearCacheBanner();
+    setHandoffNotice(false);
     setExpandedIds(new Set());
     setLoadingIds(new Set());
     setChildrenByParent({});
@@ -2708,6 +2725,7 @@ function App() {
     setStatusMessage(null);
     setCancelMessage(null);
     setRecycleSuccess(null);
+    setHandoffNotice(false);
     recycleRefreshPendingRef.current = false;
     setCleanupRefreshDelta(null);
     setUnsupportedDriveCapacity(null);
@@ -3067,6 +3085,7 @@ function App() {
   }
 
   function handleOpenExplorer(path: string) {
+    setHandoffNotice(true);
     openInExplorer(path).catch((err: unknown) => {
       setError(err instanceof Error ? err.message : String(err));
       setIsScanError(false);
@@ -3074,6 +3093,7 @@ function App() {
   }
 
   function handleSelectFile(path: string) {
+    setHandoffNotice(true);
     selectInExplorer(path)
       .then(() => {
         setError(null);
@@ -3604,6 +3624,28 @@ function App() {
         <div className="status-message status-message--success">{statusMessage}</div>
       )}
 
+      {handoffNotice && !recycleSuccess && (
+        <div className="status-message status-message--info handoff-notice" role="status">
+          <span>External tool opened. Refresh scan after making changes.</span>
+          <div className="handoff-notice-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={handleScan}
+              disabled={scanDisabled}
+            >
+              Refresh scan
+            </button>
+            <button
+              className="btn btn-sm"
+              onClick={() => setHandoffNotice(false)}
+              disabled={isLoading}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {recycleSuccess && (
         <div className="status-message status-message--success recycle-success-message" role="status">
           <strong>
@@ -3678,6 +3720,7 @@ function App() {
                 onRequestRecycle={handleRequestRecycle}
                 isAlreadyRecycled={isItemRecycled(treeContextMenu.recordIndex, treeContextMenu.path, recycledItems)}
                 onCopyError={handleCopyError}
+                onExternalHandoff={() => setHandoffNotice(true)}
               />
             )}
             <div className="content-right">
@@ -3752,6 +3795,7 @@ function App() {
                     onRequestRecycle={handleRequestRecycle}
                     recycledItems={recycledItems}
                     onCopyError={handleCopyError}
+                    onExternalHandoff={() => setHandoffNotice(true)}
                   />
                   <SubtreeSearchPanel
                     selectedDir={selectedDir}
@@ -3764,6 +3808,7 @@ function App() {
                     onRequestRecycle={handleRequestRecycle}
                     recycledItems={recycledItems}
                     onCopyError={handleCopyError}
+                    onExternalHandoff={() => setHandoffNotice(true)}
                   />
                 </div>
               )}
@@ -3796,6 +3841,7 @@ function App() {
                         onRequestRecycle={handleRequestRecycle}
                         recycledItems={recycledItems}
                         onCopyError={handleCopyError}
+                        onExternalHandoff={() => setHandoffNotice(true)}
                       />
                       <FilesTable
                         rows={selectedLargestItems.files.map(treeNodeToFileEntry)}
@@ -3809,6 +3855,7 @@ function App() {
                         onRequestRecycle={handleRequestRecycle}
                         recycledItems={recycledItems}
                         onCopyError={handleCopyError}
+                        onExternalHandoff={() => setHandoffNotice(true)}
                       />
                     </>
                   ) : null}
@@ -3836,6 +3883,7 @@ function App() {
                   recycledItems={recycledItems}
                   onCopyError={handleCopyError}
                   title="Top folders from scan results"
+                  onExternalHandoff={() => setHandoffNotice(true)}
                 />
                 <FilesTable
                   rows={filteredTopFiles}
@@ -3849,6 +3897,7 @@ function App() {
                   onRequestRecycle={handleRequestRecycle}
                   recycledItems={recycledItems}
                   onCopyError={handleCopyError}
+                  onExternalHandoff={() => setHandoffNotice(true)}
                 />
               </details>
             </div>

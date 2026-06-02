@@ -355,6 +355,21 @@ tbody tr:last-child td {
   margin-top: 4px;
 }
 
+.handoff-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+}
+
+.handoff-notice-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 /* ── Status bar ── */
 .status-bar {
   display: flex;
