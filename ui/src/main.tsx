@@ -1441,7 +1441,7 @@ function TreeView({
                 style={{ paddingLeft: 8 + row.depth * 16 }}
               >
                 Showing top {formatNumber(row.treeTruncated.shown)} of {formatNumber(row.treeTruncated.total)}.{" "}
-                Use <em>Selected folder contents</em> or search for more.
+                Use <em>Insights › Search inside</em> for more.
               </div>
             ) : (
               <TreeNodeRow
@@ -3738,65 +3738,61 @@ function App() {
                   onCopyError={handleCopyError}
                 />
               )}
-              <div className="top-search-bar">
-                <div className="top-search-row">
-                  <input
-                    className="filter-input top-search-input"
-                    type="text"
-                    placeholder="Filter visible result lists..."
-                    value={currentFilterQuery}
-                    onChange={(e) => setCurrentFilterQuery(e.target.value)}
-                    aria-label="Filter visible result lists"
-                  />
-                  {currentFilterQuery && (
-                    <button
-                      className="filter-clear-btn"
-                      onClick={() => setCurrentFilterQuery("")}
-                      title="Clear filter"
-                      aria-label="Clear filter"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-                {currentFilterQ && (
-                  <div className="top-search-count">
-                    Showing{" "}
-                    {selectedDirLimited !== null && filteredChildrenCount !== null && (
-                      <>{formatNumber(filteredChildrenCount)} / {formatNumber(selectedDirLimited.total_count)} children,{" "}</>
-                    )}
-                    {formatNumber(filteredTopDirs.length)} / {formatNumber(topDirsBase.length)} dirs,{" "}
-                    {formatNumber(filteredTopFiles.length)} / {formatNumber(topFilesBase.length)} files
-                  </div>
-                )}
-              </div>
+              {/* v0.5.9-A: Filter input hidden. currentFilterQuery state preserved for filter logic. */}
+              {/* v0.5.9-A: DirectChildrenPanel removed from default display.
+                  selectedDirLimited / selectedDirLimitedLoading / selectedDirLimitedError state preserved.
+                  DirectChildrenPanel component and get_children_limited command unchanged.
+                  Restore inside Insights in v0.5.9-C. */}
               {selectedDir && (
-                <div className="folder-explore-section">
-                  <DirectChildrenPanel
-                    dir={selectedDir}
-                    children={selectedDirLimited?.nodes}
-                    totalCount={selectedDirLimited?.total_count}
-                    isLoading={selectedDirLimitedLoading}
-                    error={selectedDirLimitedError}
-                    sourceKind={sourceKind}
-                    currentFilterQuery={currentFilterQuery}
-                    totalSize={data.summary.total_final_allocated}
-                    sortKey={directChildrenSortKey}
-                    sortDir={directChildrenSortDir}
-                    onSortKeyChange={setDirectChildrenSortKey}
-                    onSortDirChange={setDirectChildrenSortDir}
-                    ancestorDirs={selectedAncestorDirs}
-                    onNavigateToDir={handleNavigateToDir}
-                    onNavigate={handleSelectTreeNode}
-                    onOpenExplorer={handleOpenExplorer}
-                    onSelectFile={handleSelectFile}
-                    onShowProperties={handleShowProperties}
-                    advancedMode={advancedMode}
-                    onRequestRecycle={handleRequestRecycle}
-                    recycledItems={recycledItems}
-                    onCopyError={handleCopyError}
-                    onExternalHandoff={() => setHandoffNotice(true)}
-                  />
+                <details className="insights-section">
+                  <summary className="insights-summary">Insights for this folder</summary>
+                  <div className="true-largest-section">
+                    <div className="true-largest-header">
+                      {isDriveRoot(selectedDir.path)
+                        ? <>Largest items on <span className="heading-path">{selectedDir.path}</span></>
+                        : <>Largest items in <span className="heading-path">{selectedDir.path}</span></>}
+                      {selectedLargestItems?.elapsed_ms !== undefined && !largestItemsLoading && (
+                        <span className="true-largest-timing">Computed in {selectedLargestItems.elapsed_ms.toFixed(0)} ms</span>
+                      )}
+                    </div>
+                    {sourceKind !== "live" ? (
+                      <div className="true-largest-note">Largest items require a live scan.</div>
+                    ) : largestItemsLoading ? (
+                      <div className="true-largest-loading">Loading largest items…</div>
+                    ) : largestItemsError ? (
+                      <div className="true-largest-error">{largestItemsError}</div>
+                    ) : selectedLargestItems ? (
+                      <>
+                        <DirectoriesTable
+                          rows={selectedLargestItems.folders.map(treeNodeToDirEntry)}
+                          title="Largest folders in this folder"
+                          totalSize={data.summary.total_final_allocated}
+                          basePath={selectedDir.path}
+                          advancedMode={advancedMode}
+                          onOpenExplorer={handleOpenExplorer}
+                          onShowProperties={handleShowProperties}
+                          onRequestRecycle={handleRequestRecycle}
+                          recycledItems={recycledItems}
+                          onCopyError={handleCopyError}
+                          onExternalHandoff={() => setHandoffNotice(true)}
+                        />
+                        <FilesTable
+                          rows={selectedLargestItems.files.map(treeNodeToFileEntry)}
+                          title="Largest files in this folder"
+                          totalSize={data.summary.total_final_allocated}
+                          basePath={selectedDir.path}
+                          advancedMode={advancedMode}
+                          onOpenLocation={handleOpenExplorer}
+                          onSelectFile={handleSelectFile}
+                          onShowProperties={handleShowProperties}
+                          onRequestRecycle={handleRequestRecycle}
+                          recycledItems={recycledItems}
+                          onCopyError={handleCopyError}
+                          onExternalHandoff={() => setHandoffNotice(true)}
+                        />
+                      </>
+                    ) : null}
+                  </div>
                   <SubtreeSearchPanel
                     selectedDir={selectedDir}
                     sourceKind={sourceKind}
@@ -3810,96 +3806,47 @@ function App() {
                     onCopyError={handleCopyError}
                     onExternalHandoff={() => setHandoffNotice(true)}
                   />
-                </div>
+                  <details className="largest-items-section">
+                    <summary className="largest-items-summary">
+                      <span className="largest-items-summary-label">
+                        {!isDriveRoot(selectedDir.path)
+                          ? <>Top scan results under <span className="heading-path">{selectedDir.path}</span></>
+                          : "Top scan results"}
+                      </span>
+                      <span className="largest-items-note">
+                        Filtered from the global Top N scan results.
+                      </span>
+                    </summary>
+                    <DirectoriesTable
+                      rows={filteredTopDirs}
+                      totalSize={data.summary.total_final_allocated}
+                      basePath={selectedDir?.path}
+                      advancedMode={advancedMode}
+                      onOpenExplorer={handleOpenExplorer}
+                      onShowProperties={handleShowProperties}
+                      onRequestRecycle={handleRequestRecycle}
+                      recycledItems={recycledItems}
+                      onCopyError={handleCopyError}
+                      title="Top folders from scan results"
+                      onExternalHandoff={() => setHandoffNotice(true)}
+                    />
+                    <FilesTable
+                      rows={filteredTopFiles}
+                      totalSize={data.summary.total_final_allocated}
+                      basePath={selectedDir?.path}
+                      advancedMode={advancedMode}
+                      title="Top files from scan results"
+                      onOpenLocation={handleOpenExplorer}
+                      onSelectFile={handleSelectFile}
+                      onShowProperties={handleShowProperties}
+                      onRequestRecycle={handleRequestRecycle}
+                      recycledItems={recycledItems}
+                      onCopyError={handleCopyError}
+                      onExternalHandoff={() => setHandoffNotice(true)}
+                    />
+                  </details>
+                </details>
               )}
-              {selectedDir && (
-                <div className="true-largest-section">
-                  <div className="true-largest-header">
-                    {isDriveRoot(selectedDir.path)
-                      ? <>Largest items on <span className="heading-path">{selectedDir.path}</span></>
-                      : <>Largest items in <span className="heading-path">{selectedDir.path}</span></>}
-                    {selectedLargestItems?.elapsed_ms !== undefined && !largestItemsLoading && (
-                      <span className="true-largest-timing">Computed in {selectedLargestItems.elapsed_ms.toFixed(0)} ms</span>
-                    )}
-                  </div>
-                  {sourceKind !== "live" ? (
-                    <div className="true-largest-note">Largest items require a live scan.</div>
-                  ) : largestItemsLoading ? (
-                    <div className="true-largest-loading">Loading largest items…</div>
-                  ) : largestItemsError ? (
-                    <div className="true-largest-error">{largestItemsError}</div>
-                  ) : selectedLargestItems ? (
-                    <>
-                      <DirectoriesTable
-                        rows={selectedLargestItems.folders.map(treeNodeToDirEntry)}
-                        title="Largest folders in this folder"
-                        totalSize={data.summary.total_final_allocated}
-                        basePath={selectedDir.path}
-                        advancedMode={advancedMode}
-                        onOpenExplorer={handleOpenExplorer}
-                        onShowProperties={handleShowProperties}
-                        onRequestRecycle={handleRequestRecycle}
-                        recycledItems={recycledItems}
-                        onCopyError={handleCopyError}
-                        onExternalHandoff={() => setHandoffNotice(true)}
-                      />
-                      <FilesTable
-                        rows={selectedLargestItems.files.map(treeNodeToFileEntry)}
-                        title="Largest files in this folder"
-                        totalSize={data.summary.total_final_allocated}
-                        basePath={selectedDir.path}
-                        advancedMode={advancedMode}
-                        onOpenLocation={handleOpenExplorer}
-                        onSelectFile={handleSelectFile}
-                        onShowProperties={handleShowProperties}
-                        onRequestRecycle={handleRequestRecycle}
-                        recycledItems={recycledItems}
-                        onCopyError={handleCopyError}
-                        onExternalHandoff={() => setHandoffNotice(true)}
-                      />
-                    </>
-                  ) : null}
-                </div>
-              )}
-              <details className="largest-items-section">
-                <summary className="largest-items-summary">
-                  <span className="largest-items-summary-label">
-                    {selectedDir && !isDriveRoot(selectedDir.path)
-                      ? <>Top scan results under <span className="heading-path">{selectedDir.path}</span></>
-                      : "Top scan results"}
-                  </span>
-                  <span className="largest-items-note">
-                    Filtered from the global Top N scan results.
-                  </span>
-                </summary>
-                <DirectoriesTable
-                  rows={filteredTopDirs}
-                  totalSize={data.summary.total_final_allocated}
-                  basePath={selectedDir?.path}
-                  advancedMode={advancedMode}
-                  onOpenExplorer={handleOpenExplorer}
-                  onShowProperties={handleShowProperties}
-                  onRequestRecycle={handleRequestRecycle}
-                  recycledItems={recycledItems}
-                  onCopyError={handleCopyError}
-                  title="Top folders from scan results"
-                  onExternalHandoff={() => setHandoffNotice(true)}
-                />
-                <FilesTable
-                  rows={filteredTopFiles}
-                  totalSize={data.summary.total_final_allocated}
-                  basePath={selectedDir?.path}
-                  advancedMode={advancedMode}
-                  title="Top files from scan results"
-                  onOpenLocation={handleOpenExplorer}
-                  onSelectFile={handleSelectFile}
-                  onShowProperties={handleShowProperties}
-                  onRequestRecycle={handleRequestRecycle}
-                  recycledItems={recycledItems}
-                  onCopyError={handleCopyError}
-                  onExternalHandoff={() => setHandoffNotice(true)}
-                />
-              </details>
             </div>
           </div>
           {sourceKind === "live" && (
