@@ -684,16 +684,16 @@ tbody tr:last-child td {
 
 /* ── Folder navigation (left pane) ── */
 .folder-nav {
-  width: 500px;
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 380px;
   background: #ffffff;
   border: 1px solid #d9e1e8;
   border-radius: 8px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 200px);
-  min-height: 280px;
+  height: calc(100vh - 280px);
+  min-height: 300px;
 }
 
 .folder-nav:focus-visible {
@@ -918,8 +918,9 @@ tbody tr:last-child td {
 
 /* ── Right pane ── */
 .content-right {
-  flex: 1;
-  min-width: 0;
+  width: 360px;
+  flex-shrink: 1;
+  min-width: 280px;
 }
 
 /* ── Selected folder summary ── */
@@ -941,9 +942,12 @@ tbody tr:last-child td {
 
 .selected-folder-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
   align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 200px;
 }
 
 .selected-folder-label {
@@ -1152,6 +1156,8 @@ details[open] > .reclaimable-summary::before {
 
   .folder-nav {
     width: 100%;
+    height: auto;
+    min-height: 280px;
     max-height: 280px;
   }
 
