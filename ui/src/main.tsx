@@ -1566,7 +1566,7 @@ function SelectedFolderCard({
         <span>Children: <strong>{formatNumber(dir.child_count)}</strong></span>
       </div>
       {(reclaimableLoading || reclaimable !== null || reclaimableError !== null || sourceKind === "cached") && (
-        <details className="reclaimable-details">
+        <details className="reclaimable-details" open>
           <summary className="reclaimable-summary">
             {reclaimableLoading && "Estimated reclaimable: loading…"}
             {reclaimableError && "Reclaimable estimate unavailable"}

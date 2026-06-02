@@ -1023,19 +1023,15 @@ tbody tr:last-child td {
 
 .selected-folder-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
   margin-bottom: 6px;
 }
 
 .selected-folder-actions {
   display: flex;
   gap: 6px;
-  flex-shrink: 0;
-  align-items: center;
   flex-wrap: wrap;
-  justify-content: flex-end;
 }
 
 .selected-folder-label {
