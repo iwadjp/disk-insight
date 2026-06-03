@@ -735,20 +735,24 @@ tbody tr:last-child td {
   flex: 1;
 }
 
-/* ── Bookmarks bar (inside folder-nav, above the tree list) ── */
-.bookmarks-bar {
-  flex-shrink: 0;
-  border-bottom: 1px solid #d9e1e8;
+/* ── Bookmarks panel (right-pane inspector card) ── */
+.bookmarks-panel {
+  background: #ffffff;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  overflow: hidden;
 }
 
-.bookmarks-bar-header {
+.bookmarks-panel-header {
   display: flex;
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 6px 12px;
+  padding: 8px 12px;
   background: #f8fafc;
   border: none;
+  border-bottom: 1px solid transparent;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -760,21 +764,24 @@ tbody tr:last-child td {
   user-select: none;
 }
 
-.bookmarks-bar-header:hover {
+.bookmarks-panel-header--open {
+  border-bottom-color: #d9e1e8;
+}
+
+.bookmarks-panel-header:hover {
   background: #f0f4f8;
   color: #17202a;
 }
 
-.bookmarks-bar-chevron {
+.bookmarks-panel-chevron {
   font-size: 10px;
   color: #9eacba;
   flex-shrink: 0;
 }
 
-.bookmarks-bar-list {
-  max-height: 160px;
+.bookmarks-panel-list {
+  max-height: 180px;
   overflow-y: auto;
-  background: #fafcfe;
 }
 
 .bookmark-row {

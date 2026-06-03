@@ -1427,7 +1427,7 @@ const TreeNodeRow = React.memo(function TreeNodeRow({
   );
 }); // React.memo — see TreeRowProps for why booleans are pre-computed by parent
 
-// ── Bookmarks bar (folder-nav header area) ───────────────────────────────
+// ── Bookmarks panel (right-pane inspector card) ──────────────────────────
 
 function BookmarksBar({
   bookmarks,
@@ -1445,18 +1445,18 @@ function BookmarksBar({
   if (bookmarks.length === 0) return null;
 
   return (
-    <div className="bookmarks-bar">
+    <div className="bookmarks-panel">
       <button
-        className="bookmarks-bar-header"
+        className={`bookmarks-panel-header${open ? " bookmarks-panel-header--open" : ""}`}
         onClick={() => setOpen((v) => !v)}
         title={open ? "Collapse bookmarks" : "Expand bookmarks"}
         aria-expanded={open}
       >
-        <span className="bookmarks-bar-chevron" aria-hidden="true">{open ? "▾" : "▸"}</span>
+        <span className="bookmarks-panel-chevron" aria-hidden="true">{open ? "▾" : "▸"}</span>
         Bookmarks ({bookmarks.length})
       </button>
       {open && (
-        <div className="bookmarks-bar-list">
+        <div className="bookmarks-panel-list">
           {bookmarks.map((b) => {
             const js = jumpStates[b.id];
             const isMissing     = js?.status === "missing";
@@ -1501,6 +1501,8 @@ function BookmarksBar({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+
 function TreeView({
   rootCount,
   visibleRows,
@@ -1518,7 +1520,8 @@ function TreeView({
   onKeyDown,
   onNavMouseMove,
   navRef,
-  bookmarksBarSlot,
+  jumpScrollRef,
+  jumpScrollTick,
 }: {
   rootCount: number;
   visibleRows: VisibleTreeRow[];
@@ -1536,7 +1539,10 @@ function TreeView({
   onKeyDown: (e: React.KeyboardEvent) => void;
   onNavMouseMove?: () => void;
   navRef?: React.RefObject<HTMLElement | null>;
-  bookmarksBarSlot?: React.ReactNode;
+  /** Ref holding the FRN to center-scroll to after a bookmark jump. */
+  jumpScrollRef?: React.MutableRefObject<number | null>;
+  /** Incrementing counter that signals a new bookmark jump. */
+  jumpScrollTick?: number;
 }) {
   const listRef = useRef<HTMLDivElement | null>(null);
   const treeViewRenderCount = useRef(0);
@@ -1565,9 +1571,31 @@ function TreeView({
     }
   }, [focusedRecordIndex]);
 
+  // Center-scroll for bookmark jumps: place target at ~33% from container top.
+  // Runs AFTER the nearest-scroll effect (declared later → executes later in same commit).
+  // jumpScrollRef.current is consumed (set to null) so the next arrow-key move
+  // uses normal nearest scroll.
+  useEffect(() => {
+    if (!jumpScrollRef) return;
+    const frn = jumpScrollRef.current;
+    if (frn === null) return;
+    jumpScrollRef.current = null; // consume — subsequent arrow moves use nearest scroll
+    const container = listRef.current;
+    if (!container) return;
+    const el = container.querySelector<HTMLElement>(`[data-record-index="${frn}"]`);
+    if (!el) return;
+    // Position target at 33% from container top (center-ish without going too high)
+    const cr = container.getBoundingClientRect();
+    const er = el.getBoundingClientRect();
+    const elTopRelative = er.top - cr.top + container.scrollTop;
+    const targetScrollTop = elTopRelative - container.clientHeight * 0.33 + er.height / 2;
+    container.scrollTop = Math.max(0, targetScrollTop);
+    treeLog(`scroll JUMP-CENTER  ri=${frn}  scrollTop=${container.scrollTop.toFixed(0)}`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpScrollTick]);
+
   return (
     <aside ref={navRef} className="folder-nav" tabIndex={0} onKeyDown={onKeyDown} onMouseMove={onNavMouseMove}>
-      {bookmarksBarSlot}
       <div className="folder-nav-header">Folder tree</div>
       <div className="folder-nav-list" ref={listRef} role="tree">
         {visibleRows.length === 0 ? (
@@ -2545,6 +2573,10 @@ function App() {
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [bookmarkJumpStates, setBookmarkJumpStates] = useState<Record<string, BookmarkJumpState>>({});
+  // jumpScrollFrnRef: FRN to center-scroll to after a bookmark jump.
+  // jumpScrollTick: incrementing counter that triggers TreeView's center-scroll effect.
+  const jumpScrollFrnRef = useRef<number | null>(null);
+  const [jumpScrollTick, setJumpScrollTick] = useState(0);
   const scanRestoreRef = useRef<{ path: string; drive: string } | null>(null);
   const scanGenerationRef = useRef(0);
   const cancelMessageTimerRef = useRef<number | null>(null);
@@ -3461,6 +3493,10 @@ function App() {
       setTreeError(null);
     }
 
+    // Request center-scroll: set FRN in ref, then bump tick to trigger TreeView effect
+    jumpScrollFrnRef.current = target.record_index;
+    setJumpScrollTick((n) => n + 1);
+
     // Check if target is visible after expansion (might be outside top-300 of parent)
     const parentFrn = chain.length >= 2 ? chain[chain.length - 2] : null;
     const parentChildren = parentFrn !== null
@@ -4130,16 +4166,8 @@ function App() {
               onKeyDown={stableKeyDown}
               onNavMouseMove={stableNavMouseMove}
               navRef={treeNavRef}
-              bookmarksBarSlot={
-                bookmarks.length > 0 ? (
-                  <BookmarksBar
-                    bookmarks={bookmarks}
-                    jumpStates={bookmarkJumpStates}
-                    onJump={handleJumpToBookmark}
-                    onRemove={handleRemoveBookmarkById}
-                  />
-                ) : undefined
-              }
+              jumpScrollRef={jumpScrollFrnRef}
+              jumpScrollTick={jumpScrollTick}
             />
             {treeContextMenu && (
               <SafeContextMenu
@@ -4176,6 +4204,14 @@ function App() {
               )}
               {/* v0.5.9-A/C: Filter input hidden. State (currentFilterQuery) preserved. */}
               {/* v0.5.9-A/C: DirectChildrenPanel not in default display. State preserved. */}
+              {bookmarks.length > 0 && (
+                <BookmarksBar
+                  bookmarks={bookmarks}
+                  jumpStates={bookmarkJumpStates}
+                  onJump={handleJumpToBookmark}
+                  onRemove={handleRemoveBookmarkById}
+                />
+              )}
               {selectedDir && (
                 <button
                   className={`insights-open-btn${insightsOpen ? " insights-open-btn--open" : ""}`}
