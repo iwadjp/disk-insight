@@ -1250,6 +1250,78 @@ fn list_drives() -> Vec<DriveInfo> {
     drives
 }
 
+// ── Administrator privilege detection ────────────────────────────────────
+
+/// Returns true when the current process has an elevated (administrator) token.
+/// Uses OpenProcessToken + GetTokenInformation(TokenElevation), which is the
+/// standard UAC-aware elevation check on Windows Vista+.
+fn check_is_elevated() -> bool {
+    use windows::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows::Win32::Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY};
+    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+    unsafe {
+        // Safety: GetCurrentProcess() returns a pseudo-handle valid for the lifetime
+        // of the process. OpenProcessToken with TOKEN_QUERY is a read-only access.
+        let mut token = HANDLE::default();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).is_err() {
+            return false;
+        }
+        let mut elevation = TOKEN_ELEVATION::default();
+        let mut returned_len = 0u32;
+        let ok = GetTokenInformation(
+            token,
+            TokenElevation,
+            Some(std::ptr::addr_of_mut!(elevation).cast()),
+            std::mem::size_of::<TOKEN_ELEVATION>() as u32,
+            &mut returned_len,
+        ).is_ok();
+        let _ = CloseHandle(token);
+        ok && elevation.TokenIsElevated != 0
+    }
+}
+
+#[tauri::command]
+fn is_running_as_admin() -> bool {
+    check_is_elevated()
+}
+
+/// Relaunch the current executable with administrator privileges via the "runas"
+/// ShellExecute verb (Windows UAC elevation prompt). On success the old process
+/// exits so the elevated instance takes over. On UAC cancellation ShellExecuteExW
+/// returns ERROR_CANCELLED and we return an Err without exiting.
+#[tauri::command]
+fn relaunch_as_admin() -> Result<(), String> {
+    use windows::Win32::UI::Shell::{ShellExecuteExW, SHELLEXECUTEINFOW};
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOW;
+    use windows::core::PCWSTR;
+
+    let exe_path = std::env::current_exe()
+        .map_err(|e| format!("Failed to get executable path: {e}"))?;
+    let exe_str = exe_path.to_string_lossy().into_owned();
+
+    let exe_wide: Vec<u16>  = exe_str.encode_utf16().chain(std::iter::once(0)).collect();
+    let verb_wide: Vec<u16> = "runas".encode_utf16().chain(std::iter::once(0)).collect();
+
+    unsafe {
+        // Safety: "runas" only relaunches our own exe — it is not arbitrary verb execution.
+        // hwnd=NULL means the UAC prompt is attached to the desktop (no parent window).
+        // The call blocks until the user accepts or cancels UAC.
+        let mut sei = SHELLEXECUTEINFOW {
+            cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
+            lpVerb: PCWSTR::from_raw(verb_wide.as_ptr()),
+            lpFile: PCWSTR::from_raw(exe_wide.as_ptr()),
+            nShow: SW_SHOW.0,
+            ..Default::default()
+        };
+        ShellExecuteExW(&mut sei)
+            .map_err(|e| format!("Administrator relaunch cancelled or failed: {e}"))?;
+    }
+
+    // UAC accepted and new process launched — exit this instance immediately.
+    std::process::exit(0);
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(AppState::default())
@@ -1274,6 +1346,8 @@ fn main() {
             add_bookmark,
             remove_bookmark,
             resolve_path_chain,
+            is_running_as_admin,
+            relaunch_as_admin,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run disk-insight UI");

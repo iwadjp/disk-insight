@@ -2607,6 +2607,8 @@ function App() {
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [bookmarkJumpStates, setBookmarkJumpStates] = useState<Record<string, BookmarkJumpState>>({});
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [adminWarningDismissed, setAdminWarningDismissed] = useState(false);
   // jumpScrollFrnRef: FRN to center-scroll to after a bookmark jump.
   // jumpScrollTick: incrementing counter that triggers TreeView's center-scroll effect.
   const jumpScrollFrnRef = useRef<number | null>(null);
@@ -3595,6 +3597,17 @@ function App() {
 
   // ────────────────────────────────────────────────────────────────────────
 
+  function handleRelaunchAsAdmin() {
+    if (!isTauriRuntime()) return;
+    // On success the Rust side calls std::process::exit(0) — the invoke promise
+    // never resolves. The catch handles UAC cancellation (Rust returns an Err).
+    invoke<void>("relaunch_as_admin").catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      setStatusMessage(msg);
+      setTimeout(() => setStatusMessage(null), 5000);
+    });
+  }
+
   function handleOpenExplorer(path: string) {
     setHandoffNotice(true);
     openInExplorer(path).catch((err: unknown) => {
@@ -3900,6 +3913,14 @@ function App() {
       .catch((err: unknown) => console.warn("[bookmarks] load failed:", err instanceof Error ? err.message : String(err)));
   }, []);
 
+  // Check administrator status once on mount — determines whether to show the warning.
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    invoke<boolean>("is_running_as_admin")
+      .then(setIsAdmin)
+      .catch(() => setIsAdmin(null));
+  }, []);
+
   // Reset bookmark jump states when scan data changes (new scan = stale states).
   useEffect(() => {
     setBookmarkJumpStates({});
@@ -4063,6 +4084,26 @@ function App() {
           )}
         </div>
       </header>
+
+      {isAdmin === false && !adminWarningDismissed && (
+        <div className="admin-warning-banner" role="alert">
+          <span className="admin-warning-icon" aria-hidden="true">⚠</span>
+          <span className="admin-warning-text">
+            Running without administrator privileges. Some NTFS scan operations may be limited.
+          </span>
+          <button className="btn btn-sm" onClick={handleRelaunchAsAdmin}>
+            Relaunch as administrator
+          </button>
+          <button
+            className="admin-warning-dismiss"
+            onClick={() => setAdminWarningDismissed(true)}
+            title="Dismiss"
+            aria-label="Dismiss administrator warning"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {advancedMode && (
         <div className="advanced-mode-banner" role="status">
