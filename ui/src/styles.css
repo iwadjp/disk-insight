@@ -697,9 +697,8 @@ tbody tr:last-child td {
 }
 
 .folder-nav:focus-visible {
-  /* Subtle container focus ring; individual rows show their own focus state */
-  outline: 2px solid rgba(26, 86, 219, 0.22);
-  outline-offset: 0;
+  /* No container focus ring — active row (blue) already shows keyboard position */
+  outline: none;
 }
 
 .folder-nav-header {
@@ -761,14 +760,16 @@ tbody tr:last-child td {
   background: #dce8fc;
 }
 
+/* Keyboard-focused row: blue active background is the sole position indicator.
+   No outline here — tree-row--active already shows the current row clearly. */
 .tree-row--keyboard-focused {
-  outline: 2px solid #1a56db;
-  outline-offset: -2px;
+  /* intentionally empty; tabIndex roving is still driven by this class */
 }
 
-/* When a row is both selected (active) and keyboard-focused, the blue background
-   is sufficient; suppress the outline so there's only one visual indicator. */
-.tree-row--active.tree-row--keyboard-focused {
+/* Suppress browser default :focus-visible outline on row divs so it never
+   conflicts with the blue active row, regardless of DOM focus position. */
+.tree-row:focus,
+.tree-row:focus-visible {
   outline: none;
 }
 
