@@ -200,6 +200,21 @@ type ChildrenLimitedResult = {
   total_count: number;
 };
 
+type Bookmark = {
+  id: string;
+  kind: "directory" | "file";
+  drive_letter: string;
+  volume_serial: string;
+  path: string;
+  path_key: string;
+  display_name: string;
+  note: string | null | undefined;
+  created_at_unix_ms: number;
+  last_seen_at_unix_ms: number | null | undefined;
+  last_known_subtree_size: number | null | undefined;
+  last_known_exists: boolean | null | undefined;
+};
+
 const TOP_OPTIONS = [10, 30, 50, 100, 200, 500];
 const LARGE_FOLDER_THRESHOLD = 200;
 const LARGE_TREE_THRESHOLD = 1000;
@@ -827,6 +842,8 @@ function SafeContextMenu({
   isAlreadyRecycled,
   onCopyError,
   onExternalHandoff,
+  isBookmarked: targetIsBookmarked,
+  onToggleBookmark,
 }: {
   target: ContextMenuTarget;
   onClose: () => void;
@@ -838,13 +855,17 @@ function SafeContextMenu({
   isAlreadyRecycled?: boolean;
   onCopyError: (msg: string) => void;
   onExternalHandoff?: () => void;
+  isBookmarked?: boolean;
+  onToggleBookmark?: () => void;
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuWidth = 250;
-  const showRecycleItem = advancedMode === true && onRequestRecycle !== undefined;
-  // 5 safe items (~30px each) + 8px base padding = 158px base.
-  // Advanced section adds separator(9) + section label(20) + item(30) = 59px.
-  const menuHeight = 158 + (showRecycleItem ? 59 : 0);
+  const showRecycleItem   = advancedMode === true && onRequestRecycle !== undefined;
+  const showBookmarkItem  = onToggleBookmark !== undefined;
+  // Base: 5 safe items (~30px each) + 8px base padding = 158px.
+  // Bookmark section: separator(9) + item(30) = 39px.
+  // Advanced section: separator(9) + label(20) + item(30) = 59px.
+  const menuHeight = 158 + (showBookmarkItem ? 39 : 0) + (showRecycleItem ? 59 : 0);
   const x = Math.min(target.x, window.innerWidth - menuWidth - 4);
   const y = Math.min(target.y, window.innerHeight - menuHeight - 4);
 
@@ -940,6 +961,17 @@ function SafeContextMenu({
       <button className="context-menu-item" onClick={copyAsPath}>
         Copy as path
       </button>
+      {showBookmarkItem && (
+        <>
+          <div className="context-menu-separator" role="separator" />
+          <button
+            className="context-menu-item"
+            onClick={() => { onToggleBookmark!(); onClose(); }}
+          >
+            {targetIsBookmarked ? "Remove bookmark" : "Add bookmark"}
+          </button>
+        </>
+      )}
       {showRecycleItem && (
         <>
           <div className="context-menu-separator" role="separator" />
@@ -1528,6 +1560,8 @@ function SelectedFolderCard({
   refreshAfterCleanupDisabled,
   cleanupRefreshDelta,
   onCopyError,
+  isBookmarked: folderIsBookmarked,
+  onToggleBookmark,
 }: {
   dir: DirectoryEntry;
   reclaimable: ReclaimableSummary | null;
@@ -1539,6 +1573,8 @@ function SelectedFolderCard({
   refreshAfterCleanupDisabled: boolean;
   cleanupRefreshDelta: CleanupRefreshDelta | null;
   onCopyError: (msg: string) => void;
+  isBookmarked?: boolean;
+  onToggleBookmark?: () => void;
 }) {
   const confidenceClass = reclaimable
     ? `confidence-badge confidence-badge--${reclaimable.confidence.toLowerCase()}`
@@ -1562,6 +1598,16 @@ function SelectedFolderCard({
           >
             Refresh after cleanup
           </button>
+          {onToggleBookmark && (
+            <button
+              className={`btn btn--bookmark${folderIsBookmarked ? " btn--bookmark--active" : ""}`}
+              onClick={onToggleBookmark}
+              title={folderIsBookmarked ? "Remove bookmark" : "Add bookmark"}
+              aria-label={folderIsBookmarked ? "Remove bookmark" : "Add bookmark"}
+            >
+              {folderIsBookmarked ? "★" : "☆"}
+            </button>
+          )}
         </div>
       </div>
       <div className="selected-folder-path" title={dir.path}>
@@ -2408,6 +2454,7 @@ function App() {
   const [largestItemsError, setLargestItemsError] = useState<string | null>(null);
   const [handoffNotice, setHandoffNotice] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const scanRestoreRef = useRef<{ path: string; drive: string } | null>(null);
   const scanGenerationRef = useRef(0);
   const cancelMessageTimerRef = useRef<number | null>(null);
@@ -3206,6 +3253,49 @@ function App() {
   _contextMenuFnRef.current  = handleTreeContextMenu;
   _keyDownFnRef.current      = handleTreeKeyDown;
 
+  // ── Bookmark helpers ────────────────────────────────────────────────────
+
+  /** Normalize a path to a bookmark match key (lowercase, no trailing \, no \\?\). */
+  function bookmarkPathKey(path: string): string {
+    let s = path.replace(/\//g, "\\");
+    if (s.startsWith("\\\\?\\")) s = s.slice(4);
+    else if (s.startsWith("\\??\\")) s = s.slice(4);
+    while (s.length > 3 && s.endsWith("\\")) s = s.slice(0, -1);
+    return s.toLowerCase();
+  }
+
+  function isBookmarked(path: string): boolean {
+    const key = bookmarkPathKey(path);
+    return bookmarks.some((b) => b.path_key === key);
+  }
+
+  function handleAddBookmark(path: string, isDirectory: boolean) {
+    if (!isTauriRuntime()) return;
+    invoke<Bookmark[]>("add_bookmark", { path, isDirectory })
+      .then(setBookmarks)
+      .catch((err: unknown) => console.warn("[bookmarks] add failed:", err instanceof Error ? err.message : String(err)));
+  }
+
+  function handleRemoveBookmarkByPath(path: string) {
+    if (!isTauriRuntime()) return;
+    const key = bookmarkPathKey(path);
+    const bookmark = bookmarks.find((b) => b.path_key === key);
+    if (!bookmark) return;
+    invoke<Bookmark[]>("remove_bookmark", { id: bookmark.id })
+      .then(setBookmarks)
+      .catch((err: unknown) => console.warn("[bookmarks] remove failed:", err instanceof Error ? err.message : String(err)));
+  }
+
+  function handleToggleBookmark(path: string, isDirectory: boolean) {
+    if (isBookmarked(path)) {
+      handleRemoveBookmarkByPath(path);
+    } else {
+      handleAddBookmark(path, isDirectory);
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
+
   function handleOpenExplorer(path: string) {
     setHandoffNotice(true);
     openInExplorer(path).catch((err: unknown) => {
@@ -3502,6 +3592,14 @@ function App() {
     if (active instanceof HTMLElement && (active.tagName === "INPUT" || active.tagName === "SELECT")) return;
     treeNavRef.current.focus({ preventScroll: true });
   }, [data]);
+
+  // Load persisted bookmarks once on mount (Tauri runtime only).
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    invoke<Bookmark[]>("list_bookmarks")
+      .then(setBookmarks)
+      .catch((err: unknown) => console.warn("[bookmarks] load failed:", err instanceof Error ? err.message : String(err)));
+  }, []);
 
   useEffect(() => {
     if (!isLoading || scanStartMsRef.current === null) return;
@@ -3854,6 +3952,8 @@ function App() {
                 isAlreadyRecycled={isItemRecycled(treeContextMenu.recordIndex, treeContextMenu.path, recycledItems)}
                 onCopyError={handleCopyError}
                 onExternalHandoff={() => setHandoffNotice(true)}
+                isBookmarked={isBookmarked(treeContextMenu.path)}
+                onToggleBookmark={() => handleToggleBookmark(treeContextMenu.path, treeContextMenu.isDirectory)}
               />
             )}
             <div className="content-right">
@@ -3869,6 +3969,8 @@ function App() {
                   refreshAfterCleanupDisabled={scanDisabled}
                   cleanupRefreshDelta={cleanupRefreshDelta}
                   onCopyError={handleCopyError}
+                  isBookmarked={isBookmarked(selectedDir.path)}
+                  onToggleBookmark={() => handleToggleBookmark(selectedDir.path, true)}
                 />
               )}
               {/* v0.5.9-A/C: Filter input hidden. State (currentFilterQuery) preserved. */}

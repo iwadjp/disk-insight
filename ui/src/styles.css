@@ -301,6 +301,23 @@ tbody tr:last-child td {
   font-size: 12px;
 }
 
+.btn--bookmark {
+  padding: 4px 10px;
+  font-size: 15px;
+  min-width: 34px;
+}
+
+.btn--bookmark--active {
+  background: #fef9c3;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.btn--bookmark--active:hover:not(:disabled) {
+  background: #fef08a;
+  border-color: #d97706;
+}
+
 
 .error,
 .loading {

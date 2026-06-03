@@ -48,6 +48,50 @@ struct RecycleResult {
 
 const SAMPLE_JSON: &str = include_str!("../../public/sample/probe7.sample.json");
 
+// ── Bookmark data model ───────────────────────────────────────────────────
+
+const BOOKMARKS_SCHEMA_VERSION: u32 = 1;
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+struct Bookmark {
+    id: String,
+    /// "directory" | "file"
+    kind: String,
+    /// Drive letter (display only — volume_serial is the match key)
+    drive_letter: String,
+    /// 8-hex volume serial from GetVolumeInformationW — stable across letter changes
+    volume_serial: String,
+    /// Full path, original case (display)
+    path: String,
+    /// Normalized lowercase path (match key: no trailing \, no \\?\, lowercase)
+    path_key: String,
+    /// Basename for list display
+    display_name: String,
+    /// Reserved for future user notes (MVP: always null, no UI yet)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    note: Option<String>,
+    created_at_unix_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_seen_at_unix_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_known_subtree_size: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_known_exists: Option<bool>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct BookmarksFile {
+    schema_version: u32,
+    updated_at_unix_ms: u64,
+    bookmarks: Vec<Bookmark>,
+}
+
+impl Default for BookmarksFile {
+    fn default() -> Self {
+        Self { schema_version: BOOKMARKS_SCHEMA_VERSION, updated_at_unix_ms: 0, bookmarks: Vec::new() }
+    }
+}
+
 #[derive(Clone, serde::Serialize)]
 struct ScanProgressEvent {
     scan_id:    String,
@@ -584,6 +628,106 @@ fn is_same_or_child_path(target: &str, base: &str) -> bool {
     target == base || target.starts_with(&format!("{base}\\"))
 }
 
+// ── Bookmark persistence helpers ──────────────────────────────────────────
+
+/// Returns %LOCALAPPDATA%\disk-insight (parent of the cache\ dir).
+/// bookmarks.json lives here directly so a cache-clear won't delete user data.
+fn local_data_dir() -> Result<PathBuf, String> {
+    let base = std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .ok_or_else(|| "LOCALAPPDATA is not set".to_string())?;
+    Ok(base.join("disk-insight"))
+}
+
+fn bookmark_now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(u128::from(u64::MAX)) as u64
+}
+
+/// Match key: same normalization as is_same_path (no \\?\, no trailing \, lowercase).
+fn bookmark_path_key(raw: &str) -> String {
+    normalize_raw_path_for_compare(raw).to_lowercase()
+}
+
+/// Extract drive letter from an absolute Windows path.
+fn drive_letter_from_path_str(path: &str) -> Option<char> {
+    let s = path.strip_prefix(r"\\?\").unwrap_or(path);
+    let bytes = s.as_bytes();
+    if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
+        Some(bytes[0].to_ascii_uppercase() as char)
+    } else {
+        None
+    }
+}
+
+/// Get 8-hex volume serial from GetVolumeInformationW.
+fn volume_serial_for_drive(letter: char) -> Result<String, String> {
+    use windows::Win32::Storage::FileSystem::GetVolumeInformationW;
+    use windows::core::PCWSTR;
+    let root: Vec<u16> = format!("{}:\\", letter.to_ascii_uppercase())
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut serial = 0u32;
+    unsafe { GetVolumeInformationW(PCWSTR(root.as_ptr()), None, Some(&mut serial), None, None, None) }
+        .map_err(|e| format!("GetVolumeInformationW({letter}:): {e}"))?;
+    Ok(format!("{serial:08X}"))
+}
+
+/// Load bookmarks.json; returns empty file on missing. On corrupt JSON, retires to
+/// bookmarks.json.corrupt-<ms> and returns empty file (does not crash startup).
+fn load_bookmarks_file() -> BookmarksFile {
+    let dir = match local_data_dir() {
+        Ok(d) => d,
+        Err(e) => { eprintln!("[bookmarks] data dir unavailable: {e}"); return BookmarksFile::default(); }
+    };
+    let path = dir.join("bookmarks.json");
+    if !path.exists() { return BookmarksFile::default(); }
+    let raw = match std::fs::read(&path) {
+        Ok(r) => r,
+        Err(e) => { eprintln!("[bookmarks] read error: {e}"); return BookmarksFile::default(); }
+    };
+    match serde_json::from_slice::<BookmarksFile>(&raw) {
+        Ok(f) if f.schema_version == BOOKMARKS_SCHEMA_VERSION => f,
+        Err(e) => {
+            eprintln!("[bookmarks] corrupt JSON ({e}), retiring to .corrupt");
+            let corrupt = path.with_extension(format!("json.corrupt-{}", bookmark_now_ms()));
+            let _ = std::fs::rename(&path, &corrupt);
+            BookmarksFile::default()
+        }
+        Ok(f) => {
+            eprintln!("[bookmarks] unsupported schema_version={}", f.schema_version);
+            BookmarksFile::default()
+        }
+    }
+}
+
+/// Atomically write bookmarks file (tmp + rename, same pattern as scan-cache).
+fn save_bookmarks_file(file: &mut BookmarksFile) -> Result<(), String> {
+    file.updated_at_unix_ms = bookmark_now_ms();
+    let dir = local_data_dir()?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create data dir: {e}"))?;
+    let dest = dir.join("bookmarks.json");
+    let tmp  = dir.join(format!("bookmarks.json.tmp-{}", file.updated_at_unix_ms));
+    let json = serde_json::to_vec_pretty(file).map_err(|e| format!("serialize bookmarks: {e}"))?;
+    std::fs::write(&tmp, &json).map_err(|e| format!("write tmp bookmarks: {e}"))?;
+    match std::fs::rename(&tmp, &dest) {
+        Ok(()) => Ok(()),
+        Err(rename_err) => {
+            if dest.exists() {
+                std::fs::remove_file(&dest).map_err(|e| format!("remove old bookmarks: {e}"))?;
+                std::fs::rename(&tmp, &dest).map_err(|e| format!("rename bookmarks: {e}"))?;
+                Ok(())
+            } else {
+                Err(format!("rename bookmarks: {rename_err}"))
+            }
+        }
+    }
+}
+
 fn block_reason_for_recycle_target(normalized_path: &str, attributes: u32) -> Option<String> {
     use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_SYSTEM;
 
@@ -899,6 +1043,67 @@ fn open_terminal_at(path: String, is_dir: bool) -> Result<(), String> {
     Ok(())
 }
 
+// ── Bookmark Tauri commands ────────────────────────────────────────────────
+
+/// Returns the current bookmark list. Corrupt file is silently retired; startup
+/// is never blocked by a bad bookmarks.json.
+#[tauri::command]
+fn list_bookmarks() -> Vec<Bookmark> {
+    load_bookmarks_file().bookmarks
+}
+
+/// Add a bookmark for `path`. Derives drive_letter, volume_serial, path_key
+/// from the path. Deduplicates on (volume_serial, path_key). Returns updated list.
+#[tauri::command]
+fn add_bookmark(path: String, is_directory: bool) -> Result<Vec<Bookmark>, String> {
+    let drive_letter = drive_letter_from_path_str(&path)
+        .ok_or_else(|| format!("cannot determine drive letter from: {path}"))?;
+    let volume_serial = volume_serial_for_drive(drive_letter)
+        .unwrap_or_else(|_| "UNKNOWN".to_string());
+    let path_key = bookmark_path_key(&path);
+    let display_name = {
+        let norm = normalize_raw_path_for_compare(&path);
+        let trimmed = norm.trim_end_matches('\\');
+        trimmed.rsplit('\\').next()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(trimmed)
+            .to_string()
+    };
+
+    let mut file = load_bookmarks_file();
+    // Dedup: same volume + path
+    if file.bookmarks.iter().any(|b| b.volume_serial == volume_serial && b.path_key == path_key) {
+        return Ok(file.bookmarks);
+    }
+    let ts  = bookmark_now_ms();
+    let idx = file.bookmarks.len();
+    file.bookmarks.push(Bookmark {
+        id:                      format!("b-{ts}-{idx}"),
+        kind:                    if is_directory { "directory".to_string() } else { "file".to_string() },
+        drive_letter:            drive_letter.to_string(),
+        volume_serial,
+        path:                    path.clone(),
+        path_key,
+        display_name,
+        note:                    None,
+        created_at_unix_ms:      ts,
+        last_seen_at_unix_ms:    None,
+        last_known_subtree_size: None,
+        last_known_exists:       None,
+    });
+    save_bookmarks_file(&mut file)?;
+    Ok(file.bookmarks)
+}
+
+/// Remove a bookmark by its id field. Returns updated list.
+#[tauri::command]
+fn remove_bookmark(id: String) -> Result<Vec<Bookmark>, String> {
+    let mut file = load_bookmarks_file();
+    file.bookmarks.retain(|b| b.id != id);
+    save_bookmarks_file(&mut file)?;
+    Ok(file.bookmarks)
+}
+
 #[tauri::command]
 fn list_drives() -> Vec<DriveInfo> {
     use windows::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives};
@@ -949,6 +1154,9 @@ fn main() {
             get_largest_items_under,
             get_reclaimable_summary,
             list_drives,
+            list_bookmarks,
+            add_bookmark,
+            remove_bookmark,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run disk-insight UI");
