@@ -144,6 +144,46 @@ h2 {
   color: #64748b;
 }
 
+/* ── Compact one-line drive summary (replaces old metric cards) ── */
+.compact-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 0;
+  padding: 7px 14px;
+  margin-bottom: 10px;
+  background: #ffffff;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: #374151;
+  line-height: 1.6;
+}
+
+.compact-summary-drive {
+  font-weight: 650;
+  color: #17202a;
+  white-space: nowrap;
+}
+
+.compact-summary-sep {
+  padding: 0 8px;
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.compact-summary--unsupported {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.compact-summary-note {
+  color: #64748b;
+  font-size: 12px;
+  white-space: normal;
+}
+
 .table-section {
   margin-top: 18px;
   overflow: hidden;

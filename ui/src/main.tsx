@@ -1254,60 +1254,50 @@ function PerfBreakdown({ summary, invokeMs }: { summary: Summary; invokeMs: numb
   );
 }
 
-function SummaryCard({ summary }: { summary: Summary }) {
-  const items = [
-    ["Drive", summary.drive],
-    [
-      "Allocated estimate",
-      formatBytes(summary.total_final_allocated),
-      "Estimated allocated-style size. Compare with Explorer \"Size on disk\" or WizTree \"Allocated\", not Explorer \"Size\".",
-    ],
-    ["Files", formatNumber(summary.files)],
-    ["Directories", formatNumber(summary.directories)],
-  ];
+function CompactSummary({
+  summary,
+  capacity,
+}: {
+  summary: Summary;
+  capacity?: DriveCapacity | null;
+}) {
   return (
-    <section className="summary" aria-label="Scan summary">
-      {items.map(([label, value, title]) => (
-        <div className="metric" key={label} title={title}>
-          <span className="metric-label">{label}</span>
-          <strong>{value}</strong>
-        </div>
-      ))}
-    </section>
-  );
-}
-
-function CapacityCard({ capacity }: { capacity: DriveCapacity }) {
-  return (
-    <div className="capacity-card">
-      <span className="metric-label">Drive capacity</span>
-      <div className="capacity-card-stats">
-        <span title="Total volume capacity reported by the OS">{formatBytes(capacity.total_bytes)}{" "}total</span>
-        <span className="capacity-sep">·</span>
-        <span title="Used space (total minus free)">{formatBytes(capacity.used_bytes)}{" "}used ({capacity.used_percent.toFixed(1)}%)</span>
-        <span className="capacity-sep">·</span>
-        <span title="Free space on the volume">{formatBytes(capacity.free_bytes)}{" "}free</span>
-      </div>
+    <div className="compact-summary" aria-label="Scan summary">
+      <span className="compact-summary-drive">{summary.drive}</span>
+      {capacity && (
+        <>
+          <span className="compact-summary-sep" aria-hidden="true">·</span>
+          <span title="Total volume capacity reported by the OS">{formatBytes(capacity.total_bytes)}</span>
+          <span className="compact-summary-sep" aria-hidden="true">·</span>
+          <span title="Used space (total minus free)">Used {formatBytes(capacity.used_bytes)} ({capacity.used_percent.toFixed(1)}%)</span>
+          <span className="compact-summary-sep" aria-hidden="true">·</span>
+          <span title="Free space on the volume">Free {formatBytes(capacity.free_bytes)}</span>
+          <span className="compact-summary-sep" aria-hidden="true">·</span>
+        </>
+      )}
+      <span title="Estimated allocated-style size. Compare with Explorer 'Size on disk' or WizTree 'Allocated', not Explorer 'Size'.">
+        Alloc {formatBytes(summary.total_final_allocated)}
+      </span>
+      <span className="compact-summary-sep" aria-hidden="true">·</span>
+      <span>Files {formatRecords(summary.files)}</span>
+      <span className="compact-summary-sep" aria-hidden="true">·</span>
+      <span>Dirs {formatRecords(summary.directories)}</span>
     </div>
   );
 }
 
 function UnsupportedDriveCapacityCard({ drive, capacity, note }: UnsupportedDriveCapacity) {
   return (
-    <div className="capacity-card capacity-card--unsupported">
-      <span className="metric-label">Drive capacity</span>
-      <div>
-        <div className="capacity-card-stats">
-          <span title="Total volume capacity reported by Windows">{formatBytes(capacity.total_bytes)}{" "}total</span>
-          <span className="capacity-sep">·</span>
-          <span title="Used space (total minus free)">{formatBytes(capacity.used_bytes)}{" "}used ({capacity.used_percent.toFixed(1)}%)</span>
-          <span className="capacity-sep">·</span>
-          <span title="Free space on the volume">{formatBytes(capacity.free_bytes)}{" "}free</span>
-        </div>
-        <div className="capacity-note">
-          {drive}: {note}
-        </div>
-      </div>
+    <div className="compact-summary compact-summary--unsupported">
+      <span className="compact-summary-drive">{drive}</span>
+      <span className="compact-summary-sep" aria-hidden="true">·</span>
+      <span title="Total volume capacity reported by Windows">{formatBytes(capacity.total_bytes)}</span>
+      <span className="compact-summary-sep" aria-hidden="true">·</span>
+      <span title="Used space (total minus free)">Used {formatBytes(capacity.used_bytes)} ({capacity.used_percent.toFixed(1)}%)</span>
+      <span className="compact-summary-sep" aria-hidden="true">·</span>
+      <span title="Free space on the volume">Free {formatBytes(capacity.free_bytes)}</span>
+      <span className="compact-summary-sep" aria-hidden="true">·</span>
+      <span className="compact-summary-note">{note}</span>
     </div>
   );
 }
@@ -4264,8 +4254,7 @@ function App() {
             isLoading={isLoading}
             scanTopN={scanTopN}
           />
-          <SummaryCard summary={data.summary} />
-          {data.capacity && <CapacityCard capacity={data.capacity} />}
+          <CompactSummary summary={data.summary} capacity={data.capacity} />
           <div className="content-pane">
             <TreeView
               rootCount={data.root_children?.length ?? 0}
