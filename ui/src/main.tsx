@@ -1334,7 +1334,15 @@ const TreeNodeRow = React.memo(function TreeNodeRow({
         <button
           className="tree-toggle"
           tabIndex={-1}
-          onClick={(e) => { e.stopPropagation(); onToggleExpand(node); }}
+          onKeyDown={onKeyDown}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleExpand(node);
+            // Move DOM focus to the row div after clicking so subsequent key events
+            // reach onKeyDown directly, even if tabIndex={-1} caused focus to escape
+            // to an ancestor (WebView2-specific behaviour).
+            e.currentTarget.closest<HTMLElement>('[role="treeitem"]')?.focus({ preventScroll: true });
+          }}
           disabled={isLoading}
           aria-label={isExpanded ? "Collapse" : "Expand"}
           title={isExpanded ? "Collapse" : "Expand"}
@@ -1350,6 +1358,7 @@ const TreeNodeRow = React.memo(function TreeNodeRow({
         <button
           className="tree-label"
           tabIndex={-1}
+          onKeyDown={onKeyDown}
           onClick={() => onSelect(node)}
           title={node.path}
         >
@@ -3101,6 +3110,12 @@ function App() {
   function handleToggleExpand(node: TreeNode) {
     if (!node.is_directory) return;
     const id = node.record_index;
+
+    // Track the clicked row so keyboard navigation knows which row is "current".
+    // handleSelectTreeNode handles this for label clicks; toggle clicks need it too.
+    // When called from handleTreeKeyDown, focusedRecordIndex is already correct,
+    // so this is a no-op (same value, React bails out of the state update).
+    setFocusedRecordIndex(id);
 
     // Collapse if already expanded
     if (expandedIds.has(id)) {
