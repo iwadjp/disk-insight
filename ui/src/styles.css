@@ -766,10 +766,13 @@ tbody tr:last-child td {
   /* intentionally empty; tabIndex roving is still driven by this class */
 }
 
-/* Suppress browser default :focus-visible outline on row divs so it never
-   conflicts with the blue active row, regardless of DOM focus position. */
-.tree-row:focus,
-.tree-row:focus-visible {
+/* Suppress browser default :focus-visible outline on tree-row divs and all
+   child elements (toggle buttons, label buttons, spans) so they never conflict
+   with the blue active row, regardless of which DOM element holds focus. */
+.folder-nav .tree-row:focus,
+.folder-nav .tree-row:focus-visible,
+.folder-nav .tree-row *:focus,
+.folder-nav .tree-row *:focus-visible {
   outline: none;
 }
 

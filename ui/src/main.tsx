@@ -1328,6 +1328,7 @@ function TreeNodeRow({
       {isDir ? (
         <button
           className="tree-toggle"
+          tabIndex={-1}
           onClick={(e) => { e.stopPropagation(); onToggleExpand(node); }}
           disabled={isLoading}
           aria-label={isExpanded ? "Collapse" : "Expand"}
@@ -1343,6 +1344,7 @@ function TreeNodeRow({
       {isDir ? (
         <button
           className="tree-label"
+          tabIndex={-1}
           onClick={() => onSelect(node)}
           title={node.path}
         >
