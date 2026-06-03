@@ -1678,11 +1678,7 @@ function SelectedFolderCard({
   reclaimableLoading,
   reclaimableError,
   sourceKind,
-  onOpenExplorer,
-  onRefreshAfterCleanup,
-  refreshAfterCleanupDisabled,
   cleanupRefreshDelta,
-  onCopyError,
   isBookmarked: folderIsBookmarked,
   onToggleBookmark,
 }: {
@@ -1691,11 +1687,7 @@ function SelectedFolderCard({
   reclaimableLoading: boolean;
   reclaimableError: string | null;
   sourceKind: SourceKind | null;
-  onOpenExplorer: (path: string) => void;
-  onRefreshAfterCleanup: () => void;
-  refreshAfterCleanupDisabled: boolean;
   cleanupRefreshDelta: CleanupRefreshDelta | null;
-  onCopyError: (msg: string) => void;
   isBookmarked?: boolean;
   onToggleBookmark?: () => void;
 }) {
@@ -1707,31 +1699,16 @@ function SelectedFolderCard({
     <div className="selected-folder-card">
       <div className="selected-folder-header">
         <span className="selected-folder-label">Selected folder</span>
-        <div className="selected-folder-actions">
-          <button className="btn" onClick={() => onOpenExplorer(dir.path)}>
-            Open folder
-          </button>
-          <CopyButton text={dir.path} onError={onCopyError} />
+        {onToggleBookmark && (
           <button
-            className="btn"
-            onClick={onRefreshAfterCleanup}
-            disabled={refreshAfterCleanupDisabled}
-            title="Refresh scan after cleaning files in Explorer"
-            aria-label="Refresh scan after cleaning files in Explorer"
+            className={`btn btn--bookmark${folderIsBookmarked ? " btn--bookmark--active" : ""}`}
+            onClick={onToggleBookmark}
+            title={folderIsBookmarked ? "Remove bookmark" : "Add bookmark"}
+            aria-label={folderIsBookmarked ? "Remove bookmark" : "Add bookmark"}
           >
-            Refresh after cleanup
+            {folderIsBookmarked ? "★" : "☆"}
           </button>
-          {onToggleBookmark && (
-            <button
-              className={`btn btn--bookmark${folderIsBookmarked ? " btn--bookmark--active" : ""}`}
-              onClick={onToggleBookmark}
-              title={folderIsBookmarked ? "Remove bookmark" : "Add bookmark"}
-              aria-label={folderIsBookmarked ? "Remove bookmark" : "Add bookmark"}
-            >
-              {folderIsBookmarked ? "★" : "☆"}
-            </button>
-          )}
-        </div>
+        )}
       </div>
       <div className="selected-folder-path" title={dir.path}>
         {isDriveRoot(dir.path) ? (
@@ -4300,11 +4277,7 @@ function App() {
                   reclaimableLoading={reclaimableLoading}
                   reclaimableError={reclaimableError}
                   sourceKind={sourceKind}
-                  onOpenExplorer={handleOpenExplorer}
-                  onRefreshAfterCleanup={handleRefreshAfterCleanup}
-                  refreshAfterCleanupDisabled={scanDisabled}
                   cleanupRefreshDelta={cleanupRefreshDelta}
-                  onCopyError={handleCopyError}
                   isBookmarked={isBookmarked(selectedDir.path)}
                   onToggleBookmark={() => handleToggleBookmark(selectedDir.path, true)}
                 />

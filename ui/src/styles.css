@@ -1296,15 +1296,11 @@ tbody tr:last-child td {
 
 .selected-folder-header {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 6px;
-}
-
-.selected-folder-actions {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
 }
 
 .selected-folder-label {
