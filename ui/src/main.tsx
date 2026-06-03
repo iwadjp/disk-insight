@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
@@ -1271,25 +1271,29 @@ type TreeRowProps = {
   node: TreeNode;
   depth: number;
   totalSize: number;
-  expandedIds: Set<number>;
-  loadingIds: Set<number>;
-  selectedRecordIndex: number | undefined;
-  focusedRecordIndex: number | null;
-  isRecycled?: boolean;
+  // Pre-computed booleans — parent computes these so React.memo can skip unchanged rows
+  isExpanded: boolean;
+  isLoading: boolean;
+  isSelected: boolean;
+  isFocused: boolean;
+  isRecycled: boolean;
   onToggleExpand: (node: TreeNode) => void;
   onSelect: (node: TreeNode) => void;
   onContextMenu: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
 };
 
-function TreeNodeRow({
+// React.memo: only re-renders when its own props change.
+// With pre-computed boolean props, arrow-key navigation re-renders only 2 rows
+// (old active → false, new active → true) instead of all visible rows.
+const TreeNodeRow = React.memo(function TreeNodeRow({
   node,
   depth,
   totalSize,
-  expandedIds,
-  loadingIds,
-  selectedRecordIndex,
-  focusedRecordIndex,
+  isExpanded,
+  isLoading,
+  isSelected,
+  isFocused,
   isRecycled,
   onToggleExpand,
   onSelect,
@@ -1302,15 +1306,6 @@ function TreeNodeRow({
     treeLog(`row ri=${node.record_index} name=${node.name} rendered ${renderCount.current}× (frequent re-render detected)`);
   }
   const isDir       = node.is_directory;
-  const isExpanded  = expandedIds.has(node.record_index);
-  const isLoading   = loadingIds.has(node.record_index);
-  // In keyboard mode (focusedRecordIndex set), selection follows the focused row
-  // so the blue highlight and the focus indicator always land on the same row.
-  // In mouse-only mode (focusedRecordIndex null), fall back to selectedDir.
-  const isSelected  = focusedRecordIndex !== null
-    ? focusedRecordIndex === node.record_index
-    : selectedRecordIndex === node.record_index;
-  const isFocused   = focusedRecordIndex === node.record_index; // drives tabIndex
   const indent      = 8 + depth * 16;
   const displayName = node.name || node.path;
   const barPct      = totalSize > 0 ? Math.min(100, (node.subtree_size / totalSize) * 100) : 0;
@@ -1377,7 +1372,7 @@ function TreeNodeRow({
       )}
     </div>
   );
-}
+}); // React.memo — see TreeRowProps for why booleans are pre-computed by parent
 
 function TreeView({
   rootCount,
@@ -1480,10 +1475,14 @@ function TreeView({
                 node={row.node}
                 depth={row.depth}
                 totalSize={totalSize}
-                expandedIds={expandedIds}
-                loadingIds={loadingIds}
-                selectedRecordIndex={selectedRecordIndex}
-                focusedRecordIndex={focusedRecordIndex}
+                isExpanded={expandedIds.has(row.node.record_index)}
+                isLoading={loadingIds.has(row.node.record_index)}
+                isSelected={
+                  focusedRecordIndex !== null
+                    ? focusedRecordIndex === row.node.record_index
+                    : selectedRecordIndex === row.node.record_index
+                }
+                isFocused={focusedRecordIndex === row.node.record_index}
                 isRecycled={recycledItems ? isItemRecycled(row.node.record_index, row.node.path, recycledItems) : false}
                 onToggleExpand={onToggleExpand}
                 onSelect={onSelect}
@@ -2404,6 +2403,17 @@ function App() {
   const recycleRefreshPendingRef = useRef(false);
   const treeNavRef = useRef<HTMLElement | null>(null);
 
+  // Stable handler refs — useRef so React.memo on TreeNodeRow can skip unchanged rows.
+  // Each ref is updated every render, so the stable callback always calls the latest fn.
+  const _toggleExpandFnRef = useRef<(node: TreeNode) => void>(() => {});
+  const _selectNodeFnRef   = useRef<(node: TreeNode) => void>(() => {});
+  const _contextMenuFnRef  = useRef<(e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void>(() => {});
+  const _keyDownFnRef      = useRef<(e: React.KeyboardEvent) => void>(() => {});
+  const stableToggleExpand = useCallback((node: TreeNode) => _toggleExpandFnRef.current(node), []);
+  const stableSelectNode   = useCallback((node: TreeNode) => _selectNodeFnRef.current(node), []);
+  const stableContextMenu  = useCallback((e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => _contextMenuFnRef.current(e, node), []);
+  const stableKeyDown      = useCallback((e: React.KeyboardEvent) => _keyDownFnRef.current(e), []);
+
   const visibleRows = useMemo(() => {
     const t0 = performance.now();
     const rows = buildVisibleRows(data?.root_children ?? [], expandedIds, childrenByParent, childrenErrors, treeExpandedTotalCount);
@@ -2609,27 +2619,41 @@ function App() {
       setReclaimableLoading(false);
       return;
     }
-    const recT0 = performance.now();
-    perfLog(`reclaimable START  path=${selectedDir.path}`);
+    // 150ms debounce: rapid arrow-key movement cancels previous requests so only
+    // the folder the user stops on triggers get_reclaimable_summary IPC.
     let cancelled = false;
-    setReclaimableLoading(true);
-    setReclaimableError(null);
-    getReclaimableSummary(selectedDir.record_index, selectedDir.path, data.summary.drive)
-      .then((summary) => {
-        if (cancelled) return;
-        perfLog(`reclaimable DONE  path=${selectedDir.path}  t=${(performance.now() - recT0).toFixed(0)}ms  confidence=${summary.confidence}`);
-        setReclaimable(summary);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        perfLog(`reclaimable ERROR  path=${selectedDir.path}  t=${(performance.now() - recT0).toFixed(0)}ms`);
-        setReclaimable(null);
-        setReclaimableError(String(err));
-      })
-      .finally(() => {
-        if (!cancelled) setReclaimableLoading(false);
-      });
-    return () => { cancelled = true; };
+    let debounceId: number | null = null;
+    debounceId = window.setTimeout(() => {
+      debounceId = null;
+      if (cancelled) return;
+      const recT0 = performance.now();
+      perfLog(`reclaimable START  path=${selectedDir.path}`);
+      treeLog(`reclaimable IPC FIRED (after 150ms debounce)  path=${selectedDir.path}`);
+      setReclaimableLoading(true);
+      setReclaimableError(null);
+      getReclaimableSummary(selectedDir.record_index, selectedDir.path, data.summary.drive)
+        .then((summary) => {
+          if (cancelled) return;
+          perfLog(`reclaimable DONE  path=${selectedDir.path}  t=${(performance.now() - recT0).toFixed(0)}ms  confidence=${summary.confidence}`);
+          setReclaimable(summary);
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          perfLog(`reclaimable ERROR  path=${selectedDir.path}  t=${(performance.now() - recT0).toFixed(0)}ms`);
+          setReclaimable(null);
+          setReclaimableError(String(err));
+        })
+        .finally(() => {
+          if (!cancelled) setReclaimableLoading(false);
+        });
+    }, 150);
+    return () => {
+      cancelled = true;
+      if (debounceId !== null) {
+        window.clearTimeout(debounceId);
+        debounceId = null;
+      }
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDir?.record_index, selectedDir?.path, data?.summary.drive, sourceKind]);
 
@@ -3147,6 +3171,14 @@ function App() {
         });
       });
   }
+
+  // Sync stable refs every render so stableToggleExpand/stableSelectNode/etc.
+  // always invoke the latest closure. Function declarations are hoisted so all
+  // handlers are available here regardless of textual order.
+  _toggleExpandFnRef.current = handleToggleExpand;
+  _selectNodeFnRef.current   = handleSelectTreeNode;
+  _contextMenuFnRef.current  = handleTreeContextMenu;
+  _keyDownFnRef.current      = handleTreeKeyDown;
 
   function handleOpenExplorer(path: string) {
     setHandoffNotice(true);
@@ -3777,10 +3809,10 @@ function App() {
               treeError={treeError}
               sourceKind={sourceKind}
               recycledItems={recycledItems}
-              onToggleExpand={handleToggleExpand}
-              onSelect={handleSelectTreeNode}
-              onContextMenu={handleTreeContextMenu}
-              onKeyDown={handleTreeKeyDown}
+              onToggleExpand={stableToggleExpand}
+              onSelect={stableSelectNode}
+              onContextMenu={stableContextMenu}
+              onKeyDown={stableKeyDown}
               navRef={treeNavRef}
             />
             {treeContextMenu && (
