@@ -5,6 +5,7 @@
 
 - 前提資料: [`v0.5.13-company-pc-dogfooding-plan.md`](./v0.5.13-company-pc-dogfooding-plan.md)（方針・リスク表）
   / [`context-menu-release-decisions.md`](./context-menu-release-decisions.md)（メニュー仕様）
+- **Build 手順・hash 記録:** [`company-safe-build.md`](./company-safe-build.md) / script: [`scripts/build-company-safe.ps1`](../scripts/build-company-safe.ps1)
 - 本書は **判断と手順のみ**。コード変更・署名・配布・GitHub Release は含まない。
 - **大原則:** セキュリティ製品（Defender / EDR / AppLocker / SmartScreen）の無効化・回避・検知回避は一切行わない。
   社内ルールに従い、許可される範囲でのみ実行する。**許可が取れない／警告が出るなら会社PCでは使わない。**

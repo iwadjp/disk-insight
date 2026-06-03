@@ -236,12 +236,12 @@ const TREE_EXPAND_LIMIT = 300;
 const PREF_KEY = "disk-insight.preferences.v1";
 
 // Performance instrumentation — set to true to enable, false for normal use
-const PERF_LOG = true;
+const PERF_LOG = false;
 function perfLog(...args: unknown[]): void {
   if (PERF_LOG) console.log("[perf]", ...args);
 }
-// Tree-specific performance instrumentation (set false before shipping)
-const PERF_TREE = true;
+// Tree-specific performance instrumentation
+const PERF_TREE = false;
 function treeLog(...args: unknown[]): void {
   if (PERF_TREE) console.log("[perf-tree]", ...args);
 }
