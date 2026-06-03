@@ -760,6 +760,14 @@ tbody tr:last-child td {
   background: #dce8fc;
 }
 
+/* During keyboard navigation, suppress hover background on non-active rows.
+   The folder-nav[data-keynav] attribute is set in handleTreeKeyDown and cleared
+   on the first mousemove inside the tree. This prevents the previous mouse-hover
+   position from showing a faint highlight alongside the keyboard-active row. */
+.folder-nav[data-keynav] .tree-row:not(.tree-row--active):hover {
+  background: transparent;
+}
+
 /* Keyboard-focused row: blue active background is the sole position indicator.
    No outline here — tree-row--active already shows the current row clearly. */
 .tree-row--keyboard-focused {

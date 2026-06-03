@@ -1389,6 +1389,7 @@ function TreeView({
   onSelect,
   onContextMenu,
   onKeyDown,
+  onNavMouseMove,
   navRef,
 }: {
   rootCount: number;
@@ -1405,6 +1406,7 @@ function TreeView({
   onSelect: (node: TreeNode) => void;
   onContextMenu: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
+  onNavMouseMove?: () => void;
   navRef?: React.RefObject<HTMLElement | null>;
 }) {
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -1435,7 +1437,7 @@ function TreeView({
   }, [focusedRecordIndex]);
 
   return (
-    <aside ref={navRef} className="folder-nav" tabIndex={0} onKeyDown={onKeyDown}>
+    <aside ref={navRef} className="folder-nav" tabIndex={0} onKeyDown={onKeyDown} onMouseMove={onNavMouseMove}>
       <div className="folder-nav-header">Folder tree</div>
       <div className="folder-nav-list" ref={listRef} role="tree">
         {visibleRows.length === 0 ? (
@@ -2409,10 +2411,14 @@ function App() {
   const _selectNodeFnRef   = useRef<(node: TreeNode) => void>(() => {});
   const _contextMenuFnRef  = useRef<(e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void>(() => {});
   const _keyDownFnRef      = useRef<(e: React.KeyboardEvent) => void>(() => {});
-  const stableToggleExpand = useCallback((node: TreeNode) => _toggleExpandFnRef.current(node), []);
-  const stableSelectNode   = useCallback((node: TreeNode) => _selectNodeFnRef.current(node), []);
-  const stableContextMenu  = useCallback((e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => _contextMenuFnRef.current(e, node), []);
-  const stableKeyDown      = useCallback((e: React.KeyboardEvent) => _keyDownFnRef.current(e), []);
+  const stableToggleExpand  = useCallback((node: TreeNode) => _toggleExpandFnRef.current(node), []);
+  const stableSelectNode    = useCallback((node: TreeNode) => _selectNodeFnRef.current(node), []);
+  const stableContextMenu   = useCallback((e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => _contextMenuFnRef.current(e, node), []);
+  const stableKeyDown       = useCallback((e: React.KeyboardEvent) => _keyDownFnRef.current(e), []);
+  // Clears keyboard-nav mode when the mouse moves inside the tree so hover resumes.
+  const stableNavMouseMove  = useCallback(() => {
+    treeNavRef.current?.removeAttribute('data-keynav');
+  }, []);
 
   const visibleRows = useMemo(() => {
     const t0 = performance.now();
@@ -2960,6 +2966,11 @@ function App() {
     if (!navKeys.includes(e.key)) return;
     e.preventDefault();
     e.stopPropagation(); // prevent double-fire when called from both row div and folder-nav
+
+    // Enter keyboard-nav mode: CSS .folder-nav[data-keynav] suppresses hover on
+    // non-active rows so the old mouse-hover position does not leave a stale highlight.
+    // Cleared on first mousemove inside folder-nav (see stableNavMouseMove / onNavMouseMove).
+    treeNavRef.current?.setAttribute('data-keynav', '1');
 
     const t0 = performance.now();
 
@@ -3813,6 +3824,7 @@ function App() {
               onSelect={stableSelectNode}
               onContextMenu={stableContextMenu}
               onKeyDown={stableKeyDown}
+              onNavMouseMove={stableNavMouseMove}
               navRef={treeNavRef}
             />
             {treeContextMenu && (
