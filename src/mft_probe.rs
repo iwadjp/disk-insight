@@ -2435,6 +2435,7 @@ pub struct JsonTreeNode {
 #[derive(serde::Serialize)]
 pub struct JsonSummary {
     pub drive:                 String,
+    pub volume_serial:         Option<String>,
     pub total_records:         usize,
     pub in_use_entries:        usize,
     pub files:                 usize,
@@ -3780,8 +3781,10 @@ where
 
     let total_elapsed = total_start.elapsed();
 
+    let volume_serial = get_volume_serial_hex(drive).ok();
     let summary = JsonSummary {
         drive:                 format!("{}:", drive),
+        volume_serial,
         total_records,
         in_use_entries:        arena.len(),
         files:                 total_file_count,

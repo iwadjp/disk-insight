@@ -7,6 +7,7 @@ import "./styles.css";
 
 type Summary = {
   drive: string;
+  volume_serial?: string | null;
   total_records: number;
   in_use_entries: number;
   files: number;
@@ -208,7 +209,7 @@ type ResolvePathResult = {
 };
 
 type BookmarkJumpState = {
-  status: "jumping" | "found" | "missing" | "unavailable" | "outside300";
+  status: "jumping" | "found" | "missing" | "unavailable" | "outside300" | "other_drive";
   message?: string;
 };
 
@@ -1434,13 +1435,26 @@ function BookmarksBar({
   jumpStates,
   onJump,
   onRemove,
+  currentVolumeSerial,
 }: {
   bookmarks: Bookmark[];
   jumpStates: Record<string, BookmarkJumpState>;
   onJump: (b: Bookmark) => void;
   onRemove: (id: string) => void;
+  currentVolumeSerial?: string | null;
 }) {
   const [open, setOpen] = useState(true);
+
+  // Sort: current-drive bookmarks first, other-drive bookmarks last.
+  const sortedBookmarks = useMemo(() => {
+    if (!currentVolumeSerial) return bookmarks;
+    const cur = currentVolumeSerial.toUpperCase();
+    return [...bookmarks].sort((a, b) => {
+      const aOther = a.volume_serial?.toUpperCase() !== cur ? 1 : 0;
+      const bOther = b.volume_serial?.toUpperCase() !== cur ? 1 : 0;
+      return aOther - bOther;
+    });
+  }, [bookmarks, currentVolumeSerial]);
 
   if (bookmarks.length === 0) return null;
 
@@ -1457,15 +1471,16 @@ function BookmarksBar({
       </button>
       {open && (
         <div className="bookmarks-panel-list">
-          {bookmarks.map((b) => {
+          {sortedBookmarks.map((b) => {
             const js = jumpStates[b.id];
             const isMissing     = js?.status === "missing";
             const isUnavailable = js?.status === "unavailable";
             const isJumping     = js?.status === "jumping";
             const isOutside     = js?.status === "outside300";
+            const isOtherDrive  = js?.status === "other_drive";
             const rowClass = [
               "bookmark-row",
-              isMissing || isUnavailable ? "bookmark-row--dim" : "",
+              (isMissing || isUnavailable || isOtherDrive) ? "bookmark-row--dim" : "",
             ].join(" ").trim();
             return (
               <div key={b.id} className={rowClass} title={b.path}>
@@ -1482,6 +1497,7 @@ function BookmarksBar({
                   {isJumping && <span className="bookmark-badge bookmark-badge--jumping" aria-label="Jumping">…</span>}
                   {isMissing && <span className="bookmark-badge bookmark-badge--missing" title={js?.message ?? "Not found in current scan"}>missing</span>}
                   {isUnavailable && <span className="bookmark-badge bookmark-badge--unavailable" title={js?.message ?? ""}>no scan</span>}
+                  {isOtherDrive && <span className="bookmark-badge bookmark-badge--other-drive" title={js?.message ?? ""}>scan {b.drive_letter}:</span>}
                   {isOutside && <span className="bookmark-badge bookmark-badge--outside" title={js?.message ?? ""}>↑300</span>}
                 </button>
                 <button
@@ -2907,6 +2923,33 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDir?.record_index, sourceKind, insightsOpen]);
 
+  // When data loads (new scan) or bookmarks change, proactively mark cross-drive
+  // bookmarks as "other_drive" so the badge shows without requiring a click.
+  useEffect(() => {
+    const currentSerial = data?.summary?.volume_serial?.toUpperCase();
+    if (!currentSerial) return;
+    setBookmarkJumpStates((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const b of bookmarks) {
+        const bSerial = b.volume_serial?.toUpperCase();
+        if (!bSerial || bSerial === "UNKNOWN") continue;
+        const isOther = bSerial !== currentSerial;
+        const prevStatus = prev[b.id]?.status;
+        if (isOther && prevStatus !== "other_drive") {
+          next[b.id] = { status: "other_drive", message: `Scan ${b.drive_letter}: to use this bookmark` };
+          changed = true;
+        } else if (!isOther && prevStatus === "other_drive") {
+          // Drive changed to match — clear stale other_drive state
+          delete next[b.id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.summary?.volume_serial, bookmarks]);
+
   function runLoad(
     loader: () => Promise<DiskInsightOutput>,
     msg: string,
@@ -3442,6 +3485,22 @@ function App() {
 
   async function handleJumpToBookmark(bookmark: Bookmark) {
     if (!isTauriRuntime()) return;
+
+    // Cross-drive check: if bookmark is on a different volume than current scan,
+    // show a clear message instead of silently failing.
+    const currentSerial = data?.summary?.volume_serial?.toUpperCase();
+    const bSerial = bookmark.volume_serial?.toUpperCase();
+    if (currentSerial && bSerial && bSerial !== "UNKNOWN" && bSerial !== currentSerial) {
+      const msg = `This bookmark is on ${bookmark.drive_letter}:. Scan ${bookmark.drive_letter}: to jump to it.`;
+      setBookmarkJumpStates((prev) => ({
+        ...prev,
+        [bookmark.id]: { status: "other_drive", message: `Scan ${bookmark.drive_letter}: to use this bookmark` },
+      }));
+      setStatusMessage(msg);
+      setTimeout(() => setStatusMessage(null), 4000);
+      return;
+    }
+
     setBookmarkJumpStates((prev) => ({ ...prev, [bookmark.id]: { status: "jumping" } }));
 
     let result: ResolvePathResult;
@@ -4228,6 +4287,7 @@ function App() {
                   jumpStates={bookmarkJumpStates}
                   onJump={handleJumpToBookmark}
                   onRemove={handleRemoveBookmarkById}
+                  currentVolumeSerial={data?.summary?.volume_serial ?? null}
                 />
               )}
               {selectedDir && (

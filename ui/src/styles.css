@@ -871,6 +871,11 @@ tbody tr:last-child td {
   color: #92400e;
 }
 
+.bookmark-badge--other-drive {
+  background: #e2e8f0;
+  color: #475569;
+}
+
 .bookmark-remove {
   flex-shrink: 0;
   width: 24px;
