@@ -200,6 +200,18 @@ type ChildrenLimitedResult = {
   total_count: number;
 };
 
+type ResolvePathResult = {
+  status: "found" | "missing" | "unavailable";
+  chain: number[];            // FRNs root→target (inclusive); empty for drive root
+  target: TreeNode | null;
+  message: string | null;
+};
+
+type BookmarkJumpState = {
+  status: "jumping" | "found" | "missing" | "unavailable" | "outside300";
+  message?: string;
+};
+
 type Bookmark = {
   id: string;
   kind: "directory" | "file";
@@ -1415,6 +1427,80 @@ const TreeNodeRow = React.memo(function TreeNodeRow({
   );
 }); // React.memo — see TreeRowProps for why booleans are pre-computed by parent
 
+// ── Bookmarks bar (folder-nav header area) ───────────────────────────────
+
+function BookmarksBar({
+  bookmarks,
+  jumpStates,
+  onJump,
+  onRemove,
+}: {
+  bookmarks: Bookmark[];
+  jumpStates: Record<string, BookmarkJumpState>;
+  onJump: (b: Bookmark) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(true);
+
+  if (bookmarks.length === 0) return null;
+
+  return (
+    <div className="bookmarks-bar">
+      <button
+        className="bookmarks-bar-header"
+        onClick={() => setOpen((v) => !v)}
+        title={open ? "Collapse bookmarks" : "Expand bookmarks"}
+        aria-expanded={open}
+      >
+        <span className="bookmarks-bar-chevron" aria-hidden="true">{open ? "▾" : "▸"}</span>
+        Bookmarks ({bookmarks.length})
+      </button>
+      {open && (
+        <div className="bookmarks-bar-list">
+          {bookmarks.map((b) => {
+            const js = jumpStates[b.id];
+            const isMissing     = js?.status === "missing";
+            const isUnavailable = js?.status === "unavailable";
+            const isJumping     = js?.status === "jumping";
+            const isOutside     = js?.status === "outside300";
+            const rowClass = [
+              "bookmark-row",
+              isMissing || isUnavailable ? "bookmark-row--dim" : "",
+            ].join(" ").trim();
+            return (
+              <div key={b.id} className={rowClass} title={b.path}>
+                <button
+                  className="bookmark-row-main"
+                  onClick={() => onJump(b)}
+                  title={b.path}
+                  disabled={isJumping}
+                >
+                  <span className="bookmark-kind-icon" aria-hidden="true">
+                    {b.kind === "directory" ? "▶" : "·"}
+                  </span>
+                  <span className="bookmark-name">{b.display_name}</span>
+                  {isJumping && <span className="bookmark-badge bookmark-badge--jumping" aria-label="Jumping">…</span>}
+                  {isMissing && <span className="bookmark-badge bookmark-badge--missing" title={js?.message ?? "Not found in current scan"}>missing</span>}
+                  {isUnavailable && <span className="bookmark-badge bookmark-badge--unavailable" title={js?.message ?? ""}>no scan</span>}
+                  {isOutside && <span className="bookmark-badge bookmark-badge--outside" title={js?.message ?? ""}>↑300</span>}
+                </button>
+                <button
+                  className="bookmark-remove"
+                  onClick={(e) => { e.stopPropagation(); onRemove(b.id); }}
+                  title="Remove bookmark"
+                  aria-label={`Remove bookmark ${b.display_name}`}
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TreeView({
   rootCount,
   visibleRows,
@@ -1432,6 +1518,7 @@ function TreeView({
   onKeyDown,
   onNavMouseMove,
   navRef,
+  bookmarksBarSlot,
 }: {
   rootCount: number;
   visibleRows: VisibleTreeRow[];
@@ -1449,6 +1536,7 @@ function TreeView({
   onKeyDown: (e: React.KeyboardEvent) => void;
   onNavMouseMove?: () => void;
   navRef?: React.RefObject<HTMLElement | null>;
+  bookmarksBarSlot?: React.ReactNode;
 }) {
   const listRef = useRef<HTMLDivElement | null>(null);
   const treeViewRenderCount = useRef(0);
@@ -1479,6 +1567,7 @@ function TreeView({
 
   return (
     <aside ref={navRef} className="folder-nav" tabIndex={0} onKeyDown={onKeyDown} onMouseMove={onNavMouseMove}>
+      {bookmarksBarSlot}
       <div className="folder-nav-header">Folder tree</div>
       <div className="folder-nav-list" ref={listRef} role="tree">
         {visibleRows.length === 0 ? (
@@ -2455,6 +2544,7 @@ function App() {
   const [handoffNotice, setHandoffNotice] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const [bookmarkJumpStates, setBookmarkJumpStates] = useState<Record<string, BookmarkJumpState>>({});
   const scanRestoreRef = useRef<{ path: string; drive: string } | null>(null);
   const scanGenerationRef = useRef(0);
   const cancelMessageTimerRef = useRef<number | null>(null);
@@ -3276,14 +3366,20 @@ function App() {
       .catch((err: unknown) => console.warn("[bookmarks] add failed:", err instanceof Error ? err.message : String(err)));
   }
 
-  function handleRemoveBookmarkByPath(path: string) {
+  function handleRemoveBookmarkById(id: string) {
     if (!isTauriRuntime()) return;
+    invoke<Bookmark[]>("remove_bookmark", { id })
+      .then((updated) => {
+        setBookmarks(updated);
+        setBookmarkJumpStates((prev) => { const next = { ...prev }; delete next[id]; return next; });
+      })
+      .catch((err: unknown) => console.warn("[bookmarks] remove failed:", err instanceof Error ? err.message : String(err)));
+  }
+
+  function handleRemoveBookmarkByPath(path: string) {
     const key = bookmarkPathKey(path);
     const bookmark = bookmarks.find((b) => b.path_key === key);
-    if (!bookmark) return;
-    invoke<Bookmark[]>("remove_bookmark", { id: bookmark.id })
-      .then(setBookmarks)
-      .catch((err: unknown) => console.warn("[bookmarks] remove failed:", err instanceof Error ? err.message : String(err)));
+    if (bookmark) handleRemoveBookmarkById(bookmark.id);
   }
 
   function handleToggleBookmark(path: string, isDirectory: boolean) {
@@ -3291,6 +3387,96 @@ function App() {
       handleRemoveBookmarkByPath(path);
     } else {
       handleAddBookmark(path, isDirectory);
+    }
+  }
+
+  async function handleJumpToBookmark(bookmark: Bookmark) {
+    if (!isTauriRuntime()) return;
+    setBookmarkJumpStates((prev) => ({ ...prev, [bookmark.id]: { status: "jumping" } }));
+
+    let result: ResolvePathResult;
+    try {
+      result = await invoke<ResolvePathResult>("resolve_path_chain", {
+        path: bookmark.path,
+        volumeSerial: bookmark.volume_serial,
+      });
+    } catch (err: unknown) {
+      setBookmarkJumpStates((prev) => ({
+        ...prev,
+        [bookmark.id]: { status: "unavailable", message: err instanceof Error ? err.message : String(err) },
+      }));
+      return;
+    }
+
+    if (result.status !== "found") {
+      setBookmarkJumpStates((prev) => ({
+        ...prev,
+        [bookmark.id]: { status: result.status as "missing" | "unavailable", message: result.message ?? undefined },
+      }));
+      return;
+    }
+
+    // Drive root bookmark: no specific node to jump to
+    if (result.chain.length === 0 || !result.target) {
+      setBookmarkJumpStates((prev) => ({ ...prev, [bookmark.id]: { status: "found" } }));
+      return;
+    }
+
+    const chain = result.chain;                // FRNs: [ancestor1, ..., target]
+    const target = result.target;
+    const ancestorFrns = chain.slice(0, -1);   // FRNs that need to be expanded
+
+    // Fetch children for ancestors not yet in childrenByParent
+    const newCBP: Record<number, TreeNode[]> = {};
+    const newTEC: Record<number, number>     = {};
+    for (const frn of ancestorFrns) {
+      if (childrenByParent[frn]) continue;
+      try {
+        const r = await invoke<ChildrenLimitedResult>("get_children_limited", {
+          parentRecordIndex: frn,
+          limit: TREE_EXPAND_LIMIT,
+        });
+        newCBP[frn] = r.nodes;
+        if (r.total_count > r.nodes.length) newTEC[frn] = r.total_count;
+      } catch {
+        // skip — this level won't show children
+      }
+    }
+
+    // Apply state in one batch
+    if (Object.keys(newCBP).length > 0) {
+      setChildrenByParent((prev) => ({ ...prev, ...newCBP }));
+      if (Object.keys(newTEC).length > 0) setTreeExpandedTotalCount((prev) => ({ ...prev, ...newTEC }));
+    }
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      for (const frn of ancestorFrns) next.add(frn);
+      return next;
+    });
+
+    // Focus target
+    setFocusedRecordIndex(target.record_index);
+    if (target.is_directory) {
+      setSelectedDir(treeNodeToDirEntry(target));
+      setTreeError(null);
+    }
+
+    // Check if target is visible after expansion (might be outside top-300 of parent)
+    const parentFrn = chain.length >= 2 ? chain[chain.length - 2] : null;
+    const parentChildren = parentFrn !== null
+      ? (newCBP[parentFrn] ?? childrenByParent[parentFrn] ?? null)
+      : (data?.root_children ?? null);
+    const targetVisible = parentChildren
+      ? parentChildren.some((n) => n.record_index === target.record_index)
+      : true; // root_children check — assume visible if we can't tell
+
+    if (!targetVisible) {
+      setBookmarkJumpStates((prev) => ({
+        ...prev,
+        [bookmark.id]: { status: "outside300", message: "Parent folder expanded; target is outside the top 300 displayed entries." },
+      }));
+    } else {
+      setBookmarkJumpStates((prev) => ({ ...prev, [bookmark.id]: { status: "found" } }));
     }
   }
 
@@ -3600,6 +3786,11 @@ function App() {
       .then(setBookmarks)
       .catch((err: unknown) => console.warn("[bookmarks] load failed:", err instanceof Error ? err.message : String(err)));
   }, []);
+
+  // Reset bookmark jump states when scan data changes (new scan = stale states).
+  useEffect(() => {
+    setBookmarkJumpStates({});
+  }, [data]);
 
   useEffect(() => {
     if (!isLoading || scanStartMsRef.current === null) return;
@@ -3939,6 +4130,16 @@ function App() {
               onKeyDown={stableKeyDown}
               onNavMouseMove={stableNavMouseMove}
               navRef={treeNavRef}
+              bookmarksBarSlot={
+                bookmarks.length > 0 ? (
+                  <BookmarksBar
+                    bookmarks={bookmarks}
+                    jumpStates={bookmarkJumpStates}
+                    onJump={handleJumpToBookmark}
+                    onRemove={handleRemoveBookmarkById}
+                  />
+                ) : undefined
+              }
             />
             {treeContextMenu && (
               <SafeContextMenu

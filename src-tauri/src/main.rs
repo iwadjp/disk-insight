@@ -1043,6 +1043,122 @@ fn open_terminal_at(path: String, is_dir: bool) -> Result<(), String> {
     Ok(())
 }
 
+// ── resolve_path_chain ────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+struct ResolvePathResult {
+    status: String,             // "found" | "missing" | "unavailable"
+    /// FRNs from root's direct child down to target (inclusive).
+    /// Empty when status != "found" or when path is drive root.
+    chain: Vec<u64>,
+    target: Option<JsonTreeNode>,
+    message: Option<String>,
+}
+
+/// Resolve a bookmark path against the live ArenaCache by walking name components
+/// case-insensitively from the NTFS root (FRN 5). Returns the FRN chain from root's
+/// direct child down to the target so the frontend can expand ancestors and jump.
+#[tauri::command]
+fn resolve_path_chain(
+    state: State<'_, AppState>,
+    path: String,
+    volume_serial: String,
+) -> ResolvePathResult {
+    #[inline]
+    fn unavailable(msg: impl Into<String>) -> ResolvePathResult {
+        ResolvePathResult { status: "unavailable".into(), chain: vec![], target: None, message: Some(msg.into()) }
+    }
+    #[inline]
+    fn missing(msg: impl Into<String>) -> ResolvePathResult {
+        ResolvePathResult { status: "missing".into(), chain: vec![], target: None, message: Some(msg.into()) }
+    }
+
+    let guard = match state.arena_cache.lock() {
+        Ok(g) => g,
+        Err(_) => return unavailable("arena_cache lock error"),
+    };
+    let arena = match guard.as_ref() {
+        Some(a) => a,
+        None => return unavailable("No live scan data. Run a scan first."),
+    };
+
+    // Volume serial check — skip when either side is unknown/empty
+    let vol_upper = volume_serial.to_uppercase();
+    if !vol_upper.is_empty() && vol_upper != "UNKNOWN" {
+        match volume_serial_for_drive(arena.drive) {
+            Ok(cur) if cur != vol_upper => {
+                return unavailable(format!(
+                    "Bookmark drive (serial {vol_upper}) ≠ current scan ({}:, serial {cur})",
+                    arena.drive
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    // Normalize path and strip drive prefix ("C:" or "C:\")
+    let norm = normalize_raw_path_for_compare(&path);
+    let after_drive = if norm.len() >= 2 && norm.as_bytes()[1] == b':' {
+        norm[2..].trim_start_matches('\\')
+    } else {
+        norm.trim_start_matches('\\')
+    };
+
+    if after_drive.is_empty() {
+        // Drive root — nothing specific to expand; frontend shows top of tree
+        return ResolvePathResult {
+            status: "found".into(),
+            chain: vec![],
+            target: None,
+            message: Some("Drive root".into()),
+        };
+    }
+
+    let components: Vec<&str> = after_drive.split('\\').filter(|s| !s.is_empty()).collect();
+
+    // Walk down from NTFS root (FRN 5) matching each name component
+    let mut current_frn: u64 = 5;
+    let mut chain: Vec<u64> = Vec::with_capacity(components.len());
+
+    for (i, component) in components.iter().enumerate() {
+        let comp_lower = component.to_lowercase();
+        let is_last    = i == components.len() - 1;
+
+        let children = match arena.dir_children.get(&current_frn) {
+            Some(c) => c,
+            None => return missing(format!("Cannot list children at '{component}' (FRN {current_frn} has no children map)")),
+        };
+
+        // Case-insensitive name match. Non-last components must be directories.
+        let found = children.iter().find(|&&ci| {
+            let n = &arena.nodes[ci];
+            n.name.to_lowercase() == comp_lower && (is_last || n.is_dir)
+        });
+
+        match found {
+            Some(&ci) => {
+                let frn = arena.nodes[ci].frn;
+                chain.push(frn);
+                current_frn = frn;
+            }
+            None => return missing(format!("'{component}' not found in scan tree")),
+        }
+    }
+
+    let target_frn = match chain.last() { Some(&f) => f, None => return missing("Empty chain") };
+    let target_idx = match arena.frn_to_idx.get(&target_frn) {
+        Some(&i) => i,
+        None => return missing("Target FRN not found in index"),
+    };
+
+    ResolvePathResult {
+        status: "found".into(),
+        chain,
+        target: Some(arena.build_node(target_idx)),
+        message: None,
+    }
+}
+
 // ── Bookmark Tauri commands ────────────────────────────────────────────────
 
 /// Returns the current bookmark list. Corrupt file is silently retired; startup
@@ -1157,6 +1273,7 @@ fn main() {
             list_bookmarks,
             add_bookmark,
             remove_bookmark,
+            resolve_path_chain,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run disk-insight UI");
