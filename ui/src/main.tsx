@@ -208,9 +208,14 @@ const TREE_EXPAND_LIMIT = 300;
 const PREF_KEY = "disk-insight.preferences.v1";
 
 // Performance instrumentation — set to true to enable, false for normal use
-const PERF_LOG = false;
+const PERF_LOG = true;
 function perfLog(...args: unknown[]): void {
   if (PERF_LOG) console.log("[perf]", ...args);
+}
+// Tree-specific performance instrumentation (set false before shipping)
+const PERF_TREE = true;
+function treeLog(...args: unknown[]): void {
+  if (PERF_TREE) console.log("[perf-tree]", ...args);
 }
 const PHASE_COMPLETION_LATCH_MS = 600;
 const UPDATED_BANNER_DISMISS_MS = 4000;
@@ -1291,6 +1296,11 @@ function TreeNodeRow({
   onContextMenu,
   onKeyDown,
 }: TreeRowProps) {
+  const renderCount = useRef(0);
+  renderCount.current += 1;
+  if (PERF_TREE && renderCount.current > 1 && renderCount.current % 20 === 0) {
+    treeLog(`row ri=${node.record_index} name=${node.name} rendered ${renderCount.current}× (frequent re-render detected)`);
+  }
   const isDir       = node.is_directory;
   const isExpanded  = expandedIds.has(node.record_index);
   const isLoading   = loadingIds.has(node.record_index);
@@ -1403,9 +1413,13 @@ function TreeView({
   navRef?: React.RefObject<HTMLElement | null>;
 }) {
   const listRef = useRef<HTMLDivElement | null>(null);
+  const treeViewRenderCount = useRef(0);
+  treeViewRenderCount.current += 1;
+  if (PERF_TREE) treeLog(`TreeView render #${treeViewRenderCount.current}  visibleRows=${visibleRows.length}  focused=${focusedRecordIndex}`);
 
   useEffect(() => {
     if (focusedRecordIndex === null) return;
+    const t0 = performance.now();
     const container = listRef.current;
     if (!container) return;
     const el = container.querySelector<HTMLElement>(`[data-record-index="${focusedRecordIndex}"]`);
@@ -1416,8 +1430,12 @@ function TreeView({
     const er = el.getBoundingClientRect();
     if (er.top < cr.top) {
       container.scrollTop += er.top - cr.top;
+      treeLog(`scroll UP  ri=${focusedRecordIndex}  querySelector+scroll=${(performance.now()-t0).toFixed(1)}ms`);
     } else if (er.bottom > cr.bottom) {
       container.scrollTop += er.bottom - cr.bottom;
+      treeLog(`scroll DOWN  ri=${focusedRecordIndex}  querySelector+scroll=${(performance.now()-t0).toFixed(1)}ms`);
+    } else {
+      treeLog(`scroll NOOP  ri=${focusedRecordIndex}  querySelector=${(performance.now()-t0).toFixed(1)}ms`);
     }
   }, [focusedRecordIndex]);
 
@@ -2543,6 +2561,12 @@ function App() {
       setSelectedDirLimitedError(null);
       return;
     }
+    // DirectChildrenPanel lives inside the Insights lower panel (insightsOpen).
+    // Skip IPC when Insights is closed — fetch will run when user opens Insights.
+    if (!insightsOpen) {
+      treeLog(`direct-children SKIP (insightsOpen=false)  path=${selectedDir.path}`);
+      return;
+    }
     // Drive root: use already-loaded root_children directly (no IPC needed)
     if (isDriveRoot(selectedDir.path) && data?.root_children !== undefined) {
       const rc = data.root_children;
@@ -2576,7 +2600,7 @@ function App() {
       });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDir, sourceKind]);
+  }, [selectedDir, sourceKind, insightsOpen]);
 
   useEffect(() => {
     if (!selectedDir || !data || sourceKind !== "live") {
@@ -2616,6 +2640,13 @@ function App() {
       setLargestItemsLoading(false);
       return;
     }
+    // Largest items display is inside the Insights lower panel (insightsOpen).
+    // Skip IPC when Insights is closed — fetch will run when user opens Insights.
+    if (!insightsOpen) {
+      treeLog(`largest-items SKIP (insightsOpen=false)  path=${selectedDir.path}`);
+      setLargestItemsLoading(false);
+      return;
+    }
     let cancelled = false;
     let debounceId: number | null = null;
     setLargestItemsLoading(true);
@@ -2648,7 +2679,7 @@ function App() {
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDir?.record_index, sourceKind]);
+  }, [selectedDir?.record_index, sourceKind, insightsOpen]);
 
   function runLoad(
     loader: () => Promise<DiskInsightOutput>,
@@ -2906,9 +2937,14 @@ function App() {
     e.preventDefault();
     e.stopPropagation(); // prevent double-fire when called from both row div and folder-nav
 
+    const t0 = performance.now();
+
+    const filterT0 = performance.now();
     const allRows = visibleRows.filter(
       (r) => !r.isEmpty && !r.nodeError && r.treeTruncated === undefined,
     );
+    const filterMs = (performance.now() - filterT0).toFixed(1);
+    treeLog(`key=${e.key} START  visible=${visibleRows.length}  navigable=${allRows.length}  filter=${filterMs}ms`);
     if (allRows.length === 0) return;
 
     const currentIdx =
@@ -2919,6 +2955,7 @@ function App() {
 
     function moveToRow(idx: number) {
       const row = allRows[Math.max(0, Math.min(allRows.length - 1, idx))];
+      treeLog(`moveToRow  from_ri=${currentRow?.node.record_index ?? "none"}  to_ri=${row.node.record_index}  to_name=${row.node.name}  is_dir=${row.node.is_directory}  → setFocused + ${row.node.is_directory ? "handleSelectTreeNode(triggers reclaimable/DC/LI IPC)" : "no IPC"}`);
       setFocusedRecordIndex(row.node.record_index);
       if (row.node.is_directory) handleSelectTreeNode(row.node);
     }
@@ -2944,6 +2981,7 @@ function App() {
         if (!currentRow.node.is_directory) break; // files don't expand
         const curId = currentRow.node.record_index;
         if (!expandedIds.has(curId)) {
+          treeLog(`ArrowRight EXPAND  ri=${curId}  name=${currentRow.node.name}  → getChildrenLimited IPC`);
           handleToggleExpand(currentRow.node); // uses getChildrenLimited — WinSxS-safe
         } else {
           // Move to first child row (any type)
@@ -2959,6 +2997,7 @@ function App() {
         if (!currentRow) break;
         const curId = currentRow.node.record_index;
         if (currentRow.node.is_directory && expandedIds.has(curId)) {
+          treeLog(`ArrowLeft COLLAPSE  ri=${curId}  name=${currentRow.node.name}`);
           handleToggleExpand(currentRow.node); // collapse
         } else {
           // Move to parent folder
@@ -2970,11 +3009,14 @@ function App() {
         break;
       }
     }
+
+    treeLog(`key=${e.key} DONE  sync_elapsed=${(performance.now()-t0).toFixed(1)}ms  (async: React re-render + IPC not included)`);
   }
 
   function handleSelectTreeNode(node: TreeNode) {
     if (!node.is_directory) return;
     perfLog(`select-node  path=${node.path}  record_index=${node.record_index}`);
+    treeLog(`handleSelectTreeNode  ri=${node.record_index}  path=${node.path}  insightsOpen=${insightsOpen}  → reclaimable=WILL_FIRE  DC=${insightsOpen ? "WILL_FIRE" : "skipped"}  LI=${insightsOpen ? "WILL_FIRE(200ms)" : "skipped"}`);
     // During a refresh, keep scanRestoreRef current with the latest user
     // selection so fresh result restore uses it instead of the pre-scan snapshot.
     if (isLoading && data) {
