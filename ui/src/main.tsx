@@ -245,6 +245,28 @@ const PERF_TREE = true;
 function treeLog(...args: unknown[]): void {
   if (PERF_TREE) console.log("[perf-tree]", ...args);
 }
+
+// Tree focus diagnostics — set true to capture event history and enable
+// window.__diskInsightDebugTreeFocus() snapshot. Default: false (zero overhead).
+const TREE_FOCUS_DEBUG = false;
+const FOCUS_BUF_MAX = 50;
+type FocusBufEntry = {
+  ts: number;
+  kind: string;
+  key?: string;
+  targetTag?: string;
+  targetCls?: string;
+  focusedRI: number | null;
+  activeDomTag?: string;
+  activeDomCls?: string;
+  hasKeyNav?: boolean;
+  visibleCount?: number;
+  note?: string;
+};
+function focusDbg(...args: unknown[]): void {
+  if (TREE_FOCUS_DEBUG) console.log("[tree-focus]", ...args);
+}
+
 const PHASE_COMPLETION_LATCH_MS = 600;
 const UPDATED_BANNER_DISMISS_MS = 4000;
 const NEAR_ZERO_FREE_DELTA_BYTES = 1024 * 1024;
@@ -2584,6 +2606,29 @@ function App() {
   const [bookmarkJumpStates, setBookmarkJumpStates] = useState<Record<string, BookmarkJumpState>>({});
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [adminWarningDismissed, setAdminWarningDismissed] = useState(false);
+
+  // ── Tree focus diagnostics (TREE_FOCUS_DEBUG) ────────────────────────────
+  // Always created (cheap). All recording code is behind if(TREE_FOCUS_DEBUG)
+  // guards so there is zero runtime overhead when the flag is false.
+  const focusEventBuf    = useRef<FocusBufEntry[]>([]);
+  const dbgFocusedRIRef  = useRef<number | null>(null);
+  const dbgSelectedDirRef = useRef<{ record_index: number; path: string } | null>(null);
+  const dbgVisibleCountRef = useRef<number>(0);
+
+  function recordFocusEvent(partial: Omit<FocusBufEntry, "ts">) {
+    if (!TREE_FOCUS_DEBUG) return;
+    const ae = document.activeElement;
+    const buf = focusEventBuf.current;
+    buf.push({
+      ts: Math.round(performance.now()),
+      activeDomTag: ae?.tagName,
+      activeDomCls: ae instanceof HTMLElement ? ae.className.slice(0, 60) || undefined : undefined,
+      hasKeyNav: treeNavRef.current?.hasAttribute("data-keynav"),
+      visibleCount: dbgVisibleCountRef.current,
+      ...partial,
+    });
+    if (buf.length > FOCUS_BUF_MAX) buf.shift();
+  }
   // jumpScrollFrnRef: FRN to center-scroll to after a bookmark jump.
   // jumpScrollTick: incrementing counter that triggers TreeView's center-scroll effect.
   const jumpScrollFrnRef = useRef<number | null>(null);
@@ -3183,6 +3228,17 @@ function App() {
     e.preventDefault();
     e.stopPropagation(); // prevent double-fire when called from both row div and folder-nav
 
+    if (TREE_FOCUS_DEBUG) {
+      recordFocusEvent({
+        kind:      "keydown",
+        key:       e.key,
+        targetTag: (e.target as Element)?.tagName,
+        targetCls: (e.target as HTMLElement)?.className?.slice(0, 60),
+        focusedRI: focusedRecordIndex,
+        note: `target=${e.target === treeNavRef.current ? "folder-nav" : "row/button"}`,
+      });
+    }
+
     // Enter keyboard-nav mode: CSS .folder-nav[data-keynav] suppresses hover on
     // non-active rows so the old mouse-hover position does not leave a stale highlight.
     // Cleared on first mousemove inside folder-nav (see stableNavMouseMove / onNavMouseMove).
@@ -3204,9 +3260,17 @@ function App() {
         : -1;
     const currentRow = currentIdx >= 0 ? allRows[currentIdx] : null;
 
+    if (TREE_FOCUS_DEBUG && focusedRecordIndex !== null && currentRow === null) {
+      focusDbg(`ANOMALY: currentRow=null but focusedRI=${focusedRecordIndex}  allRows=${allRows.length}  key=${e.key}`);
+      recordFocusEvent({ kind: "anomaly-no-current-row", focusedRI: focusedRecordIndex, note: `key=${e.key} allRows=${allRows.length}` });
+    }
+
     function moveToRow(idx: number) {
       const row = allRows[Math.max(0, Math.min(allRows.length - 1, idx))];
       treeLog(`moveToRow  from_ri=${currentRow?.node.record_index ?? "none"}  to_ri=${row.node.record_index}  to_name=${row.node.name}  is_dir=${row.node.is_directory}  → setFocused + ${row.node.is_directory ? "handleSelectTreeNode(triggers reclaimable/DC/LI IPC)" : "no IPC"}`);
+      if (TREE_FOCUS_DEBUG) {
+        recordFocusEvent({ kind: "moveToRow", focusedRI: focusedRecordIndex, note: `from=${currentRow?.node.record_index ?? "none"} to=${row.node.record_index} name=${row.node.name}` });
+      }
       setFocusedRecordIndex(row.node.record_index);
       if (row.node.is_directory) handleSelectTreeNode(row.node);
     }
@@ -3268,6 +3332,9 @@ function App() {
     if (!node.is_directory) return;
     perfLog(`select-node  path=${node.path}  record_index=${node.record_index}`);
     treeLog(`handleSelectTreeNode  ri=${node.record_index}  path=${node.path}  insightsOpen=${insightsOpen}  → reclaimable=WILL_FIRE  DC=${insightsOpen ? "WILL_FIRE" : "skipped"}  LI=${insightsOpen ? "WILL_FIRE(200ms)" : "skipped"}`);
+    if (TREE_FOCUS_DEBUG) {
+      recordFocusEvent({ kind: "selectTreeNode", focusedRI: focusedRecordIndex, note: `ri=${node.record_index} path=${node.path}` });
+    }
     // During a refresh, keep scanRestoreRef current with the latest user
     // selection so fresh result restore uses it instead of the pre-scan snapshot.
     if (isLoading && data) {
@@ -3317,6 +3384,10 @@ function App() {
   function handleToggleExpand(node: TreeNode) {
     if (!node.is_directory) return;
     const id = node.record_index;
+
+    if (TREE_FOCUS_DEBUG) {
+      recordFocusEvent({ kind: "toggleExpand", focusedRI: focusedRecordIndex, note: `ri=${id} name=${node.name} was_expanded=${expandedIds.has(id)}` });
+    }
 
     // Track the clicked row so keyboard navigation knows which row is "current".
     // handleSelectTreeNode handles this for label clicks; toggle clicks need it too.
@@ -3413,6 +3484,15 @@ function App() {
   _contextMenuFnRef.current  = handleTreeContextMenu;
   _keyDownFnRef.current      = handleTreeKeyDown;
 
+  // Keep diagnostic snapshot refs current (zero cost when TREE_FOCUS_DEBUG=false)
+  if (TREE_FOCUS_DEBUG) {
+    dbgFocusedRIRef.current    = focusedRecordIndex;
+    dbgSelectedDirRef.current  = selectedDir
+      ? { record_index: selectedDir.record_index, path: selectedDir.path }
+      : null;
+    dbgVisibleCountRef.current = visibleRows.length;
+  }
+
   // ── Bookmark helpers ────────────────────────────────────────────────────
 
   /** Normalize a path to a bookmark match key (lowercase, no trailing \, no \\?\). */
@@ -3462,6 +3542,9 @@ function App() {
 
   async function handleJumpToBookmark(bookmark: Bookmark) {
     if (!isTauriRuntime()) return;
+    if (TREE_FOCUS_DEBUG) {
+      recordFocusEvent({ kind: "bookmarkJump", focusedRI: focusedRecordIndex, note: `id=${bookmark.id} path=${bookmark.path}` });
+    }
 
     // Cross-drive check: if bookmark is on a different volume than current scan,
     // show a clear message instead of silently failing.
@@ -3895,6 +3978,91 @@ function App() {
       .then(setIsAdmin)
       .catch(() => setIsAdmin(null));
   }, []);
+
+  // ── Tree focus diagnostics: window function registration ─────────────────
+  // Registers window.__diskInsightDebugTreeFocus() once on mount.
+  // The function reads from refs (always current values) so it never goes stale.
+  useEffect(() => {
+    if (!TREE_FOCUS_DEBUG) return;
+    focusDbg("diagnostic mode active — call window.__diskInsightDebugTreeFocus() to snapshot");
+    function snapshotFn() {
+      const ae = document.activeElement;
+      const nav = treeNavRef.current;
+      const activeRows  = document.querySelectorAll(".tree-row--active");
+      const focusedRows = document.querySelectorAll(".tree-row--keyboard-focused");
+      const snap: Record<string, unknown> = {
+        focusedRecordIndex: dbgFocusedRIRef.current,
+        selectedDir:        dbgSelectedDirRef.current,
+        visibleRowCount:    dbgVisibleCountRef.current,
+        activeElement: ae ? {
+          tag:           ae.tagName,
+          cls:           ae instanceof HTMLElement ? ae.className.slice(0, 100) : undefined,
+          insideFolderNav: nav?.contains(ae) ?? false,
+          dataRI: ae instanceof HTMLElement
+            ? (ae.dataset.recordIndex
+                ?? ae.closest<HTMLElement>("[data-record-index]")?.dataset.recordIndex)
+            : undefined,
+        } : null,
+        folderNavKeyNav:    nav?.hasAttribute("data-keynav") ?? false,
+        folderNavHasFocus:  document.activeElement === nav,
+        domActiveRowCount:  activeRows.length,
+        domFocusedRowCount: focusedRows.length,
+        anomalies:          [] as string[],
+        recentEvents:       focusEventBuf.current.slice(),
+      };
+      const anomalies = snap.anomalies as string[];
+      const focusedRI = dbgFocusedRIRef.current;
+      if (focusedRI !== null && activeRows.length === 0)
+        anomalies.push(`focusedRI=${focusedRI} but no .tree-row--active in DOM`);
+      if (focusedRI !== null && focusedRows.length === 0)
+        anomalies.push(`focusedRI=${focusedRI} but no .tree-row--keyboard-focused in DOM`);
+      if (activeRows.length > 1)
+        anomalies.push(`${activeRows.length} .tree-row--active elements (expected ≤1)`);
+      if (focusedRI === null && ae instanceof HTMLElement && nav?.contains(ae))
+        anomalies.push(`activeElement is inside folder-nav but focusedRecordIndex is null`);
+      const json = JSON.stringify(snap, null, 2);
+      console.log("[disk-insight tree-focus snapshot]", json);
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(json)
+          .then(() => console.log("[disk-insight] snapshot copied to clipboard"))
+          .catch(() => {});
+      }
+      return snap;
+    }
+    (window as unknown as Record<string, unknown>).__diskInsightDebugTreeFocus = snapshotFn;
+    return () => { delete (window as unknown as Record<string, unknown>).__diskInsightDebugTreeFocus; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Tree focus diagnostics: native nav event listeners ───────────────────
+  // Attaches focusin / focusout / mousedown listeners to the folder-nav element.
+  // Only runs when TREE_FOCUS_DEBUG=true AND TreeView is mounted (data !== null).
+  useEffect(() => {
+    if (!TREE_FOCUS_DEBUG) return;
+    const nav = treeNavRef.current;
+    if (!nav) return;
+    const onFocusIn  = (e: Event) => {
+      const fe = e as FocusEvent;
+      recordFocusEvent({ kind: "nav-focusin", focusedRI: dbgFocusedRIRef.current, note: `from=${(fe.relatedTarget as Element)?.tagName ?? "none"}` });
+    };
+    const onFocusOut = (e: Event) => {
+      const fe = e as FocusEvent;
+      recordFocusEvent({ kind: "nav-focusout", focusedRI: dbgFocusedRIRef.current, note: `to=${(fe.relatedTarget as Element)?.tagName ?? "none"}` });
+    };
+    const onMouseDown = (e: Event) => {
+      const me = e as MouseEvent;
+      recordFocusEvent({ kind: "nav-mousedown", targetTag: (me.target as Element)?.tagName, targetCls: (me.target as HTMLElement)?.className?.slice(0, 40), focusedRI: dbgFocusedRIRef.current });
+    };
+    nav.addEventListener("focusin",   onFocusIn);
+    nav.addEventListener("focusout",  onFocusOut);
+    nav.addEventListener("mousedown", onMouseDown);
+    return () => {
+      nav.removeEventListener("focusin",   onFocusIn);
+      nav.removeEventListener("focusout",  onFocusOut);
+      nav.removeEventListener("mousedown", onMouseDown);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!data]);
 
   // Reset bookmark jump states when scan data changes (new scan = stale states).
   useEffect(() => {
