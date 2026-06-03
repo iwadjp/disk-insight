@@ -968,11 +968,19 @@ function SafeContextMenu({
           Show properties
         </button>
       )}
-      <button className="context-menu-item" onClick={copyPath}>
+      <button
+        className="context-menu-item"
+        onClick={copyPath}
+        title={target.path}
+      >
         Copy path
       </button>
-      <button className="context-menu-item" onClick={copyAsPath}>
-        Copy as path
+      <button
+        className="context-menu-item"
+        onClick={copyAsPath}
+        title={`"${target.path}"`}
+      >
+        Copy quoted path
       </button>
       {showBookmarkItem && (
         <>
