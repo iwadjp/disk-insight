@@ -749,6 +749,29 @@ tbody tr:last-child td {
   background: #fde68a;
 }
 
+/* ── Tree focus diagnostic FAB (visible only when TREE_FOCUS_DEBUG=true) ── */
+.tree-debug-fab {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 999;
+  padding: 6px 12px;
+  background: #f59e0b;
+  color: #1c1917;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  opacity: 0.9;
+}
+
+.tree-debug-fab:hover {
+  opacity: 1;
+  background: #d97706;
+}
+
 .advanced-mode-banner {
   padding: 10px 14px;
   margin-bottom: 14px;

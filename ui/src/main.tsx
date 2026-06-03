@@ -2615,6 +2615,10 @@ function App() {
   const dbgSelectedDirRef = useRef<{ record_index: number; path: string } | null>(null);
   const dbgVisibleCountRef = useRef<number>(0);
 
+  // When set to a record_index, the focus recovery useEffect will move DOM focus
+  // to that row (or folder-nav as fallback) after the next expandedIds / childrenByParent update.
+  const pendingTreeFocusRef = useRef<number | null>(null);
+
   function recordFocusEvent(partial: Omit<FocusBufEntry, "ts">) {
     if (!TREE_FOCUS_DEBUG) return;
     const ae = document.activeElement;
@@ -2628,6 +2632,50 @@ function App() {
       ...partial,
     });
     if (buf.length > FOCUS_BUF_MAX) buf.shift();
+  }
+
+  // buildTreeFocusSnapshot: builds the diagnostic snapshot object from current refs + DOM.
+  // Does NOT copy to clipboard — callers do that so they can provide user feedback.
+  // Reads from refs so it is always current regardless of when it is called.
+  function buildTreeFocusSnapshot(): { snap: Record<string, unknown>; json: string } {
+    const ae  = document.activeElement;
+    const nav = treeNavRef.current;
+    const activeRows  = document.querySelectorAll(".tree-row--active");
+    const focusedRows = document.querySelectorAll(".tree-row--keyboard-focused");
+    const snap: Record<string, unknown> = {
+      ts:                 new Date().toISOString(),
+      focusedRecordIndex: dbgFocusedRIRef.current,
+      selectedDir:        dbgSelectedDirRef.current,
+      visibleRowCount:    dbgVisibleCountRef.current,
+      activeElement: ae ? {
+        tag:            ae.tagName,
+        cls:            ae instanceof HTMLElement ? ae.className.slice(0, 100) : undefined,
+        insideFolderNav: nav?.contains(ae) ?? false,
+        dataRI: ae instanceof HTMLElement
+          ? (ae.dataset.recordIndex
+              ?? ae.closest<HTMLElement>("[data-record-index]")?.dataset.recordIndex)
+          : undefined,
+      } : null,
+      folderNavKeyNav:    nav?.hasAttribute("data-keynav") ?? false,
+      folderNavHasFocus:  document.activeElement === nav,
+      domActiveRowCount:  activeRows.length,
+      domFocusedRowCount: focusedRows.length,
+      anomalies:          [] as string[],
+      recentEvents:       focusEventBuf.current.slice(),
+    };
+    const anomalies = snap.anomalies as string[];
+    const focusedRI = dbgFocusedRIRef.current;
+    if (focusedRI !== null && activeRows.length === 0)
+      anomalies.push(`focusedRI=${focusedRI} but no .tree-row--active in DOM`);
+    if (focusedRI !== null && focusedRows.length === 0)
+      anomalies.push(`focusedRI=${focusedRI} but no .tree-row--keyboard-focused in DOM`);
+    if (activeRows.length > 1)
+      anomalies.push(`${activeRows.length} .tree-row--active elements (expected ≤1)`);
+    if (focusedRI === null && ae instanceof HTMLElement && nav?.contains(ae))
+      anomalies.push("activeElement is inside folder-nav but focusedRecordIndex is null");
+    const json = JSON.stringify(snap, null, 2);
+    console.log("[disk-insight tree-focus snapshot]", json);
+    return { snap, json };
   }
   // jumpScrollFrnRef: FRN to center-scroll to after a bookmark jump.
   // jumpScrollTick: incrementing counter that triggers TreeView's center-scroll effect.
@@ -3395,6 +3443,11 @@ function App() {
     // so this is a no-op (same value, React bails out of the state update).
     setFocusedRecordIndex(id);
 
+    // Request focus recovery: after the DOM updates (rows added/removed), move focus
+    // back to this row. Handles the WebView2 behaviour where removing child DOM nodes
+    // causes folder-nav to lose focus (nav-focusout to=none), breaking keyboard navigation.
+    pendingTreeFocusRef.current = id;
+
     // Collapse if already expanded
     if (expandedIds.has(id)) {
       setExpandedIds((prev) => {
@@ -3654,6 +3707,20 @@ function App() {
   }
 
   // ────────────────────────────────────────────────────────────────────────
+
+  function handleCopyTreeDebug() {
+    if (!TREE_FOCUS_DEBUG) return;
+    const { json } = buildTreeFocusSnapshot();
+    const done = (ok: boolean) => {
+      setStatusMessage(ok ? "Tree debug snapshot copied to clipboard" : "Snapshot logged to console (clipboard unavailable)");
+      setTimeout(() => setStatusMessage(null), 3500);
+    };
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(json).then(() => done(true)).catch(() => done(false));
+    } else {
+      done(false);
+    }
+  }
 
   function handleRelaunchAsAdmin() {
     if (!isTauriRuntime()) return;
@@ -3984,44 +4051,9 @@ function App() {
   // The function reads from refs (always current values) so it never goes stale.
   useEffect(() => {
     if (!TREE_FOCUS_DEBUG) return;
-    focusDbg("diagnostic mode active — call window.__diskInsightDebugTreeFocus() to snapshot");
+    focusDbg("diagnostic mode active — call window.__diskInsightDebugTreeFocus() to snapshot, or use the 'Copy tree debug' button");
     function snapshotFn() {
-      const ae = document.activeElement;
-      const nav = treeNavRef.current;
-      const activeRows  = document.querySelectorAll(".tree-row--active");
-      const focusedRows = document.querySelectorAll(".tree-row--keyboard-focused");
-      const snap: Record<string, unknown> = {
-        focusedRecordIndex: dbgFocusedRIRef.current,
-        selectedDir:        dbgSelectedDirRef.current,
-        visibleRowCount:    dbgVisibleCountRef.current,
-        activeElement: ae ? {
-          tag:           ae.tagName,
-          cls:           ae instanceof HTMLElement ? ae.className.slice(0, 100) : undefined,
-          insideFolderNav: nav?.contains(ae) ?? false,
-          dataRI: ae instanceof HTMLElement
-            ? (ae.dataset.recordIndex
-                ?? ae.closest<HTMLElement>("[data-record-index]")?.dataset.recordIndex)
-            : undefined,
-        } : null,
-        folderNavKeyNav:    nav?.hasAttribute("data-keynav") ?? false,
-        folderNavHasFocus:  document.activeElement === nav,
-        domActiveRowCount:  activeRows.length,
-        domFocusedRowCount: focusedRows.length,
-        anomalies:          [] as string[],
-        recentEvents:       focusEventBuf.current.slice(),
-      };
-      const anomalies = snap.anomalies as string[];
-      const focusedRI = dbgFocusedRIRef.current;
-      if (focusedRI !== null && activeRows.length === 0)
-        anomalies.push(`focusedRI=${focusedRI} but no .tree-row--active in DOM`);
-      if (focusedRI !== null && focusedRows.length === 0)
-        anomalies.push(`focusedRI=${focusedRI} but no .tree-row--keyboard-focused in DOM`);
-      if (activeRows.length > 1)
-        anomalies.push(`${activeRows.length} .tree-row--active elements (expected ≤1)`);
-      if (focusedRI === null && ae instanceof HTMLElement && nav?.contains(ae))
-        anomalies.push(`activeElement is inside folder-nav but focusedRecordIndex is null`);
-      const json = JSON.stringify(snap, null, 2);
-      console.log("[disk-insight tree-focus snapshot]", json);
+      const { snap, json } = buildTreeFocusSnapshot();
       if (navigator.clipboard) {
         navigator.clipboard.writeText(json)
           .then(() => console.log("[disk-insight] snapshot copied to clipboard"))
@@ -4063,6 +4095,44 @@ function App() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!data]);
+
+  // ── Focus recovery after expand / collapse ──────────────────────────────
+  // handleToggleExpand sets pendingTreeFocusRef to the record_index of the toggled row.
+  // This effect fires after expandedIds or childrenByParent change (i.e., after the DOM
+  // has been committed with the new row set), then uses requestAnimationFrame to move DOM
+  // focus back to the toggled row — or to folder-nav as a fallback if the row is not
+  // visible. This fixes the WebView2 behaviour where removing child DOM nodes causes
+  // folder-nav to lose focus (nav-focusout to=none), breaking subsequent keyboard input.
+  useEffect(() => {
+    const id = pendingTreeFocusRef.current;
+    if (id === null) return;
+    pendingTreeFocusRef.current = null;
+
+    // Don't steal focus from inputs, selects, or context menus
+    const ae = document.activeElement;
+    if (ae instanceof HTMLElement) {
+      if (ae.tagName === "INPUT" || ae.tagName === "SELECT") return;
+      if (ae.closest(".context-menu")) return;
+    }
+
+    if (TREE_FOCUS_DEBUG) {
+      recordFocusEvent({ kind: "focusRecovery-scheduled", focusedRI: id, note: `ri=${id}` });
+    }
+
+    const frameId = requestAnimationFrame(() => {
+      const el = treeNavRef.current?.querySelector<HTMLElement>(`[data-record-index="${id}"]`);
+      if (el) {
+        el.focus({ preventScroll: true });
+        if (TREE_FOCUS_DEBUG) recordFocusEvent({ kind: "focusRecovery-row", focusedRI: id, note: `ri=${id} focused` });
+      } else {
+        treeNavRef.current?.focus({ preventScroll: true });
+        if (TREE_FOCUS_DEBUG) recordFocusEvent({ kind: "focusRecovery-nav-fallback", focusedRI: id, note: `ri=${id} not in DOM` });
+      }
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedIds, childrenByParent]);
 
   // Reset bookmark jump states when scan data changes (new scan = stale states).
   useEffect(() => {
@@ -4621,6 +4691,15 @@ function App() {
           onCancel={handleCancelRecycleConfirm}
           onConfirm={handleConfirmRecycle}
         />
+      )}
+      {TREE_FOCUS_DEBUG && (
+        <button
+          className="tree-debug-fab"
+          onClick={handleCopyTreeDebug}
+          title="Copy tree focus debug snapshot to clipboard (TREE_FOCUS_DEBUG=true)"
+        >
+          Copy tree debug
+        </button>
       )}
     </main>
   );
