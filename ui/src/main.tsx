@@ -1811,6 +1811,8 @@ function DirectoriesTable({
   recycledItems,
   onCopyError,
   onExternalHandoff,
+  isBookmarked,
+  onToggleBookmark,
 }: {
   rows: DirectoryEntry[];
   title: React.ReactNode;
@@ -1823,6 +1825,8 @@ function DirectoriesTable({
   recycledItems?: RecycledItem[];
   onCopyError: (msg: string) => void;
   onExternalHandoff?: () => void;
+  isBookmarked?: (path: string) => boolean;
+  onToggleBookmark?: (path: string, isDirectory: boolean) => void;
 }) {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
 
@@ -1900,6 +1904,8 @@ function DirectoriesTable({
             : false}
           onCopyError={onCopyError}
           onExternalHandoff={onExternalHandoff}
+          isBookmarked={isBookmarked ? isBookmarked(ctxMenu.path) : undefined}
+          onToggleBookmark={onToggleBookmark ? () => onToggleBookmark(ctxMenu.path, true) : undefined}
         />
       )}
     </section>
@@ -1919,6 +1925,8 @@ function FilesTable({
   recycledItems,
   onCopyError,
   onExternalHandoff,
+  isBookmarked,
+  onToggleBookmark,
 }: {
   rows: FileEntry[];
   title: React.ReactNode;
@@ -1932,6 +1940,8 @@ function FilesTable({
   recycledItems?: RecycledItem[];
   onCopyError: (msg: string) => void;
   onExternalHandoff?: () => void;
+  isBookmarked?: (path: string) => boolean;
+  onToggleBookmark?: (path: string, isDirectory: boolean) => void;
 }) {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
 
@@ -2009,6 +2019,8 @@ function FilesTable({
             : false}
           onCopyError={onCopyError}
           onExternalHandoff={onExternalHandoff}
+          isBookmarked={isBookmarked ? isBookmarked(ctxMenu.path) : undefined}
+          onToggleBookmark={onToggleBookmark ? () => onToggleBookmark(ctxMenu.path, false) : undefined}
         />
       )}
     </section>
@@ -2027,6 +2039,8 @@ function SubtreeSearchPanel({
   recycledItems,
   onCopyError,
   onExternalHandoff,
+  isBookmarked,
+  onToggleBookmark,
 }: {
   selectedDir: DirectoryEntry;
   sourceKind: SourceKind | null;
@@ -2039,6 +2053,8 @@ function SubtreeSearchPanel({
   recycledItems?: RecycledItem[];
   onCopyError: (msg: string) => void;
   onExternalHandoff?: () => void;
+  isBookmarked?: (path: string) => boolean;
+  onToggleBookmark?: (path: string, isDirectory: boolean) => void;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<TreeNode[] | null>(null);
@@ -2247,6 +2263,8 @@ function SubtreeSearchPanel({
             : false}
           onCopyError={onCopyError}
           onExternalHandoff={onExternalHandoff}
+          isBookmarked={isBookmarked ? isBookmarked(ctxMenu.path) : undefined}
+          onToggleBookmark={onToggleBookmark ? () => onToggleBookmark(ctxMenu.path, ctxMenu.isDirectory) : undefined}
         />
       )}
     </details>
@@ -4262,6 +4280,8 @@ function App() {
                         recycledItems={recycledItems}
                         onCopyError={handleCopyError}
                         onExternalHandoff={() => setHandoffNotice(true)}
+                        isBookmarked={isBookmarked}
+                        onToggleBookmark={handleToggleBookmark}
                       />
                       <FilesTable
                         rows={selectedLargestItems.files.map(treeNodeToFileEntry)}
@@ -4276,6 +4296,8 @@ function App() {
                         recycledItems={recycledItems}
                         onCopyError={handleCopyError}
                         onExternalHandoff={() => setHandoffNotice(true)}
+                        isBookmarked={isBookmarked}
+                        onToggleBookmark={handleToggleBookmark}
                       />
                     </>
                   ) : null}
@@ -4292,6 +4314,8 @@ function App() {
                   recycledItems={recycledItems}
                   onCopyError={handleCopyError}
                   onExternalHandoff={() => setHandoffNotice(true)}
+                  isBookmarked={isBookmarked}
+                  onToggleBookmark={handleToggleBookmark}
                 />
                 <details className="largest-items-section">
                   <summary className="largest-items-summary">
@@ -4316,6 +4340,8 @@ function App() {
                     onCopyError={handleCopyError}
                     title="Top folders from scan results"
                     onExternalHandoff={() => setHandoffNotice(true)}
+                    isBookmarked={isBookmarked}
+                    onToggleBookmark={handleToggleBookmark}
                   />
                   <FilesTable
                     rows={filteredTopFiles}
@@ -4330,6 +4356,8 @@ function App() {
                     recycledItems={recycledItems}
                     onCopyError={handleCopyError}
                     onExternalHandoff={() => setHandoffNotice(true)}
+                    isBookmarked={isBookmarked}
+                    onToggleBookmark={handleToggleBookmark}
                   />
                 </details>
               </div>
