@@ -1426,6 +1426,12 @@ const TreeNodeRow = React.memo(function TreeNodeRow({
       ) : (
         <span className="tree-toggle tree-toggle--leaf" aria-hidden="true">·</span>
       )}
+      <span
+        className={isDir
+          ? (isExpanded ? "tree-node-icon tree-node-icon--folder-open" : "tree-node-icon tree-node-icon--folder")
+          : "tree-node-icon tree-node-icon--file"}
+        aria-hidden="true"
+      />
       {isDir ? (
         <button
           className="tree-label"
