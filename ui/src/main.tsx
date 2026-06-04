@@ -157,6 +157,16 @@ type ReviewCandidate = {
   sizeBytes: number;
   categoryLabel: string;
 };
+interface ReviewListItem {
+  path: string;
+  name: string;
+  parentPath: string;
+  isDirectory: boolean;
+  sizeBytes: number;
+  category?: string;
+  source: 'tree' | 'large-review' | 'reviewable' | 'caution';
+  addedAt: number;
+}
 type ContextMenuTarget = {
   path: string;
   isDirectory: boolean;
@@ -892,6 +902,8 @@ function SafeContextMenu({
   isBookmarked: targetIsBookmarked,
   onToggleBookmark,
   companySafeMode,
+  isInReviewList: targetIsInReviewList,
+  onToggleReviewList,
 }: {
   target: ContextMenuTarget;
   onClose: () => void;
@@ -906,17 +918,24 @@ function SafeContextMenu({
   isBookmarked?: boolean;
   onToggleBookmark?: () => void;
   companySafeMode?: boolean;
+  isInReviewList?: boolean;
+  onToggleReviewList?: () => void;
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuWidth = 250;
-  const showRecycleItem   = advancedMode === true && onRequestRecycle !== undefined;
-  const showBookmarkItem  = onToggleBookmark !== undefined;
+  const showRecycleItem      = advancedMode === true && onRequestRecycle !== undefined;
+  const showBookmarkItem     = onToggleBookmark !== undefined;
+  const showReviewListItem   = onToggleReviewList !== undefined;
   // Base: 4 or 5 safe items (~30px each) + 8px base padding.
   // Terminal item hidden in company-safe mode: 4 × 30 + 8 = 128, else 5 × 30 + 8 = 158.
   // Bookmark section: separator(9) + item(30) = 39px.
+  // Review list section: separator(9) + item(30) = 39px.
   // Advanced section: separator(9) + label(20) + item(30) = 59px.
   const baseMenuHeight = companySafeMode ? 128 : 158;
-  const menuHeight = baseMenuHeight + (showBookmarkItem ? 39 : 0) + (showRecycleItem ? 59 : 0);
+  const menuHeight = baseMenuHeight
+    + (showBookmarkItem   ? 39 : 0)
+    + (showReviewListItem ? 39 : 0)
+    + (showRecycleItem    ? 59 : 0);
   const x = Math.min(target.x, window.innerWidth - menuWidth - 4);
   const y = Math.min(target.y, window.innerHeight - menuHeight - 4);
 
@@ -1030,6 +1049,17 @@ function SafeContextMenu({
             onClick={() => { onToggleBookmark!(); onClose(); }}
           >
             {targetIsBookmarked ? "Remove bookmark" : "Add bookmark"}
+          </button>
+        </>
+      )}
+      {showReviewListItem && (
+        <>
+          <div className="context-menu-separator" role="separator" />
+          <button
+            className="context-menu-item"
+            onClick={() => { onToggleReviewList!(); onClose(); }}
+          >
+            {targetIsInReviewList ? "Remove from review list" : "Add to review list"}
           </button>
         </>
       )}
@@ -1586,6 +1616,78 @@ function BookmarksBar({
   );
 }
 
+// ── Review list panel (right-pane inspector card) ─────────────────────────
+
+function ReviewListPanel({
+  items,
+  onRemove,
+  onClear,
+}: {
+  items: ReviewListItem[];
+  onRemove: (path: string) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <div className="review-list-panel">
+      <div className="review-list-header">
+        <button
+          className={`review-list-header-toggle${open ? " review-list-header-toggle--open" : ""}`}
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          title={open ? "Collapse review list" : "Expand review list"}
+        >
+          <span className="review-list-chevron" aria-hidden="true">{open ? "▾" : "▸"}</span>
+          Review list{items.length > 0 ? ` (${items.length})` : ""}
+        </button>
+        {open && items.length > 0 && (
+          <button className="review-list-clear" onClick={onClear} title="Clear all items from review list">
+            Clear
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="review-list-body">
+          <p className="review-list-note">Session-only list for manual review. No file operations.</p>
+          {items.length === 0 ? (
+            <p className="review-list-empty">
+              Add items from TreeView or Large review to collect candidates for manual review.
+            </p>
+          ) : (
+            <div className="review-list-items">
+              {items.map((item) => (
+                <div key={item.path} className="review-list-item" title={item.path}>
+                  <span
+                    className={item.isDirectory ? "tree-node-icon tree-node-icon--folder" : "tree-node-icon tree-node-icon--file"}
+                    aria-hidden="true"
+                  />
+                  <div className="review-list-item-main">
+                    <span className="review-list-item-name">{item.name}</span>
+                    <span className="review-list-item-meta">
+                      {formatBytes(item.sizeBytes)}
+                      {item.category ? ` · ${item.category}` : ""}
+                    </span>
+                    <span className="review-list-item-path">{item.parentPath}</span>
+                  </div>
+                  <button
+                    className="review-list-remove"
+                    onClick={() => onRemove(item.path)}
+                    title="Remove from review list"
+                    aria-label={`Remove ${item.name} from review list`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 
 function TreeView({
@@ -1605,6 +1707,8 @@ function TreeView({
   largeReviewCandidates,
   isReviewBookmarked,
   onToggleReviewBookmark,
+  isInReviewList,
+  onToggleReviewList,
   onToggleExpand,
   onSelect,
   onContextMenu,
@@ -1630,6 +1734,8 @@ function TreeView({
   largeReviewCandidates: ReviewCandidate[];
   isReviewBookmarked?: (path: string) => boolean;
   onToggleReviewBookmark?: (path: string, isDirectory: boolean) => void;
+  isInReviewList?: (path: string) => boolean;
+  onToggleReviewList?: (path: string, isDirectory: boolean, sizeBytes: number) => void;
   onToggleExpand: (node: TreeNode) => void;
   onSelect: (node: TreeNode) => void;
   onContextMenu: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
@@ -1783,6 +1889,8 @@ function TreeView({
               companySafeMode={true}
               isBookmarked={isReviewBookmarked ? isReviewBookmarked(reviewCtxMenu.path) : undefined}
               onToggleBookmark={onToggleReviewBookmark ? () => onToggleReviewBookmark(reviewCtxMenu.path, reviewCtxMenu.isDirectory) : undefined}
+              isInReviewList={isInReviewList ? isInReviewList(reviewCtxMenu.path) : undefined}
+              onToggleReviewList={onToggleReviewList ? () => onToggleReviewList(reviewCtxMenu.path, reviewCtxMenu.isDirectory, reviewCtxMenu.sizeBytes ?? 0) : undefined}
             />
           )}
         </div>
@@ -2797,6 +2905,7 @@ function App() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [adminWarningDismissed, setAdminWarningDismissed] = useState(false);
   const [treeReviewView, setTreeReviewView] = useState<TreeReviewView>('all');
+  const [reviewListItems, setReviewListItems] = useState<ReviewListItem[]>([]);
 
   // ── Tree focus diagnostics (TREE_FOCUS_DEBUG) ────────────────────────────
   // Always created (cheap). All recording code is behind if(TREE_FOCUS_DEBUG)
@@ -3288,6 +3397,7 @@ function App() {
     setHandoffNotice(false);
     setInsightsOpen(false);
     setTreeReviewView('all');
+    setReviewListItems([]);
     setExpandedIds(new Set());
     setLoadingIds(new Set());
     setChildrenByParent({});
@@ -3875,6 +3985,50 @@ function App() {
     } else {
       handleAddBookmark(path, isDirectory);
     }
+  }
+
+  // ── Review list helpers ──────────────────────────────────────────────────
+
+  function isInReviewList(path: string): boolean {
+    const key = path.toLowerCase();
+    return reviewListItems.some((item) => item.path.toLowerCase() === key);
+  }
+
+  function handleToggleReviewList(
+    path: string,
+    isDirectory: boolean,
+    sizeBytes: number,
+    source: ReviewListItem['source'],
+  ) {
+    const key = path.toLowerCase();
+    setReviewListItems((prev) => {
+      if (prev.some((item) => item.path.toLowerCase() === key)) {
+        return prev.filter((item) => item.path.toLowerCase() !== key);
+      }
+      const cat = classifyCleanupSafety(path);
+      return [
+        ...prev,
+        {
+          path,
+          name: getFileName(path),
+          parentPath: getParentDir(path),
+          isDirectory,
+          sizeBytes,
+          category: cat.category !== 'unknown' ? cat.labelEn : undefined,
+          source,
+          addedAt: Date.now(),
+        },
+      ];
+    });
+  }
+
+  function handleRemoveFromReviewList(path: string) {
+    const key = path.toLowerCase();
+    setReviewListItems((prev) => prev.filter((item) => item.path.toLowerCase() !== key));
+  }
+
+  function handleClearReviewList() {
+    setReviewListItems([]);
   }
 
   async function handleJumpToBookmark(bookmark: Bookmark) {
@@ -4882,6 +5036,8 @@ function App() {
               largeReviewCandidates={largeReviewCandidates}
               isReviewBookmarked={isBookmarked}
               onToggleReviewBookmark={handleToggleBookmark}
+              isInReviewList={isInReviewList}
+              onToggleReviewList={(path, isDir, sizeBytes) => handleToggleReviewList(path, isDir, sizeBytes, 'large-review')}
               onToggleExpand={stableToggleExpand}
               onSelect={stableSelectNode}
               onContextMenu={stableContextMenu}
@@ -4906,6 +5062,13 @@ function App() {
                 isBookmarked={isBookmarked(treeContextMenu.path)}
                 onToggleBookmark={() => handleToggleBookmark(treeContextMenu.path, treeContextMenu.isDirectory)}
                 companySafeMode={companySafeMode}
+                isInReviewList={isInReviewList(treeContextMenu.path)}
+                onToggleReviewList={() => handleToggleReviewList(
+                  treeContextMenu.path,
+                  treeContextMenu.isDirectory,
+                  treeContextMenu.sizeBytes ?? 0,
+                  treeReviewView === 'reviewable' ? 'reviewable' : treeReviewView === 'caution' ? 'caution' : 'tree',
+                )}
               />
             )}
             <div className="content-right">
@@ -4933,6 +5096,11 @@ function App() {
                   totalSize={data?.summary?.total_final_allocated ?? 0}
                 />
               )}
+              <ReviewListPanel
+                items={reviewListItems}
+                onRemove={handleRemoveFromReviewList}
+                onClear={handleClearReviewList}
+              />
               {selectedDir && (
                 <button
                   className={`insights-open-btn${insightsOpen ? " insights-open-btn--open" : ""}`}
