@@ -1693,11 +1693,11 @@ function TreeView({
   }, [jumpScrollTick]);
 
   const footerText = reviewView === 'large-review'
-    ? `Large review: ${formatNumber(largeReviewCandidates.length)} candidate${largeReviewCandidates.length !== 1 ? 's' : ''} from top scan results`
+    ? `Large review: ${formatNumber(largeReviewCandidates.length)} candidate${largeReviewCandidates.length !== 1 ? 's' : ''} · From top scan results · Size ≥ 1 GiB`
     : reviewView === 'caution'
-      ? `Visible: ${formatNumber(visibleRows.length)} of ${formatNumber(totalRowsCount)} · Caution filter (loaded rows)`
+      ? `Caution areas: ${formatNumber(visibleRows.length)} of ${formatNumber(totalRowsCount)} loaded rows · System/app-managed`
       : reviewView === 'reviewable'
-        ? `Visible: ${formatNumber(visibleRows.length)} of ${formatNumber(totalRowsCount)} · Reviewable areas filter (loaded rows, size ≥ 1 GiB)`
+        ? `Reviewable areas: ${formatNumber(visibleRows.length)} of ${formatNumber(totalRowsCount)} loaded rows · Not system/app-managed · Size ≥ 1 GiB`
         : `Root children: ${rootCount} · Visible rows: ${formatNumber(visibleRows.length)}${visibleRows.length >= LARGE_TREE_THRESHOLD ? " — consider collapsing folders." : ""}`;
 
   return (
@@ -1709,12 +1709,12 @@ function TreeView({
             className="tree-review-select"
             value={reviewView}
             onChange={(e) => onChangeReviewView(e.target.value as TreeReviewView)}
-            title="Filter tree rows by cleanup category. Reviewable areas shows large loaded rows that are not classified as system/app-managed caution areas."
+            title="Switch tree view. Large review: Temp/Cache/Dev/Recycle candidates ≥ 1 GiB from top scan results. Reviewable areas: large loaded rows not classified as system/app-managed. Caution areas: system/app-managed loaded rows."
           >
-            <option value="all">All</option>
-            <option value="large-review">Large review</option>
-            <option value="reviewable">Reviewable areas</option>
-            <option value="caution">Caution areas</option>
+            <option value="all" title="Show the normal loaded tree.">All</option>
+            <option value="large-review" title="Show large Temp / Cache / Dev dependency / Recycle Bin candidates from top scan results.">Large review</option>
+            <option value="reviewable" title="Show large loaded rows that are not classified as system/app-managed caution areas.">Reviewable areas</option>
+            <option value="caution" title="Show loaded rows classified as system or app-managed caution areas.">Caution areas</option>
           </select>
         </div>
         <span className="folder-nav-header__occ" title="Occupancy (% of drive total)">Occ.</span>
