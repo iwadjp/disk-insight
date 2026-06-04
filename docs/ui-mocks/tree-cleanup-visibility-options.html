@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>disk-insight — TreeView cleanup visibility 比較モック</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      color: #17202a;
+      background: #f0f4f8;
+      padding: 28px 16px 56px;
+    }
+
+    h1 { font-size: 22px; font-weight: 700; }
+    h2 { font-size: 15px; font-weight: 700; }
+    p  { line-height: 1.5; color: #374151; }
+
+    /* ── Page header ── */
+    .page-header { max-width: 880px; margin: 0 auto 16px; }
+    .page-header h1 { color: #1a2530; margin-bottom: 6px; }
+    .page-sub { font-size: 13px; color: #5e6b78; }
+
+    /* ── Disclaimer banner ── */
+    .disclaimer {
+      max-width: 880px; margin: 0 auto 18px;
+      padding: 10px 16px; border-radius: 8px;
+      background: #fff7ed; border: 1px solid #fed7aa;
+      font-size: 12px; color: #9a3412; line-height: 1.5;
+    }
+    .disclaimer strong { color: #7c2d12; }
+
+    /* ── Legend ── */
+    .legend {
+      max-width: 880px; margin: 0 auto 20px;
+      background: #fff; border: 1px solid #d9e1e8; border-radius: 8px;
+      padding: 12px 16px;
+    }
+    .legend-title {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: #9eacba; margin-bottom: 10px;
+    }
+    .legend-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 8px 18px; font-size: 12px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 8px; }
+    .legend-swatch {
+      flex-shrink: 0; width: 14px; height: 14px; border-radius: 3px;
+    }
+    .legend-cat { font-weight: 600; }
+    .legend-meaning { color: #5e6b78; }
+
+    /* ── Nav ── */
+    .page-nav {
+      max-width: 880px; margin: 0 auto 28px;
+      display: flex; flex-wrap: wrap; gap: 6px;
+    }
+    .page-nav a {
+      font-size: 12px; padding: 4px 12px;
+      background: #fff; border: 1px solid #d9e1e8; border-radius: 6px;
+      color: #465563; text-decoration: none;
+    }
+    .page-nav a:hover { background: #f0f4f8; }
+
+    /* ── Case layout ── */
+    .cases { max-width: 880px; margin: 0 auto; display: flex; flex-direction: column; gap: 32px; }
+
+    .case-card {
+      background: #fff; border: 1px solid #d9e1e8; border-radius: 10px; overflow: hidden;
+    }
+
+    .case-header {
+      padding: 12px 18px;
+      background: #f8fafc; border-bottom: 1px solid #d9e1e8;
+      display: flex; align-items: baseline; gap: 10px;
+    }
+
+    .case-tag {
+      flex-shrink: 0;
+      font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 2px 8px; border-radius: 4px;
+      background: #e2e8f0; color: #465563;
+    }
+    .case-tag--best   { background: #dcfce7; color: #166534; }
+    .case-tag--second { background: #dbeafe; color: #1d4ed8; }
+    .case-tag--note   { background: #fef3c7; color: #92400e; }
+    .case-tag--q      { background: #ede9fe; color: #5b21b6; }
+
+    .case-title { font-size: 14px; font-weight: 650; color: #17202a; }
+
+    .case-desc {
+      padding: 10px 18px 11px;
+      font-size: 13px; color: #5e6b78; line-height: 1.5;
+      border-bottom: 1px solid #edf1f5;
+    }
+
+    /* ── Tree mock shared (matches shipped v0.5.15-E layout) ── */
+    .tree-mock {
+      font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+      font-size: 12px; color: #17202a; background: #fff;
+    }
+
+    .tree-header-bar {
+      display: flex; align-items: center;
+      padding: 8px 14px 8px 14px; gap: 4px;
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.04em; color: #465563;
+      background: #f8fafc; border-bottom: 1px solid #d9e1e8;
+    }
+    .th-title { flex: 1; min-width: 0; }
+    .th-safety { width: 28px; text-align: center; }
+    .th-occ { width: 100px; margin-left: 4px; text-align: center; font-weight: 600; opacity: 0.7; }
+    .th-pct { width: 44px; }
+    .th-size { width: 72px; text-align: right; }
+
+    .tree-row {
+      display: flex; align-items: center; gap: 4px;
+      padding: 3px 8px 3px 8px;
+      border-bottom: 1px solid #edf1f5;
+      min-height: 28px; position: relative; background: transparent;
+      cursor: default;
+    }
+    .tree-row:last-child { border-bottom: none; }
+    .tree-row:hover { background: #edf2f7; }
+    .tree-row--active { background: #e8f0fe !important; box-shadow: inset 3px 0 0 #1a56db; }
+    .tree-row--active:hover { background: #dce8fc !important; }
+
+    /* toggle chevron */
+    .tr-toggle {
+      flex-shrink: 0; width: 22px; height: 22px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; color: #9eacba;
+    }
+
+    /* folder icon (amber, CSS-only — matches app) */
+    .icon-folder {
+      flex-shrink: 0; width: 14px; height: 10px;
+      background: #fcd34d; border-radius: 0 2px 2px 2px;
+      position: relative; align-self: center;
+    }
+    .icon-folder::before {
+      content: ''; position: absolute; top: -3px; left: 0;
+      width: 5px; height: 4px; background: #fcd34d; border-radius: 1px 2px 0 0;
+    }
+
+    .tr-name {
+      flex: 1; min-width: 0; font-weight: 500;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      display: flex; align-items: center; gap: 6px;
+    }
+
+    /* occupancy bar column (shipped) */
+    .occ-bar {
+      flex-shrink: 0; width: 100px; height: 8px;
+      background: rgba(0,0,0,0.07); border-radius: 3px; overflow: hidden;
+      position: relative; align-self: center; margin-left: 4px;
+    }
+    .occ-bar__fill {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      background: rgba(26,86,219,0.38); border-radius: 3px;
+    }
+    .col-pct {
+      flex-shrink: 0; width: 44px; text-align: right; font-size: 10px;
+      color: #5e6b78; font-variant-numeric: tabular-nums;
+    }
+    .col-size {
+      flex-shrink: 0; width: 72px; text-align: right; font-size: 11px;
+      color: #465563; font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Case B: safety marker column ── */
+    .sf-cell {
+      flex-shrink: 0; width: 28px; text-align: center;
+      font-weight: 700; font-size: 12px; font-variant-numeric: tabular-nums;
+      cursor: help;
+    }
+    .sf--strong  { color: #dc2626; }
+    .sf--caution { color: #d97706; }
+    .sf--review  { color: #2563eb; }
+    .sf--neutral { color: #cbd5e1; }
+    .sf--none    { color: transparent; }
+
+    /* ── Case C: subtle category pill after name ── */
+    .cat-pill {
+      flex-shrink: 0; font-size: 9px; font-weight: 700;
+      padding: 1px 6px; border-radius: 3px;
+      text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .cat-pill--system { background: #fee2e2; color: #991b1b; }
+    .cat-pill--app    { background: #fef3c7; color: #92400e; }
+    .cat-pill--review { background: #dbeafe; color: #1d4ed8; }
+
+    /* ── Case D: occupancy bar tone accent ── */
+    .occ-bar--accent { box-shadow: inset 3px 0 0 0 currentColor; }
+    .occ-fill--strong  { background: rgba(220,38,38,0.42); }
+    .occ-fill--caution { background: rgba(217,119,6,0.42); }
+    .occ-fill--review  { background: rgba(37,99,235,0.42); }
+    .occ-fill--neutral { background: rgba(100,116,139,0.34); }
+    .acc--strong  { color: #dc2626; }
+    .acc--caution { color: #d97706; }
+    .acc--review  { color: #2563eb; }
+    .acc--neutral { color: #cbd5e1; }
+
+    /* ── Case E: filter / view mode ── */
+    .view-bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px; background: #f1f5f9; border-bottom: 1px solid #d9e1e8;
+      font-family: Inter, system-ui, sans-serif;
+    }
+    .view-bar-label { font-size: 11px; color: #5e6b78; font-weight: 600; }
+    .view-chip {
+      font-size: 11px; padding: 3px 10px; border-radius: 12px;
+      border: 1px solid #cbd5e1; background: #fff; color: #475569; cursor: pointer;
+    }
+    .view-chip--active {
+      background: #1d4ed8; border-color: #1d4ed8; color: #fff; font-weight: 600;
+    }
+    .filter-note {
+      padding: 6px 14px; font-size: 11px; color: #1d4ed8;
+      background: #eff6ff; border-bottom: 1px solid #dbeafe;
+      font-family: Inter, system-ui, sans-serif;
+    }
+
+    /* ── Case F: Insights list ── */
+    .insights-list { font-family: Inter, system-ui, sans-serif; }
+    .insights-head {
+      padding: 10px 16px; font-size: 13px; font-weight: 700; color: #17202a;
+      border-bottom: 1px solid #edf1f5;
+    }
+    .insights-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 16px; border-bottom: 1px solid #f1f5f9;
+    }
+    .insights-row:last-child { border-bottom: none; }
+    .ins-name { flex: 1; min-width: 0; font-weight: 600; font-size: 13px; }
+    .ins-path { font-size: 11px; color: #9eacba; font-weight: 400; }
+    .ins-size { font-size: 12px; color: #465563; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .ins-cat {
+      flex-shrink: 0; font-size: 10px; font-weight: 600;
+      padding: 2px 8px; border-radius: 4px; min-width: 110px; text-align: center;
+    }
+    .ins-cat--review { background: #dbeafe; color: #1d4ed8; }
+
+    /* ── Evaluation grid ── */
+    .eval-wrap {
+      padding: 12px 18px 14px;
+      border-top: 1px solid #edf1f5; background: #f8fafc;
+    }
+    .eval-title {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: #9eacba; margin-bottom: 8px;
+    }
+    .eval-grid {
+      display: grid; grid-template-columns: 1fr auto;
+      gap: 0; font-size: 12px;
+    }
+    .eval-row { display: contents; }
+    .eval-q  { padding: 4px 8px 4px 0; color: #5e6b78; border-bottom: 1px solid #edf1f5; }
+    .eval-a  {
+      padding: 4px 0 4px 8px; font-weight: 650; text-align: right;
+      border-bottom: 1px solid #edf1f5; white-space: nowrap;
+    }
+    .eval-row:last-child .eval-q,
+    .eval-row:last-child .eval-a { border-bottom: none; }
+
+    .s-best { color: #166534; }
+    .s-good { color: #1d4ed8; }
+    .s-ok   { color: #7c3aed; }
+    .s-weak { color: #b45309; }
+    .s-bad  { color: #991b1b; }
+
+    .eval-note {
+      margin-top: 8px; font-size: 11px; color: #6b7280; line-height: 1.5;
+    }
+
+    /* ── Recommendation section ── */
+    .qs-body {
+      padding: 16px 18px;
+      font-size: 13px; line-height: 1.7; color: #374151;
+    }
+    .qs-body ol { padding-left: 18px; display: flex; flex-direction: column; gap: 10px; }
+    .qs-body code {
+      background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 3px;
+      padding: 0 4px; font-size: 11px;
+    }
+    .rec-pick {
+      margin-top: 4px; padding: 10px 14px; border-radius: 8px;
+      background: #f0fdf4; border: 1px solid #bbf7d0;
+    }
+    .rec-pick--second { background: #eff6ff; border-color: #bfdbfe; }
+    .rec-pick-title { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+
+    footer {
+      max-width: 880px; margin: 32px auto 0;
+      text-align: center; font-size: 11px; color: #9eacba;
+    }
+  </style>
+</head>
+<body>
+
+<header class="page-header">
+  <h1>TreeView cleanup visibility — 比較モック</h1>
+  <p class="page-sub">disk-insight v0.5.16-D &nbsp;·&nbsp; 実装前ユーザー確認用 &nbsp;·&nbsp; サンプル: 容量降順の混在ノード（深さは比較のため平坦表示）&nbsp;·&nbsp; 本体コード変更なし</p>
+</header>
+
+<div class="disclaimer">
+  <strong>方針:</strong> これは「容量 × cleanup safety 分類」を TreeView 上でどう見せるかの比較モックです。
+  分類は <code>cleanupSafety.ts</code> のパスヒューリスティックに基づく参考情報で、
+  disk-insight は<strong>削除を推奨しません</strong>。「safe to delete」「delete recommended」などの表現は使いません。
+  容量バー（どれだけ大きいか）と safety marker（手動で触ると危ないか／確認候補か）は役割を分けています。
+</div>
+
+<div class="legend">
+  <div class="legend-title">Safety tone 凡例（cleanupSafety.ts と対応）</div>
+  <div class="legend-grid">
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#dc2626"></span>
+      <span><span class="legend-cat">Protected system</span> <span class="legend-meaning">— 手動操作は避ける（strong-caution）</span></span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#f59e0b"></span>
+      <span><span class="legend-cat">App-managed</span> <span class="legend-meaning">— アプリ経由を推奨（caution）</span></span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#3b82f6"></span>
+      <span><span class="legend-cat">Review candidate</span> <span class="legend-meaning">— 確認候補 cache/temp/deps/bin（review）</span></span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#94a3b8"></span>
+      <span><span class="legend-cat">User data</span> <span class="legend-meaning">— 内容を理解している時のみ（neutral）</span></span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#e2e8f0"></span>
+      <span><span class="legend-cat">Unknown</span> <span class="legend-meaning">— 指針なし（none / 表示控えめ）</span></span>
+    </div>
+  </div>
+</div>
+
+<nav class="page-nav">
+  <a href="#case-a">A: 現状維持</a>
+  <a href="#case-b">B: safety marker 列</a>
+  <a href="#case-c">C: name 後 pill</a>
+  <a href="#case-d">D: bar tone accent</a>
+  <a href="#case-e">E: filter / view mode</a>
+  <a href="#case-f">F: Insights list</a>
+  <a href="#summary">比較表 / 推奨</a>
+</nav>
+
+<div class="cases">
+
+  <!-- ================================================================ A -->
+  <div class="case-card" id="case-a">
+    <div class="case-header">
+      <span class="case-tag">ベースライン</span>
+      <span class="case-title">案 A — 現状維持（容量バーのみ）</span>
+    </div>
+    <div class="case-desc">
+      現在の shipped TreeView そのまま。占有率バー + % + size。cleanup 判断の補助はなく、
+      容量把握だけに集中できる。比較の基準。
+    </div>
+    <div class="tree-mock">
+      <div class="tree-header-bar">
+        <span class="th-title">Folder tree</span>
+        <span class="th-occ">Occ.</span>
+        <span class="th-pct"></span>
+        <span class="th-size">Size</span>
+      </div>
+
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Users</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:47.6%"></span></span>
+        <span class="col-pct">47.6%</span><span class="col-size">90.2 GB</span>
+      </div>
+      <div class="tree-row tree-row--active">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Program Files</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:15.8%"></span></span>
+        <span class="col-pct">15.8%</span><span class="col-size">29.9 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Windows</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:14.2%"></span></span>
+        <span class="col-pct">14.2%</span><span class="col-size">27.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">node_modules</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:5.6%"></span></span>
+        <span class="col-pct">5.6%</span><span class="col-size">10.6 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Downloads</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:4.2%"></span></span>
+        <span class="col-pct">4.2%</span><span class="col-size">8.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">ProgramData</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:3.1%"></span></span>
+        <span class="col-pct">3.1%</span><span class="col-size">6.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Temp</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:2.6%"></span></span>
+        <span class="col-pct">2.6%</span><span class="col-size">5.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">System Volume Information</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:2.3%"></span></span>
+        <span class="col-pct">2.3%</span><span class="col-size">4.4 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Chrome Cache</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:2.1%"></span></span>
+        <span class="col-pct">2.1%</span><span class="col-size">4.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">$Recycle.Bin</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:1.0%"></span></span>
+        <span class="col-pct">1.0%</span><span class="col-size">1.9 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Misc</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:0.4%"></span></span>
+        <span class="col-pct">0.4%</span><span class="col-size">760 MB</span>
+      </div>
+    </div>
+    <div class="eval-wrap">
+      <div class="eval-title">評価</div>
+      <div class="eval-grid">
+        <div class="eval-row"><span class="eval-q">大きい cleanup 対象を素早く見つけられるか</span><span class="eval-a s-weak">△ 容量は分かるが安全性が分からない</span></div>
+        <div class="eval-row"><span class="eval-q">TreeView がごちゃつかないか</span><span class="eval-a s-best">◎ 最もシンプル</span></div>
+        <div class="eval-row"><span class="eval-q">削除推奨に見えないか</span><span class="eval-a s-best">◎ 分類を出さない</span></div>
+        <div class="eval-row"><span class="eval-q">容量バーと競合しないか</span><span class="eval-a s-best">◎ バーのみ</span></div>
+        <div class="eval-row"><span class="eval-q">実装リスク</span><span class="eval-a s-best">◎ 変更なし</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ B -->
+  <div class="case-card" id="case-b">
+    <div class="case-header">
+      <span class="case-tag case-tag--second">第二候補</span>
+      <span class="case-title">案 B — safety marker 列（容量バーと別列）</span>
+    </div>
+    <div class="case-desc">
+      name の前に細い marker 列を追加。<strong>!!</strong>=protected-system /
+      <strong>!</strong>=app-managed / <strong>?</strong>=review candidate / 空欄=user-data・unknown。
+      容量バーとは独立した列なので役割が混ざらない。記号が直感的か要確認。
+    </div>
+    <div class="tree-mock">
+      <div class="tree-header-bar">
+        <span class="th-safety" title="Safety hint">⚑</span>
+        <span class="th-title">Folder tree</span>
+        <span class="th-occ">Occ.</span>
+        <span class="th-pct"></span>
+        <span class="th-size">Size</span>
+      </div>
+
+      <div class="tree-row">
+        <span class="sf-cell sf--neutral" title="User data — 内容を理解している時のみ"></span>
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Users</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:47.6%"></span></span>
+        <span class="col-pct">47.6%</span><span class="col-size">90.2 GB</span>
+      </div>
+      <div class="tree-row tree-row--active">
+        <span class="sf-cell sf--caution" title="App-managed — アプリ経由を推奨">!</span>
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Program Files</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:15.8%"></span></span>
+        <span class="col-pct">15.8%</span><span class="col-size">29.9 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="sf-cell sf--strong" title="Protected system — 手動操作は避ける">!!</span>
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Windows</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:14.2%"></span></span>
+        <span class="col-pct">14.2%</span><span class="col-size">27.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="sf-cell sf--review" title="Review candidate (dev dependency)">?</span>
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">node_modules</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:5.6%"></span></span>
+        <span class="col-pct">5.6%</span><span class="col-size">10.6 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="sf-cell sf--neutral" title="User data — 内容を理解している時のみ"></span>
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Downloads</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:4.2%"></span></span>
+        <span class="col-pct">4.2%</span><span class="col-size">8.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="sf-cell sf--caution" title="App-managed — アプリ経由を推奨">!</span>
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">ProgramData</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:3.1%"></span></span>
+        <span class="col-pct">3.1%</span><span class="col-size">6.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="sf-cell sf--review" title="Review candidate (temp)">?</span>
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Temp</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:2.6%"></span></span>
+        <span class="col-pct">2.6%</span><span class="col-size">5.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="sf-cell sf--strong" title="Protected system — 手動操作は避ける">!!</span>
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">System Volume Information</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:2.3%"></span></span>
+        <span class="col-pct">2.3%</span><span class="col-size">4.4 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="sf-cell sf--review" title="Review candidate (cache)">?</span>
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Chrome Cache</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:2.1%"></span></span>
+        <span class="col-pct">2.1%</span><span class="col-size">4.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="sf-cell sf--review" title="Review candidate (Recycle Bin)">?</span>
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">$Recycle.Bin</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:1.0%"></span></span>
+        <span class="col-pct">1.0%</span><span class="col-size">1.9 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="sf-cell sf--none" title="Unknown — 指針なし"></span>
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Misc</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:0.4%"></span></span>
+        <span class="col-pct">0.4%</span><span class="col-size">760 MB</span>
+      </div>
+    </div>
+    <div class="eval-wrap">
+      <div class="eval-title">評価</div>
+      <div class="eval-grid">
+        <div class="eval-row"><span class="eval-q">大きい cleanup 対象を素早く見つけられるか</span><span class="eval-a s-good">○ ? を目で追える</span></div>
+        <div class="eval-row"><span class="eval-q">TreeView がごちゃつかないか</span><span class="eval-a s-ok">△ 記号がノイズになる可能性</span></div>
+        <div class="eval-row"><span class="eval-q">削除推奨に見えないか</span><span class="eval-a s-good">○ ?/! は注意で削除ではない</span></div>
+        <div class="eval-row"><span class="eval-q">容量バーと競合しないか</span><span class="eval-a s-best">◎ 別列で役割分離</span></div>
+        <div class="eval-row"><span class="eval-q">実装リスク</span><span class="eval-a s-good">○ 列追加・memo prop 1 個</span></div>
+      </div>
+      <p class="eval-note">注意: 記号 (!! / ! / ?) の意味は凡例 or tooltip 必須。記号より色ドットの方が直感的な可能性もあり、要ユーザー確認。</p>
+    </div>
+  </div>
+
+  <!-- ================================================================ C -->
+  <div class="case-card" id="case-c">
+    <div class="case-header">
+      <span class="case-tag">慎重評価</span>
+      <span class="case-title">案 C — name 直後に小さな category pill</span>
+    </div>
+    <div class="case-desc">
+      name の直後に <code>system</code> / <code>app</code> / <code>review</code> の pill を表示。
+      意味は分かりやすいが、name 列を圧迫し、pill が増えると TreeView がうるさくなる。
+      user-data / unknown には pill を出さず控えめにしている。
+    </div>
+    <div class="tree-mock">
+      <div class="tree-header-bar">
+        <span class="th-title">Folder tree</span>
+        <span class="th-occ">Occ.</span>
+        <span class="th-pct"></span>
+        <span class="th-size">Size</span>
+      </div>
+
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Users</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:47.6%"></span></span>
+        <span class="col-pct">47.6%</span><span class="col-size">90.2 GB</span>
+      </div>
+      <div class="tree-row tree-row--active">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Program Files <span class="cat-pill cat-pill--app">app</span></span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:15.8%"></span></span>
+        <span class="col-pct">15.8%</span><span class="col-size">29.9 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Windows <span class="cat-pill cat-pill--system">system</span></span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:14.2%"></span></span>
+        <span class="col-pct">14.2%</span><span class="col-size">27.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">node_modules <span class="cat-pill cat-pill--review">review</span></span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:5.6%"></span></span>
+        <span class="col-pct">5.6%</span><span class="col-size">10.6 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Downloads</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:4.2%"></span></span>
+        <span class="col-pct">4.2%</span><span class="col-size">8.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">ProgramData <span class="cat-pill cat-pill--app">app</span></span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:3.1%"></span></span>
+        <span class="col-pct">3.1%</span><span class="col-size">6.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Temp <span class="cat-pill cat-pill--review">review</span></span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:2.6%"></span></span>
+        <span class="col-pct">2.6%</span><span class="col-size">5.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">System Volume Information <span class="cat-pill cat-pill--system">system</span></span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:2.3%"></span></span>
+        <span class="col-pct">2.3%</span><span class="col-size">4.4 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Chrome Cache <span class="cat-pill cat-pill--review">review</span></span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:2.1%"></span></span>
+        <span class="col-pct">2.1%</span><span class="col-size">4.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">$Recycle.Bin <span class="cat-pill cat-pill--review">review</span></span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:1.0%"></span></span>
+        <span class="col-pct">1.0%</span><span class="col-size">1.9 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Misc</span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:0.4%"></span></span>
+        <span class="col-pct">0.4%</span><span class="col-size">760 MB</span>
+      </div>
+    </div>
+    <div class="eval-wrap">
+      <div class="eval-title">評価</div>
+      <div class="eval-grid">
+        <div class="eval-row"><span class="eval-q">大きい cleanup 対象を素早く見つけられるか</span><span class="eval-a s-good">○ pill 文字で明示的</span></div>
+        <div class="eval-row"><span class="eval-q">TreeView がごちゃつかないか</span><span class="eval-a s-weak">△ name 列圧迫・pill 多数でうるさい</span></div>
+        <div class="eval-row"><span class="eval-q">削除推奨に見えないか</span><span class="eval-a s-good">○ 中立語（review/app/system）</span></div>
+        <div class="eval-row"><span class="eval-q">容量バーと競合しないか</span><span class="eval-a s-best">◎ バーは無変更</span></div>
+        <div class="eval-row"><span class="eval-q">実装リスク</span><span class="eval-a s-ok">△ 長い name で省略表示と干渉</span></div>
+      </div>
+      <p class="eval-note">注意: 長いフォルダ名（System Volume Information 等）では pill が省略記号と重なりやすい。name 列圧迫が最大の弱点。</p>
+    </div>
+  </div>
+
+  <!-- ================================================================ D -->
+  <div class="case-card" id="case-d">
+    <div class="case-header">
+      <span class="case-tag">慎重評価</span>
+      <span class="case-title">案 D — 占有率バーに tone accent</span>
+    </div>
+    <div class="case-desc">
+      占有率バーの fill 色と左端に safety tone を載せる。列を増やさず一体化するが、
+      <strong>バーの意味が「容量」なのか「安全性」なのか混ざるリスク</strong>が最大の弱点。
+      バー長さ=容量、色=安全性、という二重エンコードを許容できるか要確認。
+    </div>
+    <div class="tree-mock">
+      <div class="tree-header-bar">
+        <span class="th-title">Folder tree</span>
+        <span class="th-occ">Occ.</span>
+        <span class="th-pct"></span>
+        <span class="th-size">Size</span>
+      </div>
+
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Users</span>
+        <span class="occ-bar occ-bar--accent acc--neutral"><span class="occ-bar__fill occ-fill--neutral" style="width:47.6%"></span></span>
+        <span class="col-pct">47.6%</span><span class="col-size">90.2 GB</span>
+      </div>
+      <div class="tree-row tree-row--active">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Program Files</span>
+        <span class="occ-bar occ-bar--accent acc--caution"><span class="occ-bar__fill occ-fill--caution" style="width:15.8%"></span></span>
+        <span class="col-pct">15.8%</span><span class="col-size">29.9 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Windows</span>
+        <span class="occ-bar occ-bar--accent acc--strong"><span class="occ-bar__fill occ-fill--strong" style="width:14.2%"></span></span>
+        <span class="col-pct">14.2%</span><span class="col-size">27.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">node_modules</span>
+        <span class="occ-bar occ-bar--accent acc--review"><span class="occ-bar__fill occ-fill--review" style="width:5.6%"></span></span>
+        <span class="col-pct">5.6%</span><span class="col-size">10.6 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Downloads</span>
+        <span class="occ-bar occ-bar--accent acc--neutral"><span class="occ-bar__fill occ-fill--neutral" style="width:4.2%"></span></span>
+        <span class="col-pct">4.2%</span><span class="col-size">8.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">ProgramData</span>
+        <span class="occ-bar occ-bar--accent acc--caution"><span class="occ-bar__fill occ-fill--caution" style="width:3.1%"></span></span>
+        <span class="col-pct">3.1%</span><span class="col-size">6.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Temp</span>
+        <span class="occ-bar occ-bar--accent acc--review"><span class="occ-bar__fill occ-fill--review" style="width:2.6%"></span></span>
+        <span class="col-pct">2.6%</span><span class="col-size">5.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">System Volume Information</span>
+        <span class="occ-bar occ-bar--accent acc--strong"><span class="occ-bar__fill occ-fill--strong" style="width:2.3%"></span></span>
+        <span class="col-pct">2.3%</span><span class="col-size">4.4 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Chrome Cache</span>
+        <span class="occ-bar occ-bar--accent acc--review"><span class="occ-bar__fill occ-fill--review" style="width:2.1%"></span></span>
+        <span class="col-pct">2.1%</span><span class="col-size">4.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">$Recycle.Bin</span>
+        <span class="occ-bar occ-bar--accent acc--review"><span class="occ-bar__fill occ-fill--review" style="width:1.0%"></span></span>
+        <span class="col-pct">1.0%</span><span class="col-size">1.9 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Misc</span>
+        <span class="occ-bar"><span class="occ-bar__fill occ-fill--neutral" style="width:0.4%"></span></span>
+        <span class="col-pct">0.4%</span><span class="col-size">760 MB</span>
+      </div>
+    </div>
+    <div class="eval-wrap">
+      <div class="eval-title">評価</div>
+      <div class="eval-grid">
+        <div class="eval-row"><span class="eval-q">大きい cleanup 対象を素早く見つけられるか</span><span class="eval-a s-ok">○ 色で区別できるが量と混ざる</span></div>
+        <div class="eval-row"><span class="eval-q">TreeView がごちゃつかないか</span><span class="eval-a s-good">○ 列は増えない</span></div>
+        <div class="eval-row"><span class="eval-q">削除推奨に見えないか</span><span class="eval-a s-ok">△ 赤バー=危険と読まれうる</span></div>
+        <div class="eval-row"><span class="eval-q">容量バーと競合しないか</span><span class="eval-a s-bad">✗ 容量と安全性の二重エンコード</span></div>
+        <div class="eval-row"><span class="eval-q">実装リスク</span><span class="eval-a s-good">○ class 切替のみ</span></div>
+      </div>
+      <p class="eval-note">注意: 容量バーの色が安全性を表すと、「バー長さ=容量」という第一目的の読み取りが曖昧になる。誤誘導リスクが比較中で最も高い。</p>
+    </div>
+  </div>
+
+  <!-- ================================================================ E -->
+  <div class="case-card" id="case-e">
+    <div class="case-header">
+      <span class="case-tag case-tag--best">第一候補</span>
+      <span class="case-title">案 E — filter / view mode（常時表示は変えない）</span>
+    </div>
+    <div class="case-desc">
+      TreeView header に view 切替を置く。通常は <strong>All</strong>（＝案 A の現状）で何も足さない。
+      <strong>Large review candidates</strong> を選ぶと、確認候補（cache / temp / deps / bin）だけに絞り込む。
+      常時表示のシンプルさを保ったまま「素早く見つける」を満たす。下は絞り込み適用後の状態。
+    </div>
+    <div class="tree-mock">
+      <div class="view-bar">
+        <span class="view-bar-label">Cleanup view:</span>
+        <span class="view-chip">All</span>
+        <span class="view-chip view-chip--active">Large review candidates</span>
+        <span class="view-chip">Caution areas</span>
+      </div>
+      <div class="filter-note">
+        確認候補（cache / temp / 開発依存 / ごみ箱）のみ表示中。容量降順。これは「確認候補」であり削除推奨ではありません。
+      </div>
+      <div class="tree-header-bar">
+        <span class="th-title">Folder tree — review candidates</span>
+        <span class="th-occ">Occ.</span>
+        <span class="th-pct"></span>
+        <span class="th-size">Size</span>
+      </div>
+
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">node_modules <span class="cat-pill cat-pill--review">deps</span></span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:5.6%"></span></span>
+        <span class="col-pct">5.6%</span><span class="col-size">10.6 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Temp <span class="cat-pill cat-pill--review">temp</span></span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:2.6%"></span></span>
+        <span class="col-pct">2.6%</span><span class="col-size">5.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">Chrome Cache <span class="cat-pill cat-pill--review">cache</span></span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:2.1%"></span></span>
+        <span class="col-pct">2.1%</span><span class="col-size">4.0 GB</span>
+      </div>
+      <div class="tree-row">
+        <span class="tr-toggle">▶</span><span class="icon-folder"></span>
+        <span class="tr-name">$Recycle.Bin <span class="cat-pill cat-pill--review">bin</span></span>
+        <span class="occ-bar"><span class="occ-bar__fill" style="width:1.0%"></span></span>
+        <span class="col-pct">1.0%</span><span class="col-size">1.9 GB</span>
+      </div>
+    </div>
+    <div class="eval-wrap">
+      <div class="eval-title">評価</div>
+      <div class="eval-grid">
+        <div class="eval-row"><span class="eval-q">大きい cleanup 対象を素早く見つけられるか</span><span class="eval-a s-best">◎ 候補だけに絞れる</span></div>
+        <div class="eval-row"><span class="eval-q">TreeView がごちゃつかないか</span><span class="eval-a s-best">◎ 通常は All で無変更</span></div>
+        <div class="eval-row"><span class="eval-q">削除推奨に見えないか</span><span class="eval-a s-good">○「確認候補」表現で抑制</span></div>
+        <div class="eval-row"><span class="eval-q">容量バーと競合しないか</span><span class="eval-a s-best">◎ バーはそのまま</span></div>
+        <div class="eval-row"><span class="eval-q">実装リスク</span><span class="eval-a s-ok">△ visibleRows フィルタ・lazy展開と整合要</span></div>
+      </div>
+      <p class="eval-note">注意: 初見で view 切替に気づきにくい可能性。絞り込み時は lazy 展開の扱い（全展開して分類するか、既知ノードのみか）を設計で詰める必要がある。</p>
+    </div>
+  </div>
+
+  <!-- ================================================================ F -->
+  <div class="case-card" id="case-f">
+    <div class="case-header">
+      <span class="case-tag case-tag--note">優先度低</span>
+      <span class="case-title">案 F — Insights に “Large review candidates” リスト</span>
+    </div>
+    <div class="case-desc">
+      TreeView には何も足さず、Insights パネルに確認候補リストを出す。目的には合うが、
+      TreeView 完結から離れ、以前の右/下ペイン依存に戻るリスクがある。
+    </div>
+    <div class="insights-list">
+      <div class="insights-head">Large review candidates</div>
+      <div class="insights-row">
+        <span class="ins-name">node_modules <span class="ins-path">C:\dev\app</span></span>
+        <span class="ins-size">10.6 GB</span>
+        <span class="ins-cat ins-cat--review">Dev dependency</span>
+      </div>
+      <div class="insights-row">
+        <span class="ins-name">Temp <span class="ins-path">C:\</span></span>
+        <span class="ins-size">5.0 GB</span>
+        <span class="ins-cat ins-cat--review">Temp candidate</span>
+      </div>
+      <div class="insights-row">
+        <span class="ins-name">Chrome Cache <span class="ins-path">…\User Data\Default</span></span>
+        <span class="ins-size">4.0 GB</span>
+        <span class="ins-cat ins-cat--review">Cache candidate</span>
+      </div>
+      <div class="insights-row">
+        <span class="ins-name">$Recycle.Bin <span class="ins-path">C:\</span></span>
+        <span class="ins-size">1.9 GB</span>
+        <span class="ins-cat ins-cat--review">Recycle Bin</span>
+      </div>
+    </div>
+    <div class="eval-wrap">
+      <div class="eval-title">評価</div>
+      <div class="eval-grid">
+        <div class="eval-row"><span class="eval-q">大きい cleanup 対象を素早く見つけられるか</span><span class="eval-a s-good">○ 候補が一覧化される</span></div>
+        <div class="eval-row"><span class="eval-q">TreeView がごちゃつかないか</span><span class="eval-a s-best">◎ TreeView 無変更</span></div>
+        <div class="eval-row"><span class="eval-q">削除推奨に見えないか</span><span class="eval-a s-good">○ candidate 表現で抑制</span></div>
+        <div class="eval-row"><span class="eval-q">容量バーと競合しないか</span><span class="eval-a s-best">◎ 別パネル</span></div>
+        <div class="eval-row"><span class="eval-q">実装リスク</span><span class="eval-a s-ok">△ 候補抽出ロジック・スキャン依存</span></div>
+      </div>
+      <p class="eval-note">注意: dogfooding で「右/下ペインは要らない」とのFBがあり、TreeView 完結から離れる点が懸念。E と組み合わせる補助案としてなら有効。</p>
+    </div>
+  </div>
+
+  <!-- ================================================================ SUMMARY -->
+  <div class="case-card" id="summary">
+    <div class="case-header">
+      <span class="case-tag case-tag--q">比較表 / 推奨</span>
+      <span class="case-title">比較表と実装候補</span>
+    </div>
+    <div class="qs-body">
+      <p style="margin-bottom:12px">評価軸: 大きい cleanup 対象を素早く見つけられるか / TreeView がごちゃつかないか / 削除推奨に見えないか / 容量バーと競合しないか / 実装・誤誘導リスク。詳細比較は <code>docs/v0.5.16-tree-cleanup-visibility-options.md</code> の表を参照。</p>
+
+      <div class="rec-pick">
+        <div class="rec-pick-title">第一候補: 案 E — filter / view mode</div>
+        “Large review candidates” に絞り込めて目的に直結。通常は All で現状のシンプルさを完全維持。
+        「削除してよい」ではなく「確認候補」というフレーミングにできる。
+        弱点は view 切替への気づきにくさと、lazy 展開との整合設計。
+      </div>
+
+      <div class="rec-pick rec-pick--second">
+        <div class="rec-pick-title">第二候補: 案 B — safety marker 列</div>
+        TreeView 完結に近く、容量バーと役割を分離できる。
+        弱点はマーカー記号のノイズと直感性。色ドット案との比較が必要。
+      </div>
+
+      <p style="margin-top:14px">
+        <strong>見送り寄り:</strong>
+        案 D は容量バーの意味が「容量／安全性」で混ざり誤誘導リスクが最大。
+        案 C は name 列圧迫が大きい。
+        案 F は目的に合うが TreeView 完結から離れるため優先度低（E の補助なら可）。
+      </p>
+      <p style="margin-top:10px">
+        本フェーズ (v0.5.16-D) は<strong>本実装しない</strong>。次フェーズでユーザーが第一/第二候補を選んでから実装に進む。
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  disk-insight v0.5.16-D &nbsp;·&nbsp; docs/ui-mocks/tree-cleanup-visibility-options.html &nbsp;·&nbsp; 外部依存なし・本体コード変更なし
+</footer>
+
+</body>
+</html>
