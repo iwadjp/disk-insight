@@ -150,6 +150,13 @@ type UnsupportedDriveCapacity = {
 type DirectChildrenSortKey = "size" | "name" | "type";
 type SortDirection = "asc" | "desc";
 type TreeReviewView = 'all' | 'large-review' | 'caution';
+type ReviewCandidate = {
+  path: string;
+  record_index: number;
+  isDirectory: boolean;
+  sizeBytes: number;
+  categoryLabel: string;
+};
 type ContextMenuTarget = {
   path: string;
   isDirectory: boolean;
@@ -1060,6 +1067,16 @@ function getFileName(filePath: string): string {
   return i >= 0 ? filePath.slice(i + 1) : filePath;
 }
 
+function reviewCategoryLabel(cat: string): string {
+  switch (cat) {
+    case 'temp-candidate':  return 'Temp candidate';
+    case 'cache-candidate': return 'Cache candidate';
+    case 'dev-dependency':  return 'Dev dependency';
+    case 'recycle-bin':     return 'Recycle Bin';
+    default:                return '';
+  }
+}
+
 function formatBytes(bytes: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
   let value = bytes;
@@ -1585,6 +1602,7 @@ function TreeView({
   recycledItems,
   reviewView,
   onChangeReviewView,
+  largeReviewCandidates,
   onToggleExpand,
   onSelect,
   onContextMenu,
@@ -1607,6 +1625,7 @@ function TreeView({
   recycledItems?: RecycledItem[];
   reviewView: TreeReviewView;
   onChangeReviewView: (v: TreeReviewView) => void;
+  largeReviewCandidates: ReviewCandidate[];
   onToggleExpand: (node: TreeNode) => void;
   onSelect: (node: TreeNode) => void;
   onContextMenu: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
@@ -1622,6 +1641,7 @@ function TreeView({
   const treeViewRenderCount = useRef(0);
   treeViewRenderCount.current += 1;
   if (PERF_TREE) treeLog(`TreeView render #${treeViewRenderCount.current}  visibleRows=${visibleRows.length}  focused=${focusedRecordIndex}`);
+  const [reviewCtxMenu, setReviewCtxMenu] = useState<ContextMenuTarget | null>(null);
 
   useEffect(() => {
     if (focusedRecordIndex === null) return;
@@ -1668,13 +1688,14 @@ function TreeView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jumpScrollTick]);
 
-  const isFiltered = reviewView !== 'all';
-  const footerText = isFiltered
-    ? `Visible: ${formatNumber(visibleRows.length)} of ${formatNumber(totalRowsCount)} · ${reviewView === 'large-review' ? 'Large review' : 'Caution'} filter (loaded rows)`
-    : `Root children: ${rootCount} · Visible rows: ${formatNumber(visibleRows.length)}${visibleRows.length >= LARGE_TREE_THRESHOLD ? " — consider collapsing folders." : ""}`;
+  const footerText = reviewView === 'large-review'
+    ? `Large review: ${formatNumber(largeReviewCandidates.length)} candidate${largeReviewCandidates.length !== 1 ? 's' : ''} from top scan results`
+    : reviewView === 'caution'
+      ? `Visible: ${formatNumber(visibleRows.length)} of ${formatNumber(totalRowsCount)} · Caution filter (loaded rows)`
+      : `Root children: ${rootCount} · Visible rows: ${formatNumber(visibleRows.length)}${visibleRows.length >= LARGE_TREE_THRESHOLD ? " — consider collapsing folders." : ""}`;
 
   return (
-    <aside ref={navRef} className="folder-nav" tabIndex={0} onKeyDown={onKeyDown} onMouseMove={onNavMouseMove}>
+    <aside ref={navRef} className="folder-nav" tabIndex={0} onKeyDown={reviewView !== 'large-review' ? onKeyDown : undefined} onMouseMove={onNavMouseMove}>
       <div className="folder-nav-header">
         <div className="folder-nav-header__title">
           <span>Folder tree</span>
@@ -1693,74 +1714,137 @@ function TreeView({
         <span className="folder-nav-header__pct" />
         <span className="folder-nav-header__size">Size</span>
       </div>
-      <div className="folder-nav-list" ref={listRef} role="tree">
-        {visibleRows.length === 0 ? (
-          isFiltered && totalRowsCount > 0 ? (
-            <p className="tree-filter-empty">
-              {reviewView === 'large-review'
-                ? 'No large review candidates in currently loaded rows.'
-                : 'No caution areas in currently loaded rows.'}
-            </p>
+
+      {reviewView === 'large-review' ? (
+        <div className="folder-nav-list" ref={listRef}>
+          <div className="tree-review-header">
+            <div>Large Review Candidates</div>
+            <div className="tree-review-header-sub">
+              Large items matching cleanup criteria from top scan results.
+            </div>
+          </div>
+          {largeReviewCandidates.length === 0 ? (
+            <p className="tree-filter-empty">No large review candidates found in top results.</p>
           ) : (
-            <p className="empty-note">
-              No root entries available. Run a live scan to load the folder tree.
-            </p>
-          )
-        ) : (
-          visibleRows.map((row) =>
-            row.isEmpty ? (
-              <div
-                key={`empty-${row.node.record_index}`}
-                className="tree-empty"
-                style={{ paddingLeft: 8 + row.depth * 16 }}
-              >
-                (empty)
-              </div>
-            ) : row.nodeError ? (
-              <div
-                key={`error-${row.node.record_index}`}
-                className="tree-node-error"
-                style={{ paddingLeft: 8 + row.depth * 16 }}
-              >
-                Failed to load children: {row.nodeError}
-              </div>
-            ) : row.treeTruncated !== undefined ? (
-              <div
-                key={`trunc-${row.node.record_index}`}
-                className="tree-truncated-note"
-                style={{ paddingLeft: 8 + row.depth * 16 }}
-              >
-                Showing top {formatNumber(row.treeTruncated.shown)} of {formatNumber(row.treeTruncated.total)}.{" "}
-                Use <em>Insights › Search inside</em> for more.
-              </div>
+            largeReviewCandidates.map((item) => {
+              const barPct = totalSize > 0 ? Math.min(100, (item.sizeBytes / totalSize) * 100) : 0;
+              return (
+                <div
+                  key={item.record_index}
+                  className="tree-review-row"
+                  title={item.path}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setReviewCtxMenu({
+                      path: item.path,
+                      isDirectory: item.isDirectory,
+                      recordIndex: item.record_index,
+                      x: e.clientX,
+                      y: e.clientY,
+                      sizeBytes: item.sizeBytes,
+                    });
+                  }}
+                >
+                  <span
+                    className={item.isDirectory ? "tree-node-icon tree-node-icon--folder" : "tree-node-icon tree-node-icon--file"}
+                    aria-hidden="true"
+                  />
+                  <div className="tree-review-main">
+                    <span className="tree-review-name">{getFileName(item.path)}</span>
+                    <span className="tree-review-path">{getParentDir(item.path)}</span>
+                    <span className="tree-review-category">{item.categoryLabel}</span>
+                  </div>
+                  <span className="tree-occ-bar" aria-hidden="true">
+                    {barPct > 0 && <span className="tree-occ-bar__fill" style={{ width: `${barPct}%` }} />}
+                  </span>
+                  <span className="tree-pct" aria-hidden="true">
+                    {totalSize > 0 ? formatPercent(item.sizeBytes, totalSize) : ""}
+                  </span>
+                  <span className="tree-size">{formatBytes(item.sizeBytes)}</span>
+                </div>
+              );
+            })
+          )}
+          {reviewCtxMenu && (
+            <SafeContextMenu
+              target={reviewCtxMenu}
+              onClose={() => setReviewCtxMenu(null)}
+              onOpenExplorer={(path) => openInExplorer(path).catch(console.warn)}
+              onSelectFile={(path) => selectInExplorer(path).catch(console.warn)}
+              advancedMode={false}
+              onCopyError={console.warn}
+              companySafeMode={true}
+            />
+          )}
+        </div>
+      ) : (
+        <div className="folder-nav-list" ref={listRef} role="tree">
+          {visibleRows.length === 0 ? (
+            reviewView === 'caution' && totalRowsCount > 0 ? (
+              <p className="tree-filter-empty">No caution areas in currently loaded rows.</p>
             ) : (
-              <TreeNodeRow
-                key={row.node.record_index}
-                node={row.node}
-                depth={row.depth}
-                totalSize={totalSize}
-                isExpanded={expandedIds.has(row.node.record_index)}
-                isLoading={loadingIds.has(row.node.record_index)}
-                isSelected={
-                  focusedRecordIndex !== null
-                    ? focusedRecordIndex === row.node.record_index
-                    : selectedRecordIndex === row.node.record_index
-                }
-                isFocused={focusedRecordIndex === row.node.record_index}
-                isRecycled={recycledItems ? isItemRecycled(row.node.record_index, row.node.path, recycledItems) : false}
-                onToggleExpand={onToggleExpand}
-                onSelect={onSelect}
-                onContextMenu={onContextMenu}
-                onKeyDown={onKeyDown}
-              />
+              <p className="empty-note">
+                No root entries available. Run a live scan to load the folder tree.
+              </p>
             )
-          )
-        )}
-      </div>
+          ) : (
+            visibleRows.map((row) =>
+              row.isEmpty ? (
+                <div
+                  key={`empty-${row.node.record_index}`}
+                  className="tree-empty"
+                  style={{ paddingLeft: 8 + row.depth * 16 }}
+                >
+                  (empty)
+                </div>
+              ) : row.nodeError ? (
+                <div
+                  key={`error-${row.node.record_index}`}
+                  className="tree-node-error"
+                  style={{ paddingLeft: 8 + row.depth * 16 }}
+                >
+                  Failed to load children: {row.nodeError}
+                </div>
+              ) : row.treeTruncated !== undefined ? (
+                <div
+                  key={`trunc-${row.node.record_index}`}
+                  className="tree-truncated-note"
+                  style={{ paddingLeft: 8 + row.depth * 16 }}
+                >
+                  Showing top {formatNumber(row.treeTruncated.shown)} of {formatNumber(row.treeTruncated.total)}.{" "}
+                  Use <em>Insights › Search inside</em> for more.
+                </div>
+              ) : (
+                <TreeNodeRow
+                  key={row.node.record_index}
+                  node={row.node}
+                  depth={row.depth}
+                  totalSize={totalSize}
+                  isExpanded={expandedIds.has(row.node.record_index)}
+                  isLoading={loadingIds.has(row.node.record_index)}
+                  isSelected={
+                    focusedRecordIndex !== null
+                      ? focusedRecordIndex === row.node.record_index
+                      : selectedRecordIndex === row.node.record_index
+                  }
+                  isFocused={focusedRecordIndex === row.node.record_index}
+                  isRecycled={recycledItems ? isItemRecycled(row.node.record_index, row.node.path, recycledItems) : false}
+                  onToggleExpand={onToggleExpand}
+                  onSelect={onSelect}
+                  onContextMenu={onContextMenu}
+                  onKeyDown={onKeyDown}
+                />
+              )
+            )
+          )}
+        </div>
+      )}
+
       {treeError && (
         <div className={`folder-nav-footer ${sourceKind === "cached" ? "folder-nav-footer--cached-note" : "folder-nav-footer--error"}`}>{treeError}</div>
       )}
-      <div className={!isFiltered && visibleRows.length >= LARGE_TREE_THRESHOLD
+      <div className={reviewView === 'all' && visibleRows.length >= LARGE_TREE_THRESHOLD
         ? "folder-nav-footer folder-nav-footer--warn"
         : "folder-nav-footer"}>
         {footerText}
@@ -2795,19 +2879,36 @@ function App() {
 
   const filteredVisibleRows = useMemo(() => {
     if (treeReviewView === 'all') return visibleRows;
-    const totalSz = data?.summary.total_final_allocated ?? 0;
-    const GiB = 1024 ** 3;
+    // large-review uses a separate flat list from top scan results; tree is hidden
+    if (treeReviewView === 'large-review') return [];
+    // caution: filter loaded tree rows by protected-system / app-managed
     return visibleRows.filter((row) => {
       if (row.isEmpty || row.nodeError || row.treeTruncated !== undefined) return false;
-      const cat = classifyCleanupSafety(row.node.path).category;
-      if (treeReviewView === 'large-review') {
-        if (!TREE_REVIEW_CATS.has(cat)) return false;
-        return row.node.subtree_size >= GiB ||
-          (totalSz > 0 && row.node.subtree_size >= totalSz * 0.01);
-      }
-      return TREE_CAUTION_CATS.has(cat);
+      return TREE_CAUTION_CATS.has(classifyCleanupSafety(row.node.path).category);
     });
-  }, [visibleRows, treeReviewView, data?.summary.total_final_allocated]);
+  }, [visibleRows, treeReviewView]);
+
+  const GiB = 1024 ** 3;
+  const largeReviewCandidates = useMemo((): ReviewCandidate[] => {
+    if (!data) return [];
+    const seen = new Set<string>();
+    const items: ReviewCandidate[] = [];
+    for (const d of data.top_directories) {
+      const cat = classifyCleanupSafety(d.path).category;
+      if (!TREE_REVIEW_CATS.has(cat) || d.subtree_size < GiB || seen.has(d.path)) continue;
+      seen.add(d.path);
+      items.push({ path: d.path, record_index: d.record_index, isDirectory: true, sizeBytes: d.subtree_size, categoryLabel: reviewCategoryLabel(cat) });
+    }
+    for (const f of data.top_files) {
+      const cat = classifyCleanupSafety(f.path).category;
+      if (!TREE_REVIEW_CATS.has(cat) || f.final_allocated_size < GiB || seen.has(f.path)) continue;
+      seen.add(f.path);
+      items.push({ path: f.path, record_index: f.record_index, isDirectory: false, sizeBytes: f.final_allocated_size, categoryLabel: reviewCategoryLabel(cat) });
+    }
+    items.sort((a, b) => b.sizeBytes - a.sizeBytes);
+    return items;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.top_directories, data?.top_files]);
 
   const selectedAncestorDirs = useMemo(
     (): DirectoryEntry[] =>
@@ -4741,6 +4842,7 @@ function App() {
               recycledItems={recycledItems}
               reviewView={treeReviewView}
               onChangeReviewView={setTreeReviewView}
+              largeReviewCandidates={largeReviewCandidates}
               onToggleExpand={stableToggleExpand}
               onSelect={stableSelectNode}
               onContextMenu={stableContextMenu}

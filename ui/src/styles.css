@@ -983,6 +983,64 @@ tbody tr:last-child td {
   line-height: 1.5;
 }
 
+/* ── Large review flat list ── */
+.tree-review-header {
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-bottom: 1px solid #bfdbfe;
+  flex-shrink: 0;
+}
+.tree-review-header-sub {
+  font-size: 10px;
+  font-weight: 400;
+  color: #5e6b78;
+  margin-top: 1px;
+}
+.tree-review-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid #edf1f5;
+  cursor: default;
+  min-height: 36px;
+}
+.tree-review-row:hover { background: #edf2f7; }
+.tree-review-row:last-child { border-bottom: none; }
+.tree-review-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.tree-review-name {
+  font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #17202a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tree-review-path {
+  font-size: 10px;
+  color: #9eacba;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tree-review-category {
+  font-size: 9px;
+  font-weight: 700;
+  color: #3b82f6;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .folder-nav-list {
   overflow-y: auto;
   flex: 1;
