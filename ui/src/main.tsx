@@ -1700,6 +1700,37 @@ function ReviewListPanel({
 }) {
   const [open, setOpen] = useState(true);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
+  const [copyStatus, setCopyStatus] = useState<string | null>(null);
+
+  function copyPaths() {
+    if (items.length === 0) return;
+    const text = items.map((item) => item.path).join("\n");
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => {
+        setCopyStatus(`Copied ${items.length} path${items.length !== 1 ? "s" : ""}.`);
+        setTimeout(() => setCopyStatus(null), 2000);
+      }).catch((err: unknown) => {
+        onCopyError(err instanceof Error ? err.message : "Failed to copy paths.");
+      });
+    } else {
+      onCopyError("Clipboard is not available.");
+    }
+  }
+
+  function copyQuoted() {
+    if (items.length === 0) return;
+    const text = items.map((item) => `"${item.path}"`).join("\n");
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => {
+        setCopyStatus(`Copied ${items.length} quoted path${items.length !== 1 ? "s" : ""}.`);
+        setTimeout(() => setCopyStatus(null), 2000);
+      }).catch((err: unknown) => {
+        onCopyError(err instanceof Error ? err.message : "Failed to copy paths.");
+      });
+    } else {
+      onCopyError("Clipboard is not available.");
+    }
+  }
 
   return (
     <div className="review-list-panel">
@@ -1713,15 +1744,37 @@ function ReviewListPanel({
           <span className="review-list-chevron" aria-hidden="true">{open ? "▾" : "▸"}</span>
           Review list{items.length > 0 ? ` (${items.length})` : ""}
         </button>
-        {open && items.length > 0 && (
-          <button className="review-list-clear" onClick={onClear} title="Clear all items from review list">
-            Clear
-          </button>
+        {open && (
+          <>
+            <button
+              className="review-list-copy-btn"
+              onClick={copyPaths}
+              disabled={items.length === 0}
+              title="Copy all review list paths to clipboard (one per line)"
+            >
+              Copy paths
+            </button>
+            <button
+              className="review-list-copy-btn"
+              onClick={copyQuoted}
+              disabled={items.length === 0}
+              title="Copy all review list paths as quoted strings to clipboard"
+            >
+              Copy quoted
+            </button>
+            {items.length > 0 && (
+              <button className="review-list-clear" onClick={onClear} title="Clear all items from review list">
+                Clear
+              </button>
+            )}
+          </>
         )}
       </div>
       {open && (
         <div className="review-list-body">
-          <p className="review-list-note">Session-only list for manual review. No file operations.</p>
+          <p className="review-list-note">
+            {copyStatus ?? "Session-only list for manual review. No file operations."}
+          </p>
           {items.length === 0 ? (
             <p className="review-list-empty">
               Add items from TreeView or Large review to collect candidates for manual review.

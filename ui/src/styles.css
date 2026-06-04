@@ -1284,6 +1284,31 @@ tbody tr:last-child td {
   border-color: #94a3b8;
 }
 
+.review-list-copy-btn {
+  flex-shrink: 0;
+  padding: 3px 7px;
+  margin-right: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #465563;
+  background: none;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.review-list-copy-btn:hover:not(:disabled) {
+  background: #f0f4f8;
+  color: #17202a;
+  border-color: #94a3b8;
+}
+
+.review-list-copy-btn:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
 .review-list-body {
   padding: 0;
 }
