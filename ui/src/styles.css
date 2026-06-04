@@ -906,7 +906,10 @@ tbody tr:last-child td {
 }
 
 .folder-nav-header {
-  padding: 10px 14px;
+  padding: 8px 8px 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -915,6 +918,41 @@ tbody tr:last-child td {
   border-bottom: 1px solid #d9e1e8;
   flex-shrink: 0;
   box-shadow: 0 1px 0 #d9e1e8;
+}
+
+.folder-nav-header__title {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Column header labels — match widths of tree-occ-bar / tree-pct / tree-size */
+.folder-nav-header__occ {
+  flex-shrink: 0;
+  width: 100px;
+  margin-left: 4px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 500;
+  color: #8a97a4;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.folder-nav-header__pct {
+  flex-shrink: 0;
+  width: 44px;
+}
+
+.folder-nav-header__size {
+  flex-shrink: 0;
+  width: 72px;
+  text-align: right;
+  padding-right: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #8a97a4;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .folder-nav-list {
@@ -1253,9 +1291,8 @@ tbody tr:last-child td {
   flex: 1;
   min-width: 0;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 2px 4px;
   border: none;
   background: transparent;
@@ -1300,28 +1337,27 @@ tbody tr:last-child td {
   color: #5e6b78;
   white-space: nowrap;
   flex-shrink: 0;
+  width: 72px;
+  text-align: right;
   padding-right: 4px;
 }
 
-/* ── Occupancy bar column (WizTree-style, TreeView only) ── */
-.occupancy-bar {
+/* ── Fixed right columns: occupancy bar / percent (WizTree-style, TreeView only) ──
+   Placed outside .tree-label so all rows share the same horizontal position
+   regardless of indentation depth (border-box + fixed width + padding-right: 8px). */
+.tree-occ-bar {
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 140px;
-}
-
-.occupancy-bar__track {
-  flex: 1;
-  height: 7px;
+  width: 100px;
+  height: 8px;
   background: rgba(0, 0, 0, 0.07);
   border-radius: 3px;
   overflow: hidden;
   position: relative;
+  align-self: center;
+  margin-left: 4px;
 }
 
-.occupancy-bar__fill {
+.tree-occ-bar__fill {
   position: absolute;
   left: 0;
   top: 0;
@@ -1331,25 +1367,25 @@ tbody tr:last-child td {
   transition: width 0.15s ease;
 }
 
-.occupancy-bar__label {
+.tree-pct {
+  flex-shrink: 0;
+  width: 44px;
+  text-align: right;
   font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   color: #5e6b78;
   white-space: nowrap;
-  width: 38px;
-  text-align: right;
-  flex-shrink: 0;
 }
 
-/* Active row: increase fill contrast against the blue selection bg */
-.tree-row--active .occupancy-bar__track {
+/* Active row: readable against blue selection bg */
+.tree-row--active .tree-occ-bar {
   background: rgba(26, 86, 219, 0.12);
 }
-.tree-row--active .occupancy-bar__fill {
+.tree-row--active .tree-occ-bar__fill {
   background: rgba(26, 86, 219, 0.55);
 }
-.tree-row--active .occupancy-bar__label {
+.tree-row--active .tree-pct {
   color: #1649c0;
 }
 

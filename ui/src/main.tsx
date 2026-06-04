@@ -1441,31 +1441,26 @@ const TreeNodeRow = React.memo(function TreeNodeRow({
         >
           <span className="tree-name">{displayName}</span>
           {isRecycled && <span className="recycled-badge">Recycled</span>}
-          {totalSize > 0 && (
-            <span className="occupancy-bar" aria-hidden="true">
-              <span className="occupancy-bar__track">
-                <span className="occupancy-bar__fill" style={{ width: `${barPct}%` }} />
-              </span>
-              <span className="occupancy-bar__label">{formatPercent(node.subtree_size, totalSize)}</span>
-            </span>
-          )}
-          <span className="tree-size">{formatBytes(node.subtree_size)}</span>
         </button>
       ) : (
         <div className="tree-label tree-label--file" title={node.path}>
           <span className="tree-name">{displayName}</span>
           {isRecycled && <span className="recycled-badge">Recycled</span>}
-          {totalSize > 0 && (
-            <span className="occupancy-bar" aria-hidden="true">
-              <span className="occupancy-bar__track">
-                <span className="occupancy-bar__fill" style={{ width: `${barPct}%` }} />
-              </span>
-              <span className="occupancy-bar__label">{formatPercent(node.subtree_size, totalSize)}</span>
-            </span>
-          )}
-          <span className="tree-size">{formatBytes(node.subtree_size)}</span>
         </div>
       )}
+      {/* Right columns are outside tree-label so all rows share the same
+          horizontal positions regardless of indentation depth. */}
+      <span
+        className="tree-occ-bar"
+        title="Occupancy — % of drive total allocated size"
+        aria-hidden="true"
+      >
+        {barPct > 0 && <span className="tree-occ-bar__fill" style={{ width: `${barPct}%` }} />}
+      </span>
+      <span className="tree-pct" aria-hidden="true">
+        {totalSize > 0 ? formatPercent(node.subtree_size, totalSize) : ""}
+      </span>
+      <span className="tree-size">{formatBytes(node.subtree_size)}</span>
     </div>
   );
 }); // React.memo — see TreeRowProps for why booleans are pre-computed by parent
@@ -1665,7 +1660,12 @@ function TreeView({
 
   return (
     <aside ref={navRef} className="folder-nav" tabIndex={0} onKeyDown={onKeyDown} onMouseMove={onNavMouseMove}>
-      <div className="folder-nav-header">Folder tree</div>
+      <div className="folder-nav-header">
+        <span className="folder-nav-header__title">Folder tree</span>
+        <span className="folder-nav-header__occ" title="Occupancy (% of drive total)">Occ.</span>
+        <span className="folder-nav-header__pct" />
+        <span className="folder-nav-header__size">Size</span>
+      </div>
       <div className="folder-nav-list" ref={listRef} role="tree">
         {visibleRows.length === 0 ? (
           <p className="empty-note">
