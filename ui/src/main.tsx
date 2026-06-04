@@ -1723,9 +1723,8 @@ function TreeView({
         <div className="folder-nav-list" ref={listRef}>
           <div className="tree-review-header">
             <div>Large Review Candidates</div>
-            <div className="tree-review-header-sub">
-              From top scan results · Criteria: Temp / Cache / Dev dependency / Recycle Bin · Size ≥ 1 GiB · Excludes user data and app/system areas
-            </div>
+            <div className="tree-review-header-sub">From top scan results · Size ≥ 1 GiB</div>
+            <div className="tree-review-header-sub">Criteria: Temp / Cache / Dev dependency / Recycle Bin · Excludes user data and app/system areas</div>
           </div>
           {largeReviewCandidates.length === 0 ? (
             <p className="tree-filter-empty">No large review candidates found in top results.</p>
@@ -4405,6 +4404,10 @@ function App() {
   useEffect(() => {
     setBookmarkJumpStates({});
   }, [data]);
+
+  useEffect(() => {
+    if (treeReviewView === 'large-review') setInsightsOpen(false);
+  }, [treeReviewView]);
 
   // Auto-resolve bookmark sizes for current-drive bookmarks after scan or bookmark list change.
   useEffect(() => {
