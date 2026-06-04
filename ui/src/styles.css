@@ -1107,16 +1107,6 @@ tbody tr:last-child td {
   position: relative;
 }
 
-.tree-size-bar {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  background: rgba(26, 86, 219, 0.09);
-  pointer-events: none;
-  border-radius: 0 2px 2px 0;
-  transition: width 0.15s ease;
-}
 
 .tree-row:last-child {
   border-bottom: none;
@@ -1311,6 +1301,56 @@ tbody tr:last-child td {
   white-space: nowrap;
   flex-shrink: 0;
   padding-right: 4px;
+}
+
+/* ── Occupancy bar column (WizTree-style, TreeView only) ── */
+.occupancy-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 140px;
+}
+
+.occupancy-bar__track {
+  flex: 1;
+  height: 7px;
+  background: rgba(0, 0, 0, 0.07);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+
+.occupancy-bar__fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(26, 86, 219, 0.38);
+  border-radius: 3px;
+  transition: width 0.15s ease;
+}
+
+.occupancy-bar__label {
+  font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: #5e6b78;
+  white-space: nowrap;
+  width: 38px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Active row: increase fill contrast against the blue selection bg */
+.tree-row--active .occupancy-bar__track {
+  background: rgba(26, 86, 219, 0.12);
+}
+.tree-row--active .occupancy-bar__fill {
+  background: rgba(26, 86, 219, 0.55);
+}
+.tree-row--active .occupancy-bar__label {
+  color: #1649c0;
 }
 
 .tree-empty {

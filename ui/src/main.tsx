@@ -1401,7 +1401,6 @@ const TreeNodeRow = React.memo(function TreeNodeRow({
       onKeyDown={onKeyDown}
       onContextMenu={(e) => onContextMenu(e, node)}
     >
-      {barPct > 0 && <div className="tree-size-bar" style={{ width: `${barPct}%` }} />}
       {isDir ? (
         <button
           className="tree-toggle"
@@ -1442,19 +1441,29 @@ const TreeNodeRow = React.memo(function TreeNodeRow({
         >
           <span className="tree-name">{displayName}</span>
           {isRecycled && <span className="recycled-badge">Recycled</span>}
-          <span className="tree-size">
-            {formatBytes(node.subtree_size)}
-            {totalSize > 0 && <span className="size-pct"> · {formatPercent(node.subtree_size, totalSize)}</span>}
-          </span>
+          {totalSize > 0 && (
+            <span className="occupancy-bar" aria-hidden="true">
+              <span className="occupancy-bar__track">
+                <span className="occupancy-bar__fill" style={{ width: `${barPct}%` }} />
+              </span>
+              <span className="occupancy-bar__label">{formatPercent(node.subtree_size, totalSize)}</span>
+            </span>
+          )}
+          <span className="tree-size">{formatBytes(node.subtree_size)}</span>
         </button>
       ) : (
         <div className="tree-label tree-label--file" title={node.path}>
           <span className="tree-name">{displayName}</span>
           {isRecycled && <span className="recycled-badge">Recycled</span>}
-          <span className="tree-size">
-            {formatBytes(node.subtree_size)}
-            {totalSize > 0 && <span className="size-pct"> · {formatPercent(node.subtree_size, totalSize)}</span>}
-          </span>
+          {totalSize > 0 && (
+            <span className="occupancy-bar" aria-hidden="true">
+              <span className="occupancy-bar__track">
+                <span className="occupancy-bar__fill" style={{ width: `${barPct}%` }} />
+              </span>
+              <span className="occupancy-bar__label">{formatPercent(node.subtree_size, totalSize)}</span>
+            </span>
+          )}
+          <span className="tree-size">{formatBytes(node.subtree_size)}</span>
         </div>
       )}
     </div>
