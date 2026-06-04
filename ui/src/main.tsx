@@ -973,7 +973,7 @@ function SafeContextMenu({
           onClose();
         }}
       >
-        Show in Explorer
+        {target.isDirectory ? "Show in Explorer" : "Show file in Explorer"}
       </button>
       {!companySafeMode && (
         <button
