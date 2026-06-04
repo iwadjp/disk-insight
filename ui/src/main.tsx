@@ -165,7 +165,7 @@ interface ReviewListItem {
   sizeBytes: number;
   recordIndex?: number;
   category?: string;
-  source: 'tree' | 'large-review' | 'reviewable' | 'caution';
+  source: 'tree' | 'large-review' | 'reviewable' | 'caution' | 'bookmark';
   addedAt: number;
 }
 type ContextMenuTarget = {
@@ -1526,6 +1526,12 @@ function BookmarksBar({
   onRemove,
   currentVolumeSerial,
   totalSize,
+  onOpenExplorer,
+  onSelectFile,
+  onCopyError,
+  isInReviewList,
+  onToggleReviewList,
+  companySafeMode,
 }: {
   bookmarks: Bookmark[];
   jumpStates: Record<string, BookmarkJumpState>;
@@ -1533,8 +1539,15 @@ function BookmarksBar({
   onRemove: (id: string) => void;
   currentVolumeSerial?: string | null;
   totalSize?: number;
+  onOpenExplorer?: (path: string) => void;
+  onSelectFile?: (path: string) => void;
+  onCopyError?: (msg: string) => void;
+  isInReviewList?: (path: string) => boolean;
+  onToggleReviewList?: (path: string, isDirectory: boolean, sizeBytes: number, source: ReviewListItem['source']) => void;
+  companySafeMode?: boolean;
 }) {
   const [open, setOpen] = useState(true);
+  const [ctxMenu, setCtxMenu] = useState<{ target: ContextMenuTarget; bookmarkId: string } | null>(null);
 
   // Sort: current-drive bookmarks first, other-drive bookmarks last.
   const sortedBookmarks = useMemo(() => {
@@ -1582,7 +1595,28 @@ function BookmarksBar({
               (isMissing || isUnavailable || isOtherDrive) ? "bookmark-row--dim" : "",
             ].join(" ").trim();
             return (
-              <div key={b.id} className={rowClass} title={b.path}>
+              <div
+                key={b.id}
+                className={rowClass}
+                title={b.path}
+                onContextMenu={(e) => {
+                  if (!onOpenExplorer) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setCtxMenu({
+                    target: {
+                      path: b.path,
+                      isDirectory: b.kind === "directory",
+                      recordIndex: -1,
+                      x: e.clientX,
+                      y: e.clientY,
+                      displayName: b.display_name,
+                      sizeBytes: js?.sizeBytes ?? b.last_known_subtree_size ?? null,
+                    },
+                    bookmarkId: b.id,
+                  });
+                }}
+              >
                 <button
                   className="bookmark-row-main"
                   onClick={() => onJump(b)}
@@ -1613,6 +1647,27 @@ function BookmarksBar({
             );
           })}
         </div>
+      )}
+      {ctxMenu && onOpenExplorer && onCopyError && (
+        <SafeContextMenu
+          target={ctxMenu.target}
+          onClose={() => setCtxMenu(null)}
+          onOpenExplorer={onOpenExplorer}
+          onSelectFile={onSelectFile}
+          onCopyError={onCopyError}
+          companySafeMode={companySafeMode}
+          isBookmarked={true}
+          onToggleBookmark={() => { onRemove(ctxMenu.bookmarkId); setCtxMenu(null); }}
+          isInReviewList={isInReviewList ? isInReviewList(ctxMenu.target.path) : undefined}
+          onToggleReviewList={onToggleReviewList
+            ? () => onToggleReviewList(
+                ctxMenu.target.path,
+                ctxMenu.target.isDirectory,
+                ctxMenu.target.sizeBytes ?? 0,
+                'bookmark',
+              )
+            : undefined}
+        />
       )}
     </div>
   );
@@ -5207,6 +5262,12 @@ function App() {
                   onRemove={handleRemoveBookmarkById}
                   currentVolumeSerial={data?.summary?.volume_serial ?? null}
                   totalSize={data?.summary?.total_final_allocated ?? 0}
+                  onOpenExplorer={handleOpenExplorer}
+                  onSelectFile={handleSelectFile}
+                  onCopyError={handleCopyError}
+                  isInReviewList={isInReviewList}
+                  onToggleReviewList={handleToggleReviewList}
+                  companySafeMode={companySafeMode}
                 />
               )}
               <ReviewListPanel
