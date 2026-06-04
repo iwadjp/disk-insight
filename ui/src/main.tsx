@@ -4511,9 +4511,14 @@ function App() {
 
       {bookmarkUndoNotice && (
         <div className="bookmark-undo-notice" role="status">
-          <span className="bookmark-undo-notice__text">
-            Bookmark removed: <strong>{bookmarkUndoNotice.displayName}</strong>
-          </span>
+          <div className="bookmark-undo-notice__body">
+            <span className="bookmark-undo-notice__text">
+              Bookmark removed: <strong>{bookmarkUndoNotice.displayName}</strong>
+            </span>
+            <span className="bookmark-undo-notice__hint">
+              Only the latest removal can be undone. Closing this notice clears it.
+            </span>
+          </div>
           <div className="bookmark-undo-notice__actions">
             <button className="btn btn-sm btn--undo" onClick={handleUndoBookmarkRemoval}>
               Undo
