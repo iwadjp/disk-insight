@@ -341,6 +341,40 @@ tbody tr:last-child td {
   font-size: 12px;
 }
 
+.btn--undo {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.btn--undo:hover:not(:disabled) {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.bookmark-undo-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.bookmark-undo-notice__text {
+  flex: 1;
+}
+
+.bookmark-undo-notice__actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .btn--bookmark {
   padding: 4px 10px;
   font-size: 15px;

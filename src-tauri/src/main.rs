@@ -1220,6 +1220,24 @@ fn remove_bookmark(id: String) -> Result<Vec<Bookmark>, String> {
     Ok(file.bookmarks)
 }
 
+/// Re-insert a previously-removed bookmark (undo deletion).
+/// Deduplicates on (volume_serial, path_key): if an entry with the same key
+/// already exists, returns the current list unchanged (already restored).
+/// Returns updated list.
+#[tauri::command]
+fn restore_bookmark(bookmark: Bookmark) -> Result<Vec<Bookmark>, String> {
+    let mut file = load_bookmarks_file();
+    let vs = bookmark.volume_serial.to_uppercase();
+    let already_exists = file.bookmarks.iter().any(|b| {
+        b.path_key == bookmark.path_key && b.volume_serial.to_uppercase() == vs
+    });
+    if !already_exists {
+        file.bookmarks.push(bookmark);
+        save_bookmarks_file(&mut file)?;
+    }
+    Ok(file.bookmarks)
+}
+
 #[tauri::command]
 fn list_drives() -> Vec<DriveInfo> {
     use windows::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives};
@@ -1345,6 +1363,7 @@ fn main() {
             list_bookmarks,
             add_bookmark,
             remove_bookmark,
+            restore_bookmark,
             resolve_path_chain,
             is_running_as_admin,
             relaunch_as_admin,

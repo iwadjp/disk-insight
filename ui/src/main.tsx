@@ -2550,6 +2550,7 @@ function App() {
   const pendingProgressRef = useRef<ScanProgress | null>(null);
   const updatedBannerTimerRef = useRef<number | null>(null);
   const bannerGenerationRef = useRef(0);
+  const bookmarkUndoTimerRef = useRef<number | null>(null);
   const [scanInvokeMs, setScanInvokeMs] = useState<number | null>(null);
 
   const [data, setData] = useState<DiskInsightOutput | null>(null);
@@ -2623,6 +2624,7 @@ function App() {
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [bookmarkJumpStates, setBookmarkJumpStates] = useState<Record<string, BookmarkJumpState>>({});
+  const [bookmarkUndoNotice, setBookmarkUndoNotice] = useState<{ displayName: string; bookmark: Bookmark } | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [adminWarningDismissed, setAdminWarningDismissed] = useState(false);
 
@@ -3588,12 +3590,40 @@ function App() {
       .catch((err: unknown) => console.warn("[bookmarks] add failed:", err instanceof Error ? err.message : String(err)));
   }
 
+  function clearBookmarkUndoNotice() {
+    if (bookmarkUndoTimerRef.current !== null) {
+      window.clearTimeout(bookmarkUndoTimerRef.current);
+      bookmarkUndoTimerRef.current = null;
+    }
+    setBookmarkUndoNotice(null);
+  }
+
+  function showBookmarkUndoNotice(bookmark: Bookmark) {
+    clearBookmarkUndoNotice();
+    setBookmarkUndoNotice({ displayName: bookmark.display_name, bookmark });
+    bookmarkUndoTimerRef.current = window.setTimeout(() => {
+      bookmarkUndoTimerRef.current = null;
+      setBookmarkUndoNotice(null);
+    }, 10000);
+  }
+
+  function handleUndoBookmarkRemoval() {
+    if (!bookmarkUndoNotice || !isTauriRuntime()) return;
+    const { bookmark } = bookmarkUndoNotice;
+    clearBookmarkUndoNotice();
+    invoke<Bookmark[]>("restore_bookmark", { bookmark })
+      .then(setBookmarks)
+      .catch((err: unknown) => console.warn("[bookmarks] restore failed:", err instanceof Error ? err.message : String(err)));
+  }
+
   function handleRemoveBookmarkById(id: string) {
     if (!isTauriRuntime()) return;
+    const toRemove = bookmarks.find((b) => b.id === id);
     invoke<Bookmark[]>("remove_bookmark", { id })
       .then((updated) => {
         setBookmarks(updated);
         setBookmarkJumpStates((prev) => { const next = { ...prev }; delete next[id]; return next; });
+        if (toRemove) showBookmarkUndoNotice(toRemove);
       })
       .catch((err: unknown) => console.warn("[bookmarks] remove failed:", err instanceof Error ? err.message : String(err)));
   }
@@ -4456,6 +4486,22 @@ function App() {
 
       {statusMessage && (
         <div className="status-message status-message--success">{statusMessage}</div>
+      )}
+
+      {bookmarkUndoNotice && (
+        <div className="bookmark-undo-notice" role="status">
+          <span className="bookmark-undo-notice__text">
+            Bookmark removed: <strong>{bookmarkUndoNotice.displayName}</strong>
+          </span>
+          <div className="bookmark-undo-notice__actions">
+            <button className="btn btn-sm btn--undo" onClick={handleUndoBookmarkRemoval}>
+              Undo
+            </button>
+            <button className="btn btn-sm" onClick={clearBookmarkUndoNotice} aria-label="Dismiss">
+              ×
+            </button>
+          </div>
+        </div>
       )}
 
       {handoffNotice && !recycleSuccess && (
