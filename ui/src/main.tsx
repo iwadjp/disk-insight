@@ -902,7 +902,6 @@ function SafeContextMenu({
   onExternalHandoff,
   isBookmarked: targetIsBookmarked,
   onToggleBookmark,
-  companySafeMode,
   isInReviewList: targetIsInReviewList,
   onToggleReviewList,
 }: {
@@ -918,7 +917,6 @@ function SafeContextMenu({
   onExternalHandoff?: () => void;
   isBookmarked?: boolean;
   onToggleBookmark?: () => void;
-  companySafeMode?: boolean;
   isInReviewList?: boolean;
   onToggleReviewList?: () => void;
 }) {
@@ -927,12 +925,11 @@ function SafeContextMenu({
   const showRecycleItem      = advancedMode === true && onRequestRecycle !== undefined;
   const showBookmarkItem     = onToggleBookmark !== undefined;
   const showReviewListItem   = onToggleReviewList !== undefined;
-  // Base: 4 or 5 safe items (~30px each) + 8px base padding.
-  // Terminal item hidden in company-safe mode: 4 × 30 + 8 = 128, else 5 × 30 + 8 = 158.
+  // Base: 5 safe items (~30px each) + 8px base padding: 5 × 30 + 8 = 158.
   // Bookmark section: separator(9) + item(30) = 39px.
   // Review list section: separator(9) + item(30) = 39px.
   // Advanced section: separator(9) + label(20) + item(30) = 59px.
-  const baseMenuHeight = companySafeMode ? 128 : 158;
+  const baseMenuHeight = 158;
   const menuHeight = baseMenuHeight
     + (showBookmarkItem   ? 39 : 0)
     + (showReviewListItem ? 39 : 0)
@@ -1006,20 +1003,18 @@ function SafeContextMenu({
       >
         {target.isDirectory ? "Show in Explorer" : "Show file in Explorer"}
       </button>
-      {!companySafeMode && (
-        <button
-          className="context-menu-item"
-          onClick={() => {
-            onExternalHandoff?.();
-            openTerminalAt(target.path, target.isDirectory).catch((err: unknown) => {
-              onCopyError(err instanceof Error ? err.message : String(err));
-            });
-            onClose();
-          }}
-        >
-          Open terminal here
-        </button>
-      )}
+      <button
+        className="context-menu-item"
+        onClick={() => {
+          onExternalHandoff?.();
+          openTerminalAt(target.path, target.isDirectory).catch((err: unknown) => {
+            onCopyError(err instanceof Error ? err.message : String(err));
+          });
+          onClose();
+        }}
+      >
+        Open terminal here
+      </button>
       {onShowProperties && (
         <button
           className="context-menu-item"
@@ -1531,7 +1526,6 @@ function BookmarksBar({
   onCopyError,
   isInReviewList,
   onToggleReviewList,
-  companySafeMode,
 }: {
   bookmarks: Bookmark[];
   jumpStates: Record<string, BookmarkJumpState>;
@@ -1544,7 +1538,6 @@ function BookmarksBar({
   onCopyError?: (msg: string) => void;
   isInReviewList?: (path: string) => boolean;
   onToggleReviewList?: (path: string, isDirectory: boolean, sizeBytes: number, source: ReviewListItem['source']) => void;
-  companySafeMode?: boolean;
 }) {
   const [open, setOpen] = useState(true);
   const [ctxMenu, setCtxMenu] = useState<{ target: ContextMenuTarget; bookmarkId: string } | null>(null);
@@ -1655,7 +1648,6 @@ function BookmarksBar({
           onOpenExplorer={onOpenExplorer}
           onSelectFile={onSelectFile}
           onCopyError={onCopyError}
-          companySafeMode={companySafeMode}
           isBookmarked={true}
           onToggleBookmark={() => { onRemove(ctxMenu.bookmarkId); setCtxMenu(null); }}
           isInReviewList={isInReviewList ? isInReviewList(ctxMenu.target.path) : undefined}
@@ -1685,7 +1677,6 @@ function ReviewListPanel({
   onCopyError,
   isBookmarked,
   onToggleBookmark,
-  companySafeMode,
 }: {
   items: ReviewListItem[];
   onRemove: (path: string) => void;
@@ -1696,7 +1687,6 @@ function ReviewListPanel({
   onCopyError: (msg: string) => void;
   isBookmarked?: (path: string) => boolean;
   onToggleBookmark?: (path: string, isDirectory: boolean) => void;
-  companySafeMode?: boolean;
 }) {
   const [open, setOpen] = useState(true);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
@@ -1839,7 +1829,6 @@ function ReviewListPanel({
           onOpenExplorer={onOpenExplorer}
           onSelectFile={onSelectFile}
           onCopyError={onCopyError}
-          companySafeMode={companySafeMode}
           isBookmarked={isBookmarked ? isBookmarked(ctxMenu.path) : undefined}
           onToggleBookmark={onToggleBookmark ? () => onToggleBookmark(ctxMenu.path, ctxMenu.isDirectory) : undefined}
           isInReviewList={true}
@@ -2048,7 +2037,6 @@ function TreeView({
               onSelectFile={(path) => selectInExplorer(path).catch(console.warn)}
               advancedMode={false}
               onCopyError={console.warn}
-              companySafeMode={true}
               isBookmarked={isReviewBookmarked ? isReviewBookmarked(reviewCtxMenu.path) : undefined}
               onToggleBookmark={onToggleReviewBookmark ? () => onToggleReviewBookmark(reviewCtxMenu.path, reviewCtxMenu.isDirectory) : undefined}
               isInReviewList={isInReviewList ? isInReviewList(reviewCtxMenu.path) : undefined}
@@ -2270,7 +2258,6 @@ function DirectoriesTable({
   onExternalHandoff,
   isBookmarked,
   onToggleBookmark,
-  companySafeMode,
 }: {
   rows: DirectoryEntry[];
   title: React.ReactNode;
@@ -2285,7 +2272,6 @@ function DirectoriesTable({
   onExternalHandoff?: () => void;
   isBookmarked?: (path: string) => boolean;
   onToggleBookmark?: (path: string, isDirectory: boolean) => void;
-  companySafeMode?: boolean;
 }) {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
 
@@ -2365,7 +2351,6 @@ function DirectoriesTable({
           onExternalHandoff={onExternalHandoff}
           isBookmarked={isBookmarked ? isBookmarked(ctxMenu.path) : undefined}
           onToggleBookmark={onToggleBookmark ? () => onToggleBookmark(ctxMenu.path, true) : undefined}
-          companySafeMode={companySafeMode}
         />
       )}
     </section>
@@ -2387,7 +2372,6 @@ function FilesTable({
   onExternalHandoff,
   isBookmarked,
   onToggleBookmark,
-  companySafeMode,
 }: {
   rows: FileEntry[];
   title: React.ReactNode;
@@ -2403,7 +2387,6 @@ function FilesTable({
   onExternalHandoff?: () => void;
   isBookmarked?: (path: string) => boolean;
   onToggleBookmark?: (path: string, isDirectory: boolean) => void;
-  companySafeMode?: boolean;
 }) {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
 
@@ -2483,7 +2466,6 @@ function FilesTable({
           onExternalHandoff={onExternalHandoff}
           isBookmarked={isBookmarked ? isBookmarked(ctxMenu.path) : undefined}
           onToggleBookmark={onToggleBookmark ? () => onToggleBookmark(ctxMenu.path, false) : undefined}
-          companySafeMode={companySafeMode}
         />
       )}
     </section>
@@ -2504,7 +2486,6 @@ function SubtreeSearchPanel({
   onExternalHandoff,
   isBookmarked,
   onToggleBookmark,
-  companySafeMode,
 }: {
   selectedDir: DirectoryEntry;
   sourceKind: SourceKind | null;
@@ -2519,7 +2500,6 @@ function SubtreeSearchPanel({
   onExternalHandoff?: () => void;
   isBookmarked?: (path: string) => boolean;
   onToggleBookmark?: (path: string, isDirectory: boolean) => void;
-  companySafeMode?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<TreeNode[] | null>(null);
@@ -2730,7 +2710,6 @@ function SubtreeSearchPanel({
           onExternalHandoff={onExternalHandoff}
           isBookmarked={isBookmarked ? isBookmarked(ctxMenu.path) : undefined}
           onToggleBookmark={onToggleBookmark ? () => onToggleBookmark(ctxMenu.path, ctxMenu.isDirectory) : undefined}
-          companySafeMode={companySafeMode}
         />
       )}
     </details>
@@ -2761,7 +2740,6 @@ function DirectChildrenPanel({
   recycledItems,
   onCopyError,
   onExternalHandoff,
-  companySafeMode,
 }: {
   dir: DirectoryEntry;
   children: TreeNode[] | undefined;
@@ -2786,7 +2764,6 @@ function DirectChildrenPanel({
   recycledItems?: RecycledItem[];
   onCopyError: (msg: string) => void;
   onExternalHandoff?: () => void;
-  companySafeMode?: boolean;
 }) {
 
   const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null);
@@ -2972,7 +2949,6 @@ function DirectChildrenPanel({
             : false}
           onCopyError={onCopyError}
           onExternalHandoff={onExternalHandoff}
-          companySafeMode={companySafeMode}
         />
       )}
     </div>
@@ -3050,7 +3026,6 @@ function App() {
   const [cancelMessage, setCancelMessage] = useState<string | null>(null);
   const [advancedMode, setAdvancedMode] = useState(false);
   const [advancedModeWarningOpen, setAdvancedModeWarningOpen] = useState(false);
-  const [companySafeMode, setCompanySafeMode] = useState(false);
   const [recycleConfirmTarget, setRecycleConfirmTarget] = useState<RecycleConfirmTarget | null>(null);
   const [isRecycling, setIsRecycling] = useState(false);
   const [recycleError, setRecycleError] = useState<string | null>(null);
@@ -4531,15 +4506,6 @@ function App() {
     }
   }
 
-  function handleCompanySafeModeToggle(e: React.ChangeEvent<HTMLInputElement>) {
-    const checked = e.target.checked;
-    setCompanySafeMode(checked);
-    if (checked) {
-      setAdvancedMode(false);
-      setAdvancedModeWarningOpen(false);
-    }
-  }
-
   function handleCancelAdvancedModeWarning() {
     setAdvancedModeWarningOpen(false);
   }
@@ -4974,23 +4940,14 @@ function App() {
             </label>
             <label
               className="advanced-mode-toggle"
-              title={companySafeMode ? "Disabled while Company-safe mode is on" : undefined}
             >
               <input
                 type="checkbox"
                 checked={advancedMode}
-                disabled={isRecycling || companySafeMode}
+                disabled={isRecycling}
                 onChange={handleAdvancedModeToggle}
               />
               <span>Advanced Mode</span>
-            </label>
-            <label className="company-safe-toggle">
-              <input
-                type="checkbox"
-                checked={companySafeMode}
-                onChange={handleCompanySafeModeToggle}
-              />
-              <span>Company-safe</span>
             </label>
             <div className="toolbar-separator" />
             {import.meta.env.DEV && (
@@ -5035,11 +4992,9 @@ function App() {
           <span className="admin-warning-text">
             Running without administrator privileges. Some NTFS scan operations may be limited.
           </span>
-          {!companySafeMode && (
-            <button className="btn btn-sm" onClick={handleRelaunchAsAdmin}>
-              Relaunch as administrator
-            </button>
-          )}
+          <button className="btn btn-sm" onClick={handleRelaunchAsAdmin}>
+            Relaunch as administrator
+          </button>
           <button
             className="admin-warning-dismiss"
             onClick={() => setAdminWarningDismissed(true)}
@@ -5048,12 +5003,6 @@ function App() {
           >
             ×
           </button>
-        </div>
-      )}
-
-      {companySafeMode && (
-        <div className="company-safe-banner" role="status">
-          Company-safe mode on — terminal launch, admin relaunch, and recycle actions are hidden
         </div>
       )}
 
@@ -5281,7 +5230,6 @@ function App() {
                 onExternalHandoff={() => setHandoffNotice(true)}
                 isBookmarked={isBookmarked(treeContextMenu.path)}
                 onToggleBookmark={() => handleToggleBookmark(treeContextMenu.path, treeContextMenu.isDirectory)}
-                companySafeMode={companySafeMode}
                 isInReviewList={isInReviewList(treeContextMenu.path)}
                 onToggleReviewList={() => handleToggleReviewList(
                   treeContextMenu.path,
@@ -5320,7 +5268,6 @@ function App() {
                   onCopyError={handleCopyError}
                   isInReviewList={isInReviewList}
                   onToggleReviewList={handleToggleReviewList}
-                  companySafeMode={companySafeMode}
                 />
               )}
               <ReviewListPanel
@@ -5333,7 +5280,6 @@ function App() {
                 onCopyError={handleCopyError}
                 isBookmarked={isBookmarked}
                 onToggleBookmark={handleToggleBookmark}
-                companySafeMode={companySafeMode}
               />
               {selectedDir && (
                 <button
@@ -5387,7 +5333,6 @@ function App() {
                         onExternalHandoff={() => setHandoffNotice(true)}
                         isBookmarked={isBookmarked}
                         onToggleBookmark={handleToggleBookmark}
-                        companySafeMode={companySafeMode}
                       />
                       <FilesTable
                         rows={selectedLargestItems.files.map(treeNodeToFileEntry)}
@@ -5404,7 +5349,6 @@ function App() {
                         onExternalHandoff={() => setHandoffNotice(true)}
                         isBookmarked={isBookmarked}
                         onToggleBookmark={handleToggleBookmark}
-                        companySafeMode={companySafeMode}
                       />
                     </>
                   ) : null}
@@ -5423,7 +5367,6 @@ function App() {
                   onExternalHandoff={() => setHandoffNotice(true)}
                   isBookmarked={isBookmarked}
                   onToggleBookmark={handleToggleBookmark}
-                  companySafeMode={companySafeMode}
                 />
                 <details className="largest-items-section">
                   <summary className="largest-items-summary">
@@ -5450,7 +5393,6 @@ function App() {
                     onExternalHandoff={() => setHandoffNotice(true)}
                     isBookmarked={isBookmarked}
                     onToggleBookmark={handleToggleBookmark}
-                    companySafeMode={companySafeMode}
                   />
                   <FilesTable
                     rows={filteredTopFiles}
@@ -5467,7 +5409,6 @@ function App() {
                     onExternalHandoff={() => setHandoffNotice(true)}
                     isBookmarked={isBookmarked}
                     onToggleBookmark={handleToggleBookmark}
-                    companySafeMode={companySafeMode}
                   />
                 </details>
               </div>
