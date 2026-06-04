@@ -1349,6 +1349,7 @@ type TreeRowProps = {
   isSelected: boolean;
   isFocused: boolean;
   isRecycled: boolean;
+  isLarge: boolean;
   onToggleExpand: (node: TreeNode) => void;
   onSelect: (node: TreeNode) => void;
   onContextMenu: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
@@ -1367,6 +1368,7 @@ const TreeNodeRow = React.memo(function TreeNodeRow({
   isSelected,
   isFocused,
   isRecycled,
+  isLarge,
   onToggleExpand,
   onSelect,
   onContextMenu,
@@ -1388,7 +1390,8 @@ const TreeNodeRow = React.memo(function TreeNodeRow({
     + (isFocused ? " tree-row--keyboard-focused" : "")
     + (isDir ? "" : " tree-row--file")
     + (isLoading ? " tree-row--loading" : "")
-    + (isRecycled ? " tree-row--recycled" : "");
+    + (isRecycled ? " tree-row--recycled" : "")
+    + (isLarge ? " tree-row--large" : "");
 
   return (
     <div
@@ -1609,6 +1612,21 @@ function TreeView({
   treeViewRenderCount.current += 1;
   if (PERF_TREE) treeLog(`TreeView render #${treeViewRenderCount.current}  visibleRows=${visibleRows.length}  focused=${focusedRecordIndex}`);
 
+  const [highlightThreshold, setHighlightThresholdState] = useState<number | null>(() => {
+    try {
+      const saved = localStorage.getItem("disk-insight.tree-highlight.v1");
+      if (saved === null) return 0.05;
+      if (saved === "off") return null;
+      const n = Number(saved);
+      return Number.isFinite(n) ? n : 0.05;
+    } catch { return 0.05; }
+  });
+
+  function setHighlightThreshold(val: number | null) {
+    setHighlightThresholdState(val);
+    try { localStorage.setItem("disk-insight.tree-highlight.v1", val === null ? "off" : String(val)); } catch { /* ignore */ }
+  }
+
   useEffect(() => {
     if (focusedRecordIndex === null) return;
     const t0 = performance.now();
@@ -1656,7 +1674,24 @@ function TreeView({
 
   return (
     <aside ref={navRef} className="folder-nav" tabIndex={0} onKeyDown={onKeyDown} onMouseMove={onNavMouseMove}>
-      <div className="folder-nav-header">Folder tree</div>
+      <div className="folder-nav-header">
+        <span>Folder tree</span>
+        <span className="tree-highlight-control">
+          <label className="tree-highlight-label" htmlFor="tree-highlight-select">Highlight</label>
+          <select
+            id="tree-highlight-select"
+            className="tree-highlight-select"
+            value={highlightThreshold === null ? "off" : String(highlightThreshold)}
+            onChange={(e) => setHighlightThreshold(e.target.value === "off" ? null : Number(e.target.value))}
+          >
+            <option value="off">Off</option>
+            <option value="0.01">≥1%</option>
+            <option value="0.03">≥3%</option>
+            <option value="0.05">≥5%</option>
+            <option value="0.1">≥10%</option>
+          </select>
+        </span>
+      </div>
       <div className="folder-nav-list" ref={listRef} role="tree">
         {visibleRows.length === 0 ? (
           <p className="empty-note">
@@ -1704,6 +1739,11 @@ function TreeView({
                 }
                 isFocused={focusedRecordIndex === row.node.record_index}
                 isRecycled={recycledItems ? isItemRecycled(row.node.record_index, row.node.path, recycledItems) : false}
+                isLarge={
+                  highlightThreshold !== null
+                  && totalSize > 0
+                  && row.node.subtree_size / totalSize >= highlightThreshold
+                }
                 onToggleExpand={onToggleExpand}
                 onSelect={onSelect}
                 onContextMenu={onContextMenu}
