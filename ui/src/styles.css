@@ -983,7 +983,7 @@ tbody tr:last-child td {
   line-height: 1.5;
 }
 
-/* ── Large review flat list ── */
+/* ── Filter view header (Large review / Reviewable areas / Caution areas) ── */
 .tree-review-header {
   padding: 6px 14px;
   font-size: 11px;

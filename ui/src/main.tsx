@@ -1693,11 +1693,11 @@ function TreeView({
   }, [jumpScrollTick]);
 
   const footerText = reviewView === 'large-review'
-    ? `Large review: ${formatNumber(largeReviewCandidates.length)} candidate${largeReviewCandidates.length !== 1 ? 's' : ''} · From top scan results · Size ≥ 1 GiB`
+    ? `Large review: ${formatNumber(largeReviewCandidates.length)} candidate${largeReviewCandidates.length !== 1 ? 's' : ''}`
     : reviewView === 'caution'
-      ? `Caution areas: ${formatNumber(visibleRows.length)} of ${formatNumber(totalRowsCount)} loaded rows · System/app-managed`
+      ? `Caution areas: ${formatNumber(visibleRows.length)} of ${formatNumber(totalRowsCount)} loaded rows`
       : reviewView === 'reviewable'
-        ? `Reviewable areas: ${formatNumber(visibleRows.length)} of ${formatNumber(totalRowsCount)} loaded rows · Not system/app-managed · Size ≥ 1 GiB`
+        ? `Reviewable areas: ${formatNumber(visibleRows.length)} of ${formatNumber(totalRowsCount)} loaded rows`
         : `Root children: ${rootCount} · Visible rows: ${formatNumber(visibleRows.length)}${visibleRows.length >= LARGE_TREE_THRESHOLD ? " — consider collapsing folders." : ""}`;
 
   return (
@@ -1788,6 +1788,19 @@ function TreeView({
         </div>
       ) : (
         <div className="folder-nav-list" ref={listRef} role="tree">
+          {reviewView === 'reviewable' && (
+            <div className="tree-review-header">
+              <div>Reviewable Areas</div>
+              <div className="tree-review-header-sub">Loaded tree rows · Size ≥ 1 GiB</div>
+              <div className="tree-review-header-sub">Criteria: Not system/app-managed · Includes user data and unknown areas</div>
+            </div>
+          )}
+          {reviewView === 'caution' && (
+            <div className="tree-review-header">
+              <div>Caution Areas</div>
+              <div className="tree-review-header-sub">Loaded tree rows · System/app-managed</div>
+            </div>
+          )}
           {visibleRows.length === 0 ? (
             reviewView === 'caution' && totalRowsCount > 0 ? (
               <p className="tree-filter-empty">No caution areas in currently loaded rows.</p>
