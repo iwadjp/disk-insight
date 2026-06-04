@@ -906,11 +906,7 @@ tbody tr:last-child td {
 }
 
 .folder-nav-header {
-  padding: 8px 10px 8px 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  padding: 10px 14px;
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -919,41 +915,6 @@ tbody tr:last-child td {
   border-bottom: 1px solid #d9e1e8;
   flex-shrink: 0;
   box-shadow: 0 1px 0 #d9e1e8;
-}
-
-.tree-highlight-control {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex-shrink: 0;
-}
-
-.tree-highlight-label {
-  font-size: 10px;
-  color: #9eacba;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-
-.tree-highlight-select {
-  font-size: 11px;
-  font-family: inherit;
-  padding: 1px 4px;
-  border: 1px solid #d9e1e8;
-  border-radius: 3px;
-  background: #fff;
-  color: #465563;
-  cursor: pointer;
-  height: 22px;
-  text-transform: none;
-  font-weight: 400;
-}
-
-.tree-highlight-select:focus {
-  outline: none;
-  border-color: #93c5fd;
 }
 
 .folder-nav-list {
@@ -1200,24 +1161,6 @@ tbody tr:last-child td {
 
 .tree-row--file {
   color: #5e6b78;
-}
-
-/* Large-node highlight (threshold selector in tree header) */
-.tree-row--large:not(.tree-row--active) {
-  background: rgba(251, 191, 36, 0.10);
-  box-shadow: inset 3px 0 0 rgba(245, 158, 11, 0.50);
-}
-
-.tree-row--large:not(.tree-row--active):hover {
-  background: rgba(251, 191, 36, 0.18);
-}
-
-.tree-row--large:not(.tree-row--active) .tree-name {
-  font-weight: 600;
-}
-
-.tree-row--large:not(.tree-row--active).tree-row--file .tree-name {
-  font-weight: 500;
 }
 
 .tree-toggle {
