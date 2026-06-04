@@ -6,7 +6,7 @@
 - 前提資料: [`company-pc-dogfooding-checklist.md`](./company-pc-dogfooding-checklist.md)（Go/No-Go・実行手順）
   / [`v0.5.13-company-pc-dogfooding-plan.md`](./v0.5.13-company-pc-dogfooding-plan.md)（リスク・方針）
 - **本書は自宅PC側の build 作業のみ。** 会社PCへの持ち込み・実行はこの docs の範囲外（チェックリスト §1〜§3 参照）。
-- **署名なしの build を会社PCに持ち込まない。** 署名済み build または社内の明示的許可が前提。
+- **未署名 build を持ち込む前に、会社PC環境で未署名ローカルツールの実行が許容されているかを確認すること。** 署名済み build が最も望ましい。
 
 ---
 
@@ -128,9 +128,9 @@ disk-insight-ui.exe
 ```
 
 **未署名の場合:**
-- SmartScreen / AppLocker で警告・ブロックされやすい
-- **社内の明示的許可が取れていない場合は会社PCに持ち込まない**
-- 許可が取れるまでは自宅PC dogfooding に留める
+- SmartScreen / AppLocker で警告が出ることがある
+- **会社PC環境で未署名ローカルツールの実行が許容されており、セキュリティ警告なしに実行できる場合は Company-safe dogfooding の候補にできる**
+- 警告・ブロックが出たら中止する。セキュリティ製品を無効化・回避しない
 
 ---
 

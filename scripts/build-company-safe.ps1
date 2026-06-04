@@ -162,29 +162,35 @@ disk-insight — Company-safe dogfooding build
 1. This is a PRE-RELEASE, UNSIGNED build for local dogfooding only.
    It is NOT an official release.
 
-2. MANDATORY: Enable Company-safe mode in the toolbar before scanning.
-   Company-safe mode hides:
+2. UNSIGNED BUILD:
+   - This exe is not code-signed.
+   - Use only if unsigned local tools are permitted in your company
+     environment (e.g., other unsigned tools run without issue).
+   - If you are unsure, ask IT before running.
+
+3. MANDATORY: Enable Company-safe mode in the toolbar before scanning.
+   In Company-safe mode, the following actions are HIDDEN:
      - Open terminal here  (PowerShell launch)
      - Relaunch as administrator
      - Advanced Mode
      - Move to Recycle Bin
 
-3. NETWORK: No network connections. No telemetry. No auto-update.
+4. NETWORK: No network connections. No telemetry. No auto-update.
 
-4. WRITES: Only to %LOCALAPPDATA%\disk-insight\  (cache + bookmarks).
+5. WRITES: Only to %LOCALAPPDATA%\disk-insight\  (cache + bookmarks).
    Scanned files are never modified.
 
-5. DESTRUCTIVE ACTIONS:
+6. DESTRUCTIVE ACTIONS:
    - Delete / Cut / Rename / Paste: NOT IMPLEMENTED.
    - Move to Recycle Bin: HIDDEN in Company-safe mode.
 
-6. UNSIGNED BUILD — SmartScreen or other security products may warn
-   or block execution. If that happens: STOP. Do not bypass.
+7. SECURITY WARNING POLICY:
+   If SmartScreen, EDR, AppLocker, or any other security product
+   warns or blocks this exe: STOP immediately. Do not bypass.
+   Do not disable or work around security controls.
 
-7. Do NOT disable Defender, EDR, AppLocker, or SmartScreen.
-
-8. Follow your organization's policy. If execution is not permitted,
-   do not run this tool.
+8. Follow your organization's policy. If running unsigned tools is
+   not permitted, do not use this tool on your company PC.
 
 See SECURITY-OVERVIEW.md for the full explanation.
 

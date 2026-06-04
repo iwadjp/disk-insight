@@ -38,7 +38,7 @@
 | バンドル | `bundle.active = false` のため **bare exe**（installer/MSI は未生成） |
 | build | `scripts/build-company-safe.ps1` で再現可能。build 時に SHA256 hash と commit を記録 |
 | 署名 | **現時点では未署名（unsigned）** |
-| 持ち込み方針 | **署名済み build または社内の明示的許可なしに会社PCで実行しない** |
+| 持ち込み方針 | 署名済み build が最も望ましい。会社PC環境で未署名ローカルツールの実行が許容されており警告なしに実行できる場合は Company-safe mode での試験利用候補 |
 
 ---
 
@@ -144,7 +144,7 @@ Show in Explorer / Show properties は Company-safe mode でも残るが、**会
 
 - 現在の build は **未署名**。
 - 未署名のため、**SmartScreen / AppLocker / EDR に停止される可能性**がある。
-- 会社PC利用には **署名済み build または社内の明示的許可が必要**。
+- 会社PC環境で未署名ローカルツールの実行が許容されており、セキュリティ警告なしに実行できる場合は Company-safe dogfooding の候補とできる。許容されていない場合は実行しない。
 - **NTFS / MFT の読み取りが社内ポリシー上許可されるか**は要確認（DLP 等が情報収集と誤認する可能性は否定できない）。
 - Company-safe mode は**安全説明をしやすくするためのもの**であり、**社内許可の代替にはならない**。
 
