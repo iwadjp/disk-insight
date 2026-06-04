@@ -163,6 +163,7 @@ interface ReviewListItem {
   parentPath: string;
   isDirectory: boolean;
   sizeBytes: number;
+  recordIndex?: number;
   category?: string;
   source: 'tree' | 'large-review' | 'reviewable' | 'caution';
   addedAt: number;
@@ -1588,9 +1589,10 @@ function BookmarksBar({
                   title={b.path}
                   disabled={isJumping}
                 >
-                  <span className="bookmark-kind-icon" aria-hidden="true">
-                    {b.kind === "directory" ? "▶" : "·"}
-                  </span>
+                  <span
+                    className={b.kind === "directory" ? "tree-node-icon tree-node-icon--folder" : "tree-node-icon tree-node-icon--file"}
+                    aria-hidden="true"
+                  />
                   <span className="bookmark-name">{b.display_name}</span>
                   {sizeLabel && <span className="bookmark-size-hint">{sizeLabel}</span>}
                   {isJumping && <span className="bookmark-badge bookmark-badge--jumping" aria-label="Jumping">…</span>}
@@ -1622,12 +1624,27 @@ function ReviewListPanel({
   items,
   onRemove,
   onClear,
+  onJump,
+  onOpenExplorer,
+  onSelectFile,
+  onCopyError,
+  isBookmarked,
+  onToggleBookmark,
+  companySafeMode,
 }: {
   items: ReviewListItem[];
   onRemove: (path: string) => void;
   onClear: () => void;
+  onJump?: (item: ReviewListItem) => void;
+  onOpenExplorer: (path: string) => void;
+  onSelectFile: (path: string) => void;
+  onCopyError: (msg: string) => void;
+  isBookmarked?: (path: string) => boolean;
+  onToggleBookmark?: (path: string, isDirectory: boolean) => void;
+  companySafeMode?: boolean;
 }) {
   const [open, setOpen] = useState(true);
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuTarget | null>(null);
 
   return (
     <div className="review-list-panel">
@@ -1657,19 +1674,42 @@ function ReviewListPanel({
           ) : (
             <div className="review-list-items">
               {items.map((item) => (
-                <div key={item.path} className="review-list-item" title={item.path}>
+                <div
+                  key={item.path}
+                  className="review-list-item"
+                  title={item.path}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setCtxMenu({
+                      path: item.path,
+                      isDirectory: item.isDirectory,
+                      recordIndex: item.recordIndex ?? -1,
+                      x: e.clientX,
+                      y: e.clientY,
+                      sizeBytes: item.sizeBytes,
+                    });
+                  }}
+                >
                   <span
                     className={item.isDirectory ? "tree-node-icon tree-node-icon--folder" : "tree-node-icon tree-node-icon--file"}
                     aria-hidden="true"
                   />
-                  <div className="review-list-item-main">
-                    <span className="review-list-item-name">{item.name}</span>
-                    <span className="review-list-item-meta">
-                      {formatBytes(item.sizeBytes)}
-                      {item.category ? ` · ${item.category}` : ""}
-                    </span>
-                    <span className="review-list-item-path">{item.parentPath}</span>
-                  </div>
+                  <button
+                    className="review-list-item-btn"
+                    onClick={() => onJump?.(item)}
+                    title={item.path}
+                    disabled={onJump === undefined}
+                  >
+                    <div className="review-list-item-main">
+                      <span className="review-list-item-name">{item.name}</span>
+                      <span className="review-list-item-meta">
+                        {formatBytes(item.sizeBytes)}
+                        {item.category ? ` · ${item.category}` : ""}
+                      </span>
+                      <span className="review-list-item-path">{item.parentPath}</span>
+                    </div>
+                  </button>
                   <button
                     className="review-list-remove"
                     onClick={() => onRemove(item.path)}
@@ -1683,6 +1723,20 @@ function ReviewListPanel({
             </div>
           )}
         </div>
+      )}
+      {ctxMenu && (
+        <SafeContextMenu
+          target={ctxMenu}
+          onClose={() => setCtxMenu(null)}
+          onOpenExplorer={onOpenExplorer}
+          onSelectFile={onSelectFile}
+          onCopyError={onCopyError}
+          companySafeMode={companySafeMode}
+          isBookmarked={isBookmarked ? isBookmarked(ctxMenu.path) : undefined}
+          onToggleBookmark={onToggleBookmark ? () => onToggleBookmark(ctxMenu.path, ctxMenu.isDirectory) : undefined}
+          isInReviewList={true}
+          onToggleReviewList={() => { onRemove(ctxMenu.path); setCtxMenu(null); }}
+        />
       )}
     </div>
   );
@@ -1735,7 +1789,7 @@ function TreeView({
   isReviewBookmarked?: (path: string) => boolean;
   onToggleReviewBookmark?: (path: string, isDirectory: boolean) => void;
   isInReviewList?: (path: string) => boolean;
-  onToggleReviewList?: (path: string, isDirectory: boolean, sizeBytes: number) => void;
+  onToggleReviewList?: (path: string, isDirectory: boolean, sizeBytes: number, recordIndex?: number) => void;
   onToggleExpand: (node: TreeNode) => void;
   onSelect: (node: TreeNode) => void;
   onContextMenu: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
@@ -1890,7 +1944,7 @@ function TreeView({
               isBookmarked={isReviewBookmarked ? isReviewBookmarked(reviewCtxMenu.path) : undefined}
               onToggleBookmark={onToggleReviewBookmark ? () => onToggleReviewBookmark(reviewCtxMenu.path, reviewCtxMenu.isDirectory) : undefined}
               isInReviewList={isInReviewList ? isInReviewList(reviewCtxMenu.path) : undefined}
-              onToggleReviewList={onToggleReviewList ? () => onToggleReviewList(reviewCtxMenu.path, reviewCtxMenu.isDirectory, reviewCtxMenu.sizeBytes ?? 0) : undefined}
+              onToggleReviewList={onToggleReviewList ? () => onToggleReviewList(reviewCtxMenu.path, reviewCtxMenu.isDirectory, reviewCtxMenu.sizeBytes ?? 0, reviewCtxMenu.recordIndex) : undefined}
             />
           )}
         </div>
@@ -3999,6 +4053,7 @@ function App() {
     isDirectory: boolean,
     sizeBytes: number,
     source: ReviewListItem['source'],
+    recordIndex?: number,
   ) {
     const key = path.toLowerCase();
     setReviewListItems((prev) => {
@@ -4014,6 +4069,7 @@ function App() {
           parentPath: getParentDir(path),
           isDirectory,
           sizeBytes,
+          recordIndex,
           category: cat.category !== 'unknown' ? cat.labelEn : undefined,
           source,
           addedAt: Date.now(),
@@ -4143,6 +4199,62 @@ function App() {
     } else {
       setBookmarkJumpStates((prev) => ({ ...prev, [bookmark.id]: { status: "found", sizeBytes: jumpSizeBytes } }));
     }
+  }
+
+  // ── Review list jump ────────────────────────────────────────────────────
+
+  async function handleJumpToReviewItem(item: ReviewListItem) {
+    if (!isTauriRuntime() || !data) return;
+    const volumeSerial = data.summary?.volume_serial ?? undefined;
+
+    let result: ResolvePathResult;
+    try {
+      result = await invoke<ResolvePathResult>("resolve_path_chain", {
+        path: item.path,
+        volumeSerial,
+      });
+    } catch {
+      return;
+    }
+
+    if (result.status !== "found" || !result.target) return;
+
+    const chain = result.chain;
+    const target = result.target;
+    const ancestorFrns = chain.slice(0, -1);
+
+    const newCBP: Record<number, TreeNode[]> = {};
+    const newTEC: Record<number, number> = {};
+    for (const frn of ancestorFrns) {
+      if (childrenByParent[frn]) continue;
+      try {
+        const r = await invoke<ChildrenLimitedResult>("get_children_limited", {
+          parentRecordIndex: frn,
+          limit: TREE_EXPAND_LIMIT,
+        });
+        newCBP[frn] = r.nodes;
+        if (r.total_count > r.nodes.length) newTEC[frn] = r.total_count;
+      } catch { /* skip */ }
+    }
+
+    if (Object.keys(newCBP).length > 0) {
+      setChildrenByParent((prev) => ({ ...prev, ...newCBP }));
+      if (Object.keys(newTEC).length > 0) setTreeExpandedTotalCount((prev) => ({ ...prev, ...newTEC }));
+    }
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      for (const frn of ancestorFrns) next.add(frn);
+      return next;
+    });
+
+    setFocusedRecordIndex(target.record_index);
+    if (target.is_directory) {
+      setSelectedDir(treeNodeToDirEntry(target));
+      setTreeError(null);
+    }
+
+    jumpScrollFrnRef.current = target.record_index;
+    setJumpScrollTick((n) => n + 1);
   }
 
   // ────────────────────────────────────────────────────────────────────────
@@ -5037,7 +5149,7 @@ function App() {
               isReviewBookmarked={isBookmarked}
               onToggleReviewBookmark={handleToggleBookmark}
               isInReviewList={isInReviewList}
-              onToggleReviewList={(path, isDir, sizeBytes) => handleToggleReviewList(path, isDir, sizeBytes, 'large-review')}
+              onToggleReviewList={(path, isDir, sizeBytes, recordIndex) => handleToggleReviewList(path, isDir, sizeBytes, 'large-review', recordIndex)}
               onToggleExpand={stableToggleExpand}
               onSelect={stableSelectNode}
               onContextMenu={stableContextMenu}
@@ -5068,6 +5180,7 @@ function App() {
                   treeContextMenu.isDirectory,
                   treeContextMenu.sizeBytes ?? 0,
                   treeReviewView === 'reviewable' ? 'reviewable' : treeReviewView === 'caution' ? 'caution' : 'tree',
+                  treeContextMenu.recordIndex,
                 )}
               />
             )}
@@ -5100,6 +5213,13 @@ function App() {
                 items={reviewListItems}
                 onRemove={handleRemoveFromReviewList}
                 onClear={handleClearReviewList}
+                onJump={handleJumpToReviewItem}
+                onOpenExplorer={handleOpenExplorer}
+                onSelectFile={handleSelectFile}
+                onCopyError={handleCopyError}
+                isBookmarked={isBookmarked}
+                onToggleBookmark={handleToggleBookmark}
+                companySafeMode={companySafeMode}
               />
               {selectedDir && (
                 <button

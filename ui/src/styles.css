@@ -1361,6 +1361,26 @@ tbody tr:last-child td {
   text-overflow: ellipsis;
 }
 
+.review-list-item-btn {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.review-list-item-btn:disabled {
+  cursor: default;
+}
+
+.review-list-item-btn:not(:disabled):hover .review-list-item-name {
+  color: #1649c0;
+}
+
 .review-list-remove {
   flex-shrink: 0;
   width: 24px;
