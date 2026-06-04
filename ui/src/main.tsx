@@ -211,6 +211,7 @@ type ResolvePathResult = {
 type BookmarkJumpState = {
   status: "jumping" | "found" | "missing" | "unavailable" | "outside300" | "other_drive";
   message?: string;
+  sizeBytes?: number;
 };
 
 type Bookmark = {
@@ -1462,12 +1463,14 @@ function BookmarksBar({
   onJump,
   onRemove,
   currentVolumeSerial,
+  totalSize,
 }: {
   bookmarks: Bookmark[];
   jumpStates: Record<string, BookmarkJumpState>;
   onJump: (b: Bookmark) => void;
   onRemove: (id: string) => void;
   currentVolumeSerial?: string | null;
+  totalSize?: number;
 }) {
   const [open, setOpen] = useState(true);
 
@@ -1504,6 +1507,14 @@ function BookmarksBar({
             const isJumping     = js?.status === "jumping";
             const isOutside     = js?.status === "outside300";
             const isOtherDrive  = js?.status === "other_drive";
+            const hasBadge = isMissing || isUnavailable || isOtherDrive || isOutside || isJumping;
+            const sizeBytes = js?.sizeBytes;
+            const showSize = !hasBadge && sizeBytes !== undefined && sizeBytes > 0;
+            const sizeLabel = showSize
+              ? (totalSize && totalSize > 0
+                  ? `${formatBytes(sizeBytes!)} · ${formatPercent(sizeBytes!, totalSize)}`
+                  : formatBytes(sizeBytes!))
+              : null;
             const rowClass = [
               "bookmark-row",
               (isMissing || isUnavailable || isOtherDrive) ? "bookmark-row--dim" : "",
@@ -1520,6 +1531,7 @@ function BookmarksBar({
                     {b.kind === "directory" ? "▶" : "·"}
                   </span>
                   <span className="bookmark-name">{b.display_name}</span>
+                  {sizeLabel && <span className="bookmark-size-hint">{sizeLabel}</span>}
                   {isJumping && <span className="bookmark-badge bookmark-badge--jumping" aria-label="Jumping">…</span>}
                   {isMissing && <span className="bookmark-badge bookmark-badge--missing" title={js?.message ?? "Not found in current scan"}>missing</span>}
                   {isUnavailable && <span className="bookmark-badge bookmark-badge--unavailable" title={js?.message ?? ""}>no scan</span>}
@@ -2551,6 +2563,7 @@ function App() {
   const updatedBannerTimerRef = useRef<number | null>(null);
   const bannerGenerationRef = useRef(0);
   const bookmarkUndoTimerRef = useRef<number | null>(null);
+  const bookmarkAutoResolveKey = useRef<string | null>(null);
   const [scanInvokeMs, setScanInvokeMs] = useState<number | null>(null);
 
   const [data, setData] = useState<DiskInsightOutput | null>(null);
@@ -3766,13 +3779,14 @@ function App() {
       ? parentChildren.some((n) => n.record_index === target.record_index)
       : true; // root_children check — assume visible if we can't tell
 
+    const jumpSizeBytes = target.is_directory ? target.subtree_size : target.direct_file_size;
     if (!targetVisible) {
       setBookmarkJumpStates((prev) => ({
         ...prev,
-        [bookmark.id]: { status: "outside300", message: "Parent folder expanded; target is outside the top 300 displayed entries." },
+        [bookmark.id]: { status: "outside300", message: "Parent folder expanded; target is outside the top 300 displayed entries.", sizeBytes: jumpSizeBytes },
       }));
     } else {
-      setBookmarkJumpStates((prev) => ({ ...prev, [bookmark.id]: { status: "found" } }));
+      setBookmarkJumpStates((prev) => ({ ...prev, [bookmark.id]: { status: "found", sizeBytes: jumpSizeBytes } }));
     }
   }
 
@@ -4218,6 +4232,54 @@ function App() {
     setBookmarkJumpStates({});
   }, [data]);
 
+  // Auto-resolve bookmark sizes for current-drive bookmarks after scan or bookmark list change.
+  useEffect(() => {
+    if (!data || !isTauriRuntime()) return;
+    const serial = data.summary.volume_serial?.toUpperCase();
+    if (!serial) return;
+    const sameDrive = bookmarks.filter((b) => b.volume_serial?.toUpperCase() === serial);
+    if (sameDrive.length === 0) return;
+    const key = serial + "|" + (data.summary.total_time_ms ?? 0) + "|" + sameDrive.map((b) => b.id).sort().join(",");
+    if (bookmarkAutoResolveKey.current === key) return;
+    bookmarkAutoResolveKey.current = key;
+    for (const bm of sameDrive) {
+      invoke<ResolvePathResult>("resolve_path_chain", {
+        path: bm.path,
+        volumeSerial: bm.volume_serial,
+      })
+        .then((result) => {
+          if (result.status === "found" && result.target) {
+            const tgt = result.target;
+            const sizeBytes = tgt.is_directory ? tgt.subtree_size : tgt.direct_file_size;
+            setBookmarkJumpStates((prev) => {
+              const existing = prev[bm.id];
+              if (existing?.status === "jumping") return prev;
+              return {
+                ...prev,
+                [bm.id]: {
+                  status: existing?.status === "outside300" ? "outside300" : "found",
+                  message: existing?.message,
+                  sizeBytes,
+                },
+              };
+            });
+          } else if (result.status !== "found") {
+            setBookmarkJumpStates((prev) => ({
+              ...prev,
+              [bm.id]: {
+                status: result.status as "missing" | "unavailable",
+                message: result.message ?? undefined,
+              },
+            }));
+          }
+        })
+        .catch(() => {
+          // silently skip — errors surfaced on explicit jump
+        });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, bookmarks]);
+
   useEffect(() => {
     if (!isLoading || scanStartMsRef.current === null) return;
     const t0 = scanStartMsRef.current;
@@ -4657,6 +4719,7 @@ function App() {
                   onJump={handleJumpToBookmark}
                   onRemove={handleRemoveBookmarkById}
                   currentVolumeSerial={data?.summary?.volume_serial ?? null}
+                  totalSize={data?.summary?.total_final_allocated ?? 0}
                 />
               )}
               {selectedDir && (

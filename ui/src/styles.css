@@ -1028,6 +1028,14 @@ tbody tr:last-child td {
   text-overflow: ellipsis;
 }
 
+.bookmark-size-hint {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #6b7280;
+  white-space: nowrap;
+  font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+}
+
 .bookmark-badge {
   flex-shrink: 0;
   font-size: 9px;
