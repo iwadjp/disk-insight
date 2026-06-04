@@ -79,15 +79,21 @@ $flagPerfLog   = Check-Flag "PERF_LOG"
 $flagPerfTree  = Check-Flag "PERF_TREE"
 Write-Host ""
 
-# ── 3. Company-safe mode check ────────────────────────────────────────────────
-Write-Host "--- Company-safe mode ---" -ForegroundColor Yellow
-$csHit = Select-String -Path $mainTsx -Pattern "companySafeMode" -List
-if ($csHit) {
-    Write-Host "  OK: companySafeMode found in source" -ForegroundColor Green
-    $companySafeStatus = "implemented"
+# ── 3. Safety model check ─────────────────────────────────────────────────────
+Write-Host "--- Safety model check ---" -ForegroundColor Yellow
+$advancedModeHit = Select-String -Path $mainTsx -Pattern "advancedMode" -List
+if ($advancedModeHit) {
+    Write-Host "  OK: advancedMode found in source (Normal + Advanced model)" -ForegroundColor Green
+    $safetyModelStatus = "Normal + Advanced"
 } else {
-    Write-Host "  WARNING: companySafeMode not found — check implementation" -ForegroundColor Red
-    $companySafeStatus = "NOT FOUND"
+    Write-Host "  WARNING: advancedMode not found -- check implementation" -ForegroundColor Red
+    $safetyModelStatus = "UNKNOWN"
+}
+$csStillPresent = Select-String -Path $mainTsx -Pattern "companySafeMode" -List
+if ($csStillPresent) {
+    Write-Host "  WARNING: companySafeMode still found in source (expected removed in v0.5.18-C)" -ForegroundColor Yellow
+} else {
+    Write-Host "  OK: companySafeMode not present (removed in v0.5.18-C)" -ForegroundColor Green
 }
 Write-Host ""
 
@@ -154,10 +160,10 @@ if (Test-Path $srcOverview) {
 # 6c. Generate README-company-safe.txt
 $buildTime = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
 $readmeContent = @"
-disk-insight — Company-safe dogfooding build
-=============================================
+disk-insight - Company PC dogfooding build
+==========================================
 
-** READ BEFORE RUNNING **
+READ BEFORE RUNNING
 
 1. This is a PRE-RELEASE, UNSIGNED build for local dogfooding only.
    It is NOT an official release.
@@ -168,12 +174,15 @@ disk-insight — Company-safe dogfooding build
      environment (e.g., other unsigned tools run without issue).
    - If you are unsure, ask IT before running.
 
-3. MANDATORY: Enable Company-safe mode in the toolbar before scanning.
-   In Company-safe mode, the following actions are HIDDEN:
-     - Open terminal here  (PowerShell launch)
-     - Relaunch as administrator
-     - Advanced Mode
-     - Move to Recycle Bin
+3. SAFETY MODEL:
+   The app starts in default Normal Mode.
+   In Normal Mode, destructive file operations are NOT shown.
+   Move to Recycle Bin is shown ONLY if the user explicitly enables
+   Advanced Mode for the current session.
+   - Do NOT enable Advanced Mode on a company PC.
+   - Advanced Mode is non-persistent (resets to OFF on each launch).
+   NOTE: There is no Company-safe UI toggle. The app uses Normal Mode
+   by default. See SECURITY-OVERVIEW.md for details.
 
 4. NETWORK: No network connections. No telemetry. No auto-update.
 
@@ -182,7 +191,8 @@ disk-insight — Company-safe dogfooding build
 
 6. DESTRUCTIVE ACTIONS:
    - Delete / Cut / Rename / Paste: NOT IMPLEMENTED.
-   - Move to Recycle Bin: HIDDEN in Company-safe mode.
+   - Move to Recycle Bin: only available if Advanced Mode is ON.
+     Do not enable Advanced Mode on a company PC.
 
 7. SECURITY WARNING POLICY:
    If SmartScreen, EDR, AppLocker, or any other security product
@@ -203,7 +213,7 @@ Write-Host "  Generated README-company-safe.txt" -ForegroundColor Green
 
 # 6d. Generate BUILD-INFO.txt
 $buildInfoContent = @"
-disk-insight — Build Information
+disk-insight - Build Information
 =================================
 App name      : disk-insight
 Product name  : disk-insight-ui.exe
@@ -227,19 +237,23 @@ TREE_FOCUS_DEBUG : $flagTreeFocus
 PERF_LOG         : $flagPerfLog
 PERF_TREE        : $flagPerfTree
 
-Company-safe mode : $companySafeStatus
+Safety model      : Normal + Advanced
+Company-safe UI   : removed in v0.5.18-C
+Advanced Mode     : explicit session-only opt-in (do not enable on company PC)
 Bundle type       : bare exe (bundle.active=false, no installer/MSI)
-GitHub Release    : NO — this is a local dogfooding build only
+GitHub Release    : NO - this is a local dogfooding build only
 
 Security notes
 --------------
 - No network connections, no telemetry, no auto-update.
 - Writes only to %LOCALAPPDATA%\disk-insight\  (cache + bookmarks.json).
-- Company-safe mode hides: terminal launch, admin relaunch, Advanced
-  Mode, Move to Recycle Bin.
+- Normal Mode (default): no destructive file operations shown.
+- Advanced Mode: explicit opt-in, session-only, resets on each launch.
+  Move to Recycle Bin shown only when Advanced Mode is ON.
+  Do NOT enable Advanced Mode on a company PC.
 - Delete / Rename / Cut / Paste are NOT implemented.
 - UNSIGNED: may trigger SmartScreen / AppLocker / EDR warnings.
-  If warned or blocked — STOP. Do not bypass security products.
+  If warned or blocked - STOP. Do not bypass security products.
 "@
 
 $buildInfoPath = Join-Path $distDir "BUILD-INFO.txt"
@@ -276,12 +290,12 @@ Write-Host "    Commit  : $commitShort"
 Write-Host "    SHA256  : $hash"
 Write-Host "    Signed  : unsigned"
 Write-Host "    TREE_FOCUS_DEBUG / PERF_LOG / PERF_TREE = false"
-Write-Host "    Company-safe mode: $companySafeStatus"
+Write-Host "    Safety model: $safetyModelStatus"
 Write-Host ""
 Write-Host "IMPORTANT:" -ForegroundColor Yellow
 Write-Host "  This is an UNSIGNED build." -ForegroundColor Yellow
-Write-Host "  If security products warn or block — STOP. Do not bypass." -ForegroundColor Yellow
-Write-Host "  Enable Company-safe mode before scanning." -ForegroundColor Yellow
+Write-Host "  If security products warn or block - STOP. Do not bypass." -ForegroundColor Yellow
+Write-Host "  Use default Normal Mode. Do NOT enable Advanced Mode on a company PC." -ForegroundColor Yellow
 Write-Host "  See: docs\company-pc-dogfooding-checklist.md" -ForegroundColor Yellow
 Write-Host "       dist-company-safe\README-company-safe.txt" -ForegroundColor Yellow
 Write-Host ""
