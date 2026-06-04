@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { classifyCleanupSafety } from "./cleanupSafety";
 import "./styles.css";
 
 type Summary = {
@@ -148,6 +149,7 @@ type UnsupportedDriveCapacity = {
 };
 type DirectChildrenSortKey = "size" | "name" | "type";
 type SortDirection = "asc" | "desc";
+type TreeReviewView = 'all' | 'large-review' | 'caution';
 type ContextMenuTarget = {
   path: string;
   isDirectory: boolean;
@@ -230,6 +232,8 @@ type Bookmark = {
 };
 
 const TOP_OPTIONS = [10, 30, 50, 100, 200, 500];
+const TREE_REVIEW_CATS  = new Set(['temp-candidate', 'cache-candidate', 'dev-dependency', 'recycle-bin']);
+const TREE_CAUTION_CATS = new Set(['protected-system', 'app-managed']);
 const LARGE_FOLDER_THRESHOLD = 200;
 const LARGE_TREE_THRESHOLD = 1000;
 const DIRECT_CHILDREN_DISPLAY_LIMIT = 300;
@@ -1570,6 +1574,7 @@ function BookmarksBar({
 function TreeView({
   rootCount,
   visibleRows,
+  totalRowsCount,
   totalSize,
   expandedIds,
   loadingIds,
@@ -1578,6 +1583,8 @@ function TreeView({
   treeError,
   sourceKind,
   recycledItems,
+  reviewView,
+  onChangeReviewView,
   onToggleExpand,
   onSelect,
   onContextMenu,
@@ -1589,6 +1596,7 @@ function TreeView({
 }: {
   rootCount: number;
   visibleRows: VisibleTreeRow[];
+  totalRowsCount: number;
   totalSize: number;
   expandedIds: Set<number>;
   loadingIds: Set<number>;
@@ -1597,6 +1605,8 @@ function TreeView({
   treeError: string | null;
   sourceKind: SourceKind | null;
   recycledItems?: RecycledItem[];
+  reviewView: TreeReviewView;
+  onChangeReviewView: (v: TreeReviewView) => void;
   onToggleExpand: (node: TreeNode) => void;
   onSelect: (node: TreeNode) => void;
   onContextMenu: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
@@ -1658,19 +1668,44 @@ function TreeView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jumpScrollTick]);
 
+  const isFiltered = reviewView !== 'all';
+  const footerText = isFiltered
+    ? `Visible: ${formatNumber(visibleRows.length)} of ${formatNumber(totalRowsCount)} · ${reviewView === 'large-review' ? 'Large review' : 'Caution'} filter (loaded rows)`
+    : `Root children: ${rootCount} · Visible rows: ${formatNumber(visibleRows.length)}${visibleRows.length >= LARGE_TREE_THRESHOLD ? " — consider collapsing folders." : ""}`;
+
   return (
     <aside ref={navRef} className="folder-nav" tabIndex={0} onKeyDown={onKeyDown} onMouseMove={onNavMouseMove}>
       <div className="folder-nav-header">
-        <span className="folder-nav-header__title">Folder tree</span>
+        <div className="folder-nav-header__title">
+          <span>Folder tree</span>
+          <select
+            className="tree-review-select"
+            value={reviewView}
+            onChange={(e) => onChangeReviewView(e.target.value as TreeReviewView)}
+            title="Filter tree rows by cleanup category"
+          >
+            <option value="all">All</option>
+            <option value="large-review">Large review</option>
+            <option value="caution">Caution areas</option>
+          </select>
+        </div>
         <span className="folder-nav-header__occ" title="Occupancy (% of drive total)">Occ.</span>
         <span className="folder-nav-header__pct" />
         <span className="folder-nav-header__size">Size</span>
       </div>
       <div className="folder-nav-list" ref={listRef} role="tree">
         {visibleRows.length === 0 ? (
-          <p className="empty-note">
-            No root entries available. Run a live scan to load the folder tree.
-          </p>
+          isFiltered && totalRowsCount > 0 ? (
+            <p className="tree-filter-empty">
+              {reviewView === 'large-review'
+                ? 'No large review candidates in currently loaded rows.'
+                : 'No caution areas in currently loaded rows.'}
+            </p>
+          ) : (
+            <p className="empty-note">
+              No root entries available. Run a live scan to load the folder tree.
+            </p>
+          )
         ) : (
           visibleRows.map((row) =>
             row.isEmpty ? (
@@ -1725,11 +1760,10 @@ function TreeView({
       {treeError && (
         <div className={`folder-nav-footer ${sourceKind === "cached" ? "folder-nav-footer--cached-note" : "folder-nav-footer--error"}`}>{treeError}</div>
       )}
-      <div className={visibleRows.length >= LARGE_TREE_THRESHOLD
+      <div className={!isFiltered && visibleRows.length >= LARGE_TREE_THRESHOLD
         ? "folder-nav-footer folder-nav-footer--warn"
         : "folder-nav-footer"}>
-        Root children: {rootCount} · Visible rows: {formatNumber(visibleRows.length)}
-        {visibleRows.length >= LARGE_TREE_THRESHOLD && " — consider collapsing folders."}
+        {footerText}
       </div>
     </aside>
   );
@@ -2655,6 +2689,7 @@ function App() {
   const [bookmarkUndoNotice, setBookmarkUndoNotice] = useState<{ displayName: string; bookmark: Bookmark } | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [adminWarningDismissed, setAdminWarningDismissed] = useState(false);
+  const [treeReviewView, setTreeReviewView] = useState<TreeReviewView>('all');
 
   // ── Tree focus diagnostics (TREE_FOCUS_DEBUG) ────────────────────────────
   // Always created (cheap). All recording code is behind if(TREE_FOCUS_DEBUG)
@@ -2757,6 +2792,22 @@ function App() {
     perfLog(`visible-rows  count=${rows.length}  t=${(performance.now() - t0).toFixed(1)}ms`);
     return rows;
   }, [data?.root_children, expandedIds, childrenByParent, childrenErrors, treeExpandedTotalCount]);
+
+  const filteredVisibleRows = useMemo(() => {
+    if (treeReviewView === 'all') return visibleRows;
+    const totalSz = data?.summary.total_final_allocated ?? 0;
+    const GiB = 1024 ** 3;
+    return visibleRows.filter((row) => {
+      if (row.isEmpty || row.nodeError || row.treeTruncated !== undefined) return false;
+      const cat = classifyCleanupSafety(row.node.path).category;
+      if (treeReviewView === 'large-review') {
+        if (!TREE_REVIEW_CATS.has(cat)) return false;
+        return row.node.subtree_size >= GiB ||
+          (totalSz > 0 && row.node.subtree_size >= totalSz * 0.01);
+      }
+      return TREE_CAUTION_CATS.has(cat);
+    });
+  }, [visibleRows, treeReviewView, data?.summary.total_final_allocated]);
 
   const selectedAncestorDirs = useMemo(
     (): DirectoryEntry[] =>
@@ -3102,6 +3153,7 @@ function App() {
     clearCacheBanner();
     setHandoffNotice(false);
     setInsightsOpen(false);
+    setTreeReviewView('all');
     setExpandedIds(new Set());
     setLoadingIds(new Set());
     setChildrenByParent({});
@@ -3344,11 +3396,11 @@ function App() {
     const t0 = performance.now();
 
     const filterT0 = performance.now();
-    const allRows = visibleRows.filter(
+    const allRows = filteredVisibleRows.filter(
       (r) => !r.isEmpty && !r.nodeError && r.treeTruncated === undefined,
     );
     const filterMs = (performance.now() - filterT0).toFixed(1);
-    treeLog(`key=${e.key} START  visible=${visibleRows.length}  navigable=${allRows.length}  filter=${filterMs}ms`);
+    treeLog(`key=${e.key} START  visible=${filteredVisibleRows.length}  navigable=${allRows.length}  filter=${filterMs}ms`);
     if (allRows.length === 0) return;
 
     const currentIdx =
@@ -4677,7 +4729,8 @@ function App() {
           <div className="content-pane">
             <TreeView
               rootCount={data.root_children?.length ?? 0}
-              visibleRows={visibleRows}
+              visibleRows={filteredVisibleRows}
+              totalRowsCount={visibleRows.length}
               totalSize={data.summary.total_final_allocated}
               expandedIds={expandedIds}
               loadingIds={loadingIds}
@@ -4686,6 +4739,8 @@ function App() {
               treeError={treeError}
               sourceKind={sourceKind}
               recycledItems={recycledItems}
+              reviewView={treeReviewView}
+              onChangeReviewView={setTreeReviewView}
               onToggleExpand={stableToggleExpand}
               onSelect={stableSelectNode}
               onContextMenu={stableContextMenu}
