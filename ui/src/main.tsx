@@ -1603,6 +1603,8 @@ function TreeView({
   reviewView,
   onChangeReviewView,
   largeReviewCandidates,
+  isReviewBookmarked,
+  onToggleReviewBookmark,
   onToggleExpand,
   onSelect,
   onContextMenu,
@@ -1626,6 +1628,8 @@ function TreeView({
   reviewView: TreeReviewView;
   onChangeReviewView: (v: TreeReviewView) => void;
   largeReviewCandidates: ReviewCandidate[];
+  isReviewBookmarked?: (path: string) => boolean;
+  onToggleReviewBookmark?: (path: string, isDirectory: boolean) => void;
   onToggleExpand: (node: TreeNode) => void;
   onSelect: (node: TreeNode) => void;
   onContextMenu: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
@@ -1720,7 +1724,7 @@ function TreeView({
           <div className="tree-review-header">
             <div>Large Review Candidates</div>
             <div className="tree-review-header-sub">
-              Large items matching cleanup criteria from top scan results.
+              From top scan results · Criteria: Temp / Cache / Dev dependency / Recycle Bin · Size ≥ 1 GiB · Excludes user data and app/system areas
             </div>
           </div>
           {largeReviewCandidates.length === 0 ? (
@@ -1775,6 +1779,8 @@ function TreeView({
               advancedMode={false}
               onCopyError={console.warn}
               companySafeMode={true}
+              isBookmarked={isReviewBookmarked ? isReviewBookmarked(reviewCtxMenu.path) : undefined}
+              onToggleBookmark={onToggleReviewBookmark ? () => onToggleReviewBookmark(reviewCtxMenu.path, reviewCtxMenu.isDirectory) : undefined}
             />
           )}
         </div>
@@ -4843,6 +4849,8 @@ function App() {
               reviewView={treeReviewView}
               onChangeReviewView={setTreeReviewView}
               largeReviewCandidates={largeReviewCandidates}
+              isReviewBookmarked={isBookmarked}
+              onToggleReviewBookmark={handleToggleBookmark}
               onToggleExpand={stableToggleExpand}
               onSelect={stableSelectNode}
               onContextMenu={stableContextMenu}
