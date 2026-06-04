@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use disk_insight::mft_probe::{
     build_mft_tree_model_with_policy_progress,
     compute_reclaimable_summary,
