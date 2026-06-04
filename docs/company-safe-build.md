@@ -134,16 +134,44 @@ disk-insight-ui.exe
 
 ---
 
-## 6. Build Script
+## 6. Build Script と出力フォルダ
 
 [`scripts/build-company-safe.ps1`](../scripts/build-company-safe.ps1) を使うと上記手順を自動化できる。
 
 ```powershell
-# プロジェクトルートから実行
+# プロジェクトルートから実行（自宅PC のみ）
 .\scripts\build-company-safe.ps1
 ```
 
-script の内容: git 状態確認 → debug flag 確認 → build → hash 出力。署名・アップロード・コピーは行わない。
+script の内容: git 状態確認 → debug flag 確認 → build → hash 出力 → `dist-company-safe\` パッケージ生成。
+署名・アップロード・会社PCへのコピーは行わない。
+
+### 出力フォルダ: `dist-company-safe\`
+
+script 実行後に以下のフォルダが生成される（**`.gitignore` 対象 — git には入らない**）:
+
+```
+dist-company-safe\
+  disk-insight-ui.exe     ← release exe（コピー）
+  README-company-safe.txt ← 持ち込み前に読む短い説明
+  BUILD-INFO.txt          ← SHA256 / commit / debug flags / unsigned 明記
+  SECURITY-OVERVIEW.md    ← docs/security-overview.md のコピー
+```
+
+### 会社PCに持っていく前の確認
+
+```
+[ ] dist-company-safe\BUILD-INFO.txt の SHA256 と source exe の hash が一致している
+[ ] BUILD-INFO.txt に TREE_FOCUS_DEBUG / PERF_LOG / PERF_TREE = false が記録されている
+[ ] README-company-safe.txt を読んで Company-safe mode ON の手順を確認している
+[ ] unsigned build である（SECURITY-OVERVIEW.md §11 参照）
+[ ] 会社ルール上の実行可否を確認している（company-pc-dogfooding-checklist.md §1）
+[ ] セキュリティ警告が出たら中止する方針を確認している
+```
+
+> **ExecutionPolicy について:**
+> 自宅PCで script を実行する場合は `powershell -ExecutionPolicy RemoteSigned -File scripts\build-company-safe.ps1` を使う。
+> `-ExecutionPolicy Bypass` は会社PCでの制限を回避するために使用しない。
 
 ---
 
