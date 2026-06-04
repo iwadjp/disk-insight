@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { classifyCleanupSafety } from "./cleanupSafety";
 import "./styles.css";
 
 type Summary = {
@@ -1757,6 +1758,7 @@ function SelectedFolderCard({
   const confidenceClass = reclaimable
     ? `confidence-badge confidence-badge--${reclaimable.confidence.toLowerCase()}`
     : "confidence-badge";
+  const guidance = classifyCleanupSafety(dir.path);
 
   return (
     <div className="selected-folder-card">
@@ -1808,6 +1810,14 @@ function SelectedFolderCard({
           Direct files estimate: <strong>{formatBytes(dir.direct_file_size)}</strong>
         </span>
         <span>Children: <strong>{formatNumber(dir.child_count)}</strong></span>
+      </div>
+      <div className={`cleanup-guidance cleanup-guidance--${guidance.tone}`}>
+        <div className="cleanup-guidance__eyebrow">Cleanup guidance</div>
+        <div className="cleanup-guidance__label">{guidance.labelEn}</div>
+        <div className="cleanup-guidance__note">{guidance.noteEn}</div>
+        <div className="cleanup-guidance__disclaimer">
+          Heuristic based on folder path. disk-insight does not recommend deletion.
+        </div>
       </div>
       {(reclaimableLoading || reclaimable !== null || reclaimableError !== null || sourceKind === "cached") && (
         <details className="reclaimable-details" open>

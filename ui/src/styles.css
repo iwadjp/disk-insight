@@ -1605,6 +1605,77 @@ tbody tr:last-child td {
   color: #8a97a4;
 }
 
+/* ── Cleanup guidance block (SelectedFolderCard, v0.5.16-C) ── */
+.cleanup-guidance {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  border-left: 3px solid #d1d5db;
+  background: #f9fafb;
+}
+
+.cleanup-guidance--strong-caution {
+  border-left-color: #dc2626;
+  background: #fff1f2;
+}
+
+.cleanup-guidance--caution {
+  border-left-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.cleanup-guidance--neutral {
+  border-left-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.cleanup-guidance--review-candidate {
+  border-left-color: #3b82f6;
+  background: #eff6ff;
+}
+
+/* tone: none (unknown) — very muted */
+.cleanup-guidance--none {
+  border-left-color: #e2e8f0;
+  background: #f8fafc;
+}
+
+.cleanup-guidance__eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8a97a4;
+  margin-bottom: 2px;
+}
+
+.cleanup-guidance__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #17202a;
+  margin-bottom: 2px;
+}
+
+.cleanup-guidance--strong-caution .cleanup-guidance__label { color: #991b1b; }
+.cleanup-guidance--caution        .cleanup-guidance__label { color: #92400e; }
+.cleanup-guidance--review-candidate .cleanup-guidance__label { color: #1d4ed8; }
+.cleanup-guidance--none           .cleanup-guidance__label { color: #8a97a4; }
+
+.cleanup-guidance__note {
+  font-size: 11px;
+  color: #475569;
+  line-height: 1.4;
+}
+
+.cleanup-guidance--none .cleanup-guidance__note { color: #94a3b8; }
+
+.cleanup-guidance__disclaimer {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
 .reclaimable-details {
   margin-top: 10px;
   border-top: 1px solid #e8edf1;
