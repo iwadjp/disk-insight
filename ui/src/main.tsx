@@ -149,7 +149,7 @@ type UnsupportedDriveCapacity = {
 };
 type DirectChildrenSortKey = "size" | "name" | "type";
 type SortDirection = "asc" | "desc";
-type TreeReviewView = 'all' | 'large-review' | 'caution';
+type TreeReviewView = 'all' | 'large-review' | 'reviewable' | 'caution';
 type ReviewCandidate = {
   path: string;
   record_index: number;
@@ -1696,7 +1696,9 @@ function TreeView({
     ? `Large review: ${formatNumber(largeReviewCandidates.length)} candidate${largeReviewCandidates.length !== 1 ? 's' : ''} from top scan results`
     : reviewView === 'caution'
       ? `Visible: ${formatNumber(visibleRows.length)} of ${formatNumber(totalRowsCount)} · Caution filter (loaded rows)`
-      : `Root children: ${rootCount} · Visible rows: ${formatNumber(visibleRows.length)}${visibleRows.length >= LARGE_TREE_THRESHOLD ? " — consider collapsing folders." : ""}`;
+      : reviewView === 'reviewable'
+        ? `Visible: ${formatNumber(visibleRows.length)} of ${formatNumber(totalRowsCount)} · Reviewable areas filter (loaded rows, size ≥ 1 GiB)`
+        : `Root children: ${rootCount} · Visible rows: ${formatNumber(visibleRows.length)}${visibleRows.length >= LARGE_TREE_THRESHOLD ? " — consider collapsing folders." : ""}`;
 
   return (
     <aside ref={navRef} className="folder-nav" tabIndex={0} onKeyDown={reviewView !== 'large-review' ? onKeyDown : undefined} onMouseMove={onNavMouseMove}>
@@ -1707,10 +1709,11 @@ function TreeView({
             className="tree-review-select"
             value={reviewView}
             onChange={(e) => onChangeReviewView(e.target.value as TreeReviewView)}
-            title="Filter tree rows by cleanup category"
+            title="Filter tree rows by cleanup category. Reviewable areas shows large loaded rows that are not classified as system/app-managed caution areas."
           >
             <option value="all">All</option>
             <option value="large-review">Large review</option>
+            <option value="reviewable">Reviewable areas</option>
             <option value="caution">Caution areas</option>
           </select>
         </div>
@@ -1788,6 +1791,8 @@ function TreeView({
           {visibleRows.length === 0 ? (
             reviewView === 'caution' && totalRowsCount > 0 ? (
               <p className="tree-filter-empty">No caution areas in currently loaded rows.</p>
+            ) : reviewView === 'reviewable' && totalRowsCount > 0 ? (
+              <p className="tree-filter-empty">No reviewable areas ≥ 1 GiB in currently loaded rows.</p>
             ) : (
               <p className="empty-note">
                 No root entries available. Run a live scan to load the folder tree.
@@ -2882,18 +2887,28 @@ function App() {
     return rows;
   }, [data?.root_children, expandedIds, childrenByParent, childrenErrors, treeExpandedTotalCount]);
 
+  const GiB = 1024 ** 3;
+
   const filteredVisibleRows = useMemo(() => {
     if (treeReviewView === 'all') return visibleRows;
     // large-review uses a separate flat list from top scan results; tree is hidden
     if (treeReviewView === 'large-review') return [];
     // caution: filter loaded tree rows by protected-system / app-managed
+    if (treeReviewView === 'caution') {
+      return visibleRows.filter((row) => {
+        if (row.isEmpty || row.nodeError || row.treeTruncated !== undefined) return false;
+        return TREE_CAUTION_CATS.has(classifyCleanupSafety(row.node.path).category);
+      });
+    }
+    // reviewable: non-caution loaded rows, size >= 1 GiB
+    // (Large review uses global top results; this reflects the current tree context)
     return visibleRows.filter((row) => {
       if (row.isEmpty || row.nodeError || row.treeTruncated !== undefined) return false;
-      return TREE_CAUTION_CATS.has(classifyCleanupSafety(row.node.path).category);
+      if (TREE_CAUTION_CATS.has(classifyCleanupSafety(row.node.path).category)) return false;
+      return row.node.subtree_size >= GiB;
     });
   }, [visibleRows, treeReviewView]);
 
-  const GiB = 1024 ** 3;
   const largeReviewCandidates = useMemo((): ReviewCandidate[] => {
     if (!data) return [];
     const seen = new Set<string>();
