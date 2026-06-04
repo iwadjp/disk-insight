@@ -3585,8 +3585,21 @@ function App() {
 
   function handleAddBookmark(path: string, isDirectory: boolean) {
     if (!isTauriRuntime()) return;
+    const addedKey = bookmarkPathKey(path);
     invoke<Bookmark[]>("add_bookmark", { path, isDirectory })
-      .then(setBookmarks)
+      .then((updated) => {
+        setBookmarks(updated);
+        setBookmarkUndoNotice((prev) => {
+          if (prev && prev.bookmark.path_key === addedKey) {
+            if (bookmarkUndoTimerRef.current !== null) {
+              window.clearTimeout(bookmarkUndoTimerRef.current);
+              bookmarkUndoTimerRef.current = null;
+            }
+            return null;
+          }
+          return prev;
+        });
+      })
       .catch((err: unknown) => console.warn("[bookmarks] add failed:", err instanceof Error ? err.message : String(err)));
   }
 
@@ -3610,7 +3623,15 @@ function App() {
   function handleUndoBookmarkRemoval() {
     if (!bookmarkUndoNotice || !isTauriRuntime()) return;
     const { bookmark } = bookmarkUndoNotice;
+    const alreadyExists = bookmarks.some(
+      (b) => b.path_key === bookmark.path_key && b.volume_serial.toUpperCase() === bookmark.volume_serial.toUpperCase()
+    );
     clearBookmarkUndoNotice();
+    if (alreadyExists) {
+      setStatusMessage("Bookmark already restored");
+      setTimeout(() => setStatusMessage(null), 3000);
+      return;
+    }
     invoke<Bookmark[]>("restore_bookmark", { bookmark })
       .then(setBookmarks)
       .catch((err: unknown) => console.warn("[bookmarks] restore failed:", err instanceof Error ? err.message : String(err)));
