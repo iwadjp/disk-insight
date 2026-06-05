@@ -741,14 +741,32 @@ tbody tr:last-child td {
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  border: 1px solid #fecaca;
+  border: 1px solid #c5d0db;
   border-radius: 6px;
-  background: #fff7f7;
-  color: #991b1b;
+  background: #ffffff;
+  color: #465563;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 550;
   white-space: nowrap;
   cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.advanced-mode-toggle:hover {
+  background: #f0f4f8;
+  border-color: #a8b7c6;
+}
+
+.advanced-mode-toggle--active {
+  border-color: #fecaca;
+  background: #fff7f7;
+  color: #991b1b;
+  font-weight: 650;
+}
+
+.advanced-mode-toggle--active:hover {
+  background: #fee2e2;
+  border-color: #f87171;
 }
 
 .advanced-mode-toggle input {
@@ -1234,6 +1252,7 @@ tbody tr:last-child td {
 .review-list-clear {
   flex-shrink: 0;
   padding: 3px 8px;
+  margin-left: 6px;
   margin-right: 8px;
   font-size: 10px;
   font-weight: 600;

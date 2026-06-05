@@ -2050,7 +2050,7 @@ function TreeView({
             <div className="tree-review-header">
               <div>Reviewable Areas</div>
               <div className="tree-review-header-sub">Loaded tree rows · Size ≥ 1 GiB</div>
-              <div className="tree-review-header-sub">Criteria: Not system/app-managed · Includes user data and unknown areas</div>
+              <div className="tree-review-header-sub">Criteria: Not system/app-managed · Unknown and user-visible areas</div>
             </div>
           )}
           {reviewView === 'caution' && (
@@ -4939,7 +4939,8 @@ function App() {
               </select>
             </label>
             <label
-              className="advanced-mode-toggle"
+              className={`advanced-mode-toggle${advancedMode ? " advanced-mode-toggle--active" : ""}`}
+              title="Session-only. Unlocks Move to Recycle Bin. Resets on close."
             >
               <input
                 type="checkbox"
@@ -5008,7 +5009,7 @@ function App() {
 
       {advancedMode && (
         <div className="advanced-mode-banner" role="status">
-          Advanced Mode enabled
+          Advanced Mode enabled — session only
         </div>
       )}
 
