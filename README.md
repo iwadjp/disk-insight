@@ -150,7 +150,13 @@ cargo build --release
 
 ## Screenshots
 
-TBD before public release.
+### Main TreeView
+
+![disk-insight main TreeView](docs/images/disk-insight-demo-all.png)
+
+### Large review candidates
+
+![disk-insight Large review candidates](docs/images/disk-insight-demo-large-review.png)
 
 ---
 
