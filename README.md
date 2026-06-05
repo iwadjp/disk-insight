@@ -62,14 +62,19 @@ Delete / Rename / Cut / Paste are not implemented.
 - No telemetry or analytics
 - No auto-updater
 - Local-only operation
-- Writes only to `%LOCALAPPDATA%\disk-insight\` (scan cache and bookmarks)
+- App-managed data is written only to `%LOCALAPPDATA%\disk-insight\`
+  (scan cache and bookmarks).
+- File changes are not shown in Normal Mode.
+- Move to Recycle Bin is available only after explicitly enabling Advanced Mode.
 
 ---
 
 ## Requirements
 
 - Windows 10 or later
-- NTFS volumes (optimized for NTFS; exFAT/FAT32/ReFS have limited support)
+- NTFS volumes are the primary supported target.
+  Other file systems are not the current focus and may have limited or
+  unsupported behavior.
 - Administrator privileges recommended for full MFT scan access
   (non-admin launch is possible but some scan operations may be limited)
 
@@ -80,7 +85,9 @@ Delete / Rename / Cut / Paste are not implemented.
 - **Pre-release**: not a stable production release
 - **Unsigned binary**: may trigger SmartScreen on first run — expected for
   unsigned local tools; do not bypass security controls to run it
-- **NTFS-focused**: behavior on exFAT / FAT32 / ReFS is not fully tested
+- **NTFS-focused**: NTFS is the primary supported target. Other file
+  systems are not the current focus and may have limited or unsupported
+  behavior.
 - **Administrator rights**: full MFT scan requires elevated access
 - **Cleanup classification is path-based heuristic**: Large review /
   Reviewable areas / Caution areas are derived from path patterns, not
@@ -171,7 +178,10 @@ See `docs/security-overview.md` for the full safety posture description.
 
 ## License
 
-TBD.
+TBD before public release.
+
+A license has not been selected yet. This repository should not be treated
+as publicly reusable until a license is chosen and added.
 
 ---
 
