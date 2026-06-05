@@ -3094,6 +3094,7 @@ function App() {
   const [adminWarningDismissed, setAdminWarningDismissed] = useState(false);
   const [treeReviewView, setTreeReviewView] = useState<TreeReviewView>('all');
   const [reviewListItems, setReviewListItems] = useState<ReviewListItem[]>([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // ── Tree focus diagnostics (TREE_FOCUS_DEBUG) ────────────────────────────
   // Always created (cheap). All recording code is behind if(TREE_FOCUS_DEBUG)
@@ -4670,6 +4671,15 @@ function App() {
   }, [driveInput, topN, storagePolicy, directChildrenSortKey, directChildrenSortDir, fontSizePreset, contentWidthPreset]);
 
   useEffect(() => {
+    if (!settingsOpen) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setSettingsOpen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [settingsOpen]);
+
+  useEffect(() => {
     setCleanupRefreshDelta(null);
     setRecycleSuccess(null);
     recycleRefreshPendingRef.current = false;
@@ -5042,6 +5052,13 @@ function App() {
               <span>Advanced Mode</span>
             </label>
             <div className="toolbar-separator" />
+            <button
+              className="btn btn-sm"
+              onClick={() => setSettingsOpen(true)}
+              title="Font size and content width settings"
+            >
+              Settings
+            </button>
             {(import.meta.env.DEV || isTauriRuntime()) && (
               <button
                 className="btn"
@@ -5066,32 +5083,6 @@ function App() {
                 Scan {driveLabel}:
               </button>
             )}
-          </div>
-          <div className="view-controls">
-            <label className="view-ctrl-label">
-              Font
-              <select
-                className="view-ctrl-select"
-                value={fontSizePreset}
-                onChange={(e) => setFontSizePreset(e.target.value as "small" | "medium" | "large")}
-              >
-                <option value="small">Small</option>
-                <option value="medium">Medium</option>
-                <option value="large">Large</option>
-              </select>
-            </label>
-            <label className="view-ctrl-label">
-              Width
-              <select
-                className="view-ctrl-select"
-                value={contentWidthPreset}
-                onChange={(e) => setContentWidthPreset(e.target.value as "standard" | "wide" | "full")}
-              >
-                <option value="standard">Standard</option>
-                <option value="wide">Wide</option>
-                <option value="full">Full</option>
-              </select>
-            </label>
           </div>
           {storagePolicy === "wof_adjusted" && (
             <div
@@ -5536,6 +5527,55 @@ function App() {
             <PerfBreakdown summary={data.summary} invokeMs={scanInvokeMs} />
           )}
         </>
+      )}
+      {settingsOpen && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => setSettingsOpen(false)}
+        >
+          <div
+            className="modal-card settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="settings-modal-title">Settings</h2>
+            <div className="modal-body settings-body">
+              <p className="settings-section-label">View</p>
+              <div className="settings-row">
+                <span className="settings-field-label">Font size</span>
+                <select
+                  className="top-select"
+                  value={fontSizePreset}
+                  onChange={(e) => setFontSizePreset(e.target.value as "small" | "medium" | "large")}
+                >
+                  <option value="small">Small</option>
+                  <option value="medium">Medium</option>
+                  <option value="large">Large</option>
+                </select>
+              </div>
+              <div className="settings-row">
+                <span className="settings-field-label">Content width</span>
+                <select
+                  className="top-select"
+                  value={contentWidthPreset}
+                  onChange={(e) => setContentWidthPreset(e.target.value as "standard" | "wide" | "full")}
+                >
+                  <option value="standard">Standard (1280px)</option>
+                  <option value="wide">Wide (1760px)</option>
+                  <option value="full">Full</option>
+                </select>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn" onClick={() => setSettingsOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {advancedModeWarningOpen && (
         <AdvancedModeWarningModal

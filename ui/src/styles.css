@@ -3072,38 +3072,39 @@ details.insights-section[open] > .insights-summary::before {
   color: #b91c1c;
 }
 
-/* ── View controls (font size + content width presets) ── */
-.view-controls {
+/* ── Settings dialog ── */
+.settings-modal {
+  width: min(380px, 100%);
+}
+
+.settings-modal h2 {
+  color: #17202a;
+}
+
+.settings-body {
+  padding-bottom: 4px;
+}
+
+.settings-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #465563;
+  margin: 4px 0 12px;
+}
+
+.settings-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  justify-content: flex-end;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
 }
 
-.view-ctrl-label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: #5e6b78;
-  white-space: nowrap;
-  cursor: default;
-}
-
-.view-ctrl-select {
-  padding: 3px 6px;
-  border: 1px solid #c5d0db;
-  border-radius: 5px;
-  background: #ffffff;
-  font-size: 12px;
-  cursor: pointer;
-  transition: border-color 0.1s;
-}
-
-.view-ctrl-select:focus {
-  outline: none;
-  border-color: #1a56db;
+.settings-field-label {
+  font-size: 14px;
+  color: #334155;
 }
 
 /* ── Content width presets ── */
