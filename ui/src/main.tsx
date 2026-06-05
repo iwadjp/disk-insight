@@ -267,9 +267,11 @@ const DEMO_BOOKMARKS: Bookmark[] = [
     created_at_unix_ms: 1717200000000, last_seen_at_unix_ms: null,
     last_known_subtree_size: 3221225472, last_known_exists: true },
   { id: "demo-bm-4", kind: "directory", drive_letter: "C", volume_serial: "DEMO-0001",
-    path: "C:\\$Recycle.Bin", path_key: "c:\\$recycle.bin", display_name: "$Recycle.Bin", note: null,
+    path: "C:\\Users\\demo\\AppData\\Local\\Browser\\Cache",
+    path_key: "c:\\users\\demo\\appdata\\local\\browser\\cache",
+    display_name: "Browser Cache", note: null,
     created_at_unix_ms: 1717200000000, last_seen_at_unix_ms: null,
-    last_known_subtree_size: 1610612736, last_known_exists: true },
+    last_known_subtree_size: 1288490189, last_known_exists: true },
 ];
 
 // Public-safe demo review items — pre-populated when demo data loads.
