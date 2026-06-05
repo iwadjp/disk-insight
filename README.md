@@ -1,163 +1,160 @@
 # disk-insight
 
-NTFS disk usage viewer for Windows. Reads the Master File Table (MFT) directly
-for fast, allocation-oriented size analysis and folder-level cleanup decision support.
+A local-first Windows disk usage viewer focused on fast NTFS scanning,
+TreeView-first navigation, and cautious manual cleanup assistance.
 
-**Current status: v0.3.0-safe-viewer milestone (release build, no delete action).**  
-This milestone marks disk-insight as a safe, read-only disk usage viewer.  
-It is not a full WizTree replacement yet. WizTree alternative remains a future goal (v0.4.0+).
+## Status
 
----
-
-## What it can do
-
-- Scan NTFS drives (C:, D:, …) by reading the MFT directly — no full filesystem crawl
-- Show top directories and files by allocated size
-- **Direct children panel**: immediate subdirectories and files for the selected folder,
-  with filter, sort (size / name / type), and drill-down navigation
-- **Breadcrumb / parent row**: navigate up from any subfolder
-- **Right-click context menu** on direct children rows:
-  - DIR: Open folder / Copy path
-  - FILE: Open containing folder / Copy path
-- **Reclaimable estimate** in the selected folder card:
-  - Estimated reclaimable size, range, confidence (High / Medium / Low)
-  - Basis description and caution text
-  - "Not recommended as deletion target" flag for system paths
-- **Scan progress strip** during scan: phase label, elapsed time, and shimmer bar
-- **Folder TreeView** (left pane): lazy expansion into any folder depth
-- Size metric selector:
-  - `Current allocation estimate` (default)
-  - `WOF-adjusted estimate (experimental)`
-- Drive auto-detection via `GetLogicalDrives`; top-N count configurable
-- Session preferences (drive, top-N, metric, sort) via `localStorage`
-- Explorer integration: Open folder, Select file in Explorer, Copy path
-
-## What it cannot do
-
-- **File or folder deletion** — intentionally not implemented
-- Move, rename, or cleanup operations
-- Virtual scroll for large TreeView expansions (safety warning shown when > 200 children)
-- Treemap visualization
-- Drive capacity / free space display
-- Byte-exact size matches with Explorer or WizTree (differences are expected and documented)
+Pre-release. Under active development.
+No official GitHub Release has been published yet.
+Current builds are local dogfooding artifacts only.
+Do not treat current builds as stable production releases.
 
 ---
 
-## Safety
+## Features
 
-disk-insight is a **read-only analysis tool**. It does not:
+- Fast disk usage scanning via direct NTFS MFT read
+- TreeView-first navigation with lazy folder expansion
+- Occupancy bar column (relative size at a glance)
+- View selector: All / Large review / Reviewable areas / Caution areas
+- Bookmarks (persistent across sessions, jump to folder in tree)
+- Review list (session-only staging list, batch copy paths)
+- Explorer handoff: Show in Explorer, Select file, Show properties
+- Insights panel: largest items under selected folder, subtree search
+- Drive auto-detection
+- Size metric selector: Current allocation / WOF-adjusted (experimental)
+- Scan progress indicator with phase labels
+- Advanced Mode gated Move to Recycle Bin (see Safety model below)
 
-- Delete, move, or modify files or directories
-- Claim that any path is "safe to delete"
-- Guarantee exact free-space recovery amounts
-- Recommend manual deletion of Windows system folders
+---
 
-`Reclaimable estimate` is a diagnostic aid — not a deletion guide. For system paths
-(`C:\Windows`, `C:\Program Files`, etc.), confidence is Low or the path is flagged
-"Not recommended as deletion target". Use Windows built-in tools (Disk Cleanup,
-Settings > Storage) and app uninstallation for actual space recovery — not manual
-deletion based on size estimates.
+## Safety model
+
+### Normal Mode (default)
+
+The app starts in Normal Mode on every launch.
+No destructive file operation is shown in Normal Mode.
+
+### Advanced Mode
+
+Advanced Mode is an explicit opt-in for a single session.
+It resets to OFF each time the app is closed — it is non-persistent.
+
+- Requires manual acknowledgement before enabling
+- Unlocks: Move to Recycle Bin
+- Each Move to Recycle Bin action requires per-item confirmation with path,
+  size, and risk warnings shown before proceeding
+
+**Move to Recycle Bin moves items to the Windows Recycle Bin only.**
+**It is not permanent deletion.**
+**Items in the Recycle Bin still occupy disk space until the bin is emptied.**
+
+### Not implemented
+
+Delete / Rename / Cut / Paste are not implemented.
+
+---
+
+## Privacy and network
+
+- No network communication
+- No telemetry or analytics
+- No auto-updater
+- Local-only operation
+- Writes only to `%LOCALAPPDATA%\disk-insight\` (scan cache and bookmarks)
 
 ---
 
 ## Requirements
 
-- Windows 10 / 11
-- NTFS drive (non-NTFS drives are not the current target)
-- **Administrator privileges** required for MFT access  
-  Run the terminal or built `.exe` as Administrator
+- Windows 10 or later
+- NTFS volumes (optimized for NTFS; exFAT/FAT32/ReFS have limited support)
+- Administrator privileges recommended for full MFT scan access
+  (non-admin launch is possible but some scan operations may be limited)
 
 ---
 
-## Performance
+## Known limitations
 
-Use the **release build** to evaluate speed. The dev build includes debug instrumentation
-and can be noticeably slower.
-
-Observed release-build timing (warm cache, this development system):
-
-| Drive | Files | Approx. scan time | WizTree (same system) |
-|-------|-------|-------------------|-----------------------|
-| C: (SSD) | ~1.3 M | ~10 s | ~15 s |
-| D: (HDD) | ~4.5 M | ~54 s | ~51 s |
-
-Actual times depend on drive type, file count, fragmentation, and OS page-cache state.
-Cold-cache scans (first scan after reboot) are slower — C: up to ~20 s, D: up to ~70 s.
-The scan progress strip shows phase label and elapsed time throughout.
-
----
-
-## CLI usage
-
-### Build
-
-```powershell
-cargo build --release
-```
-
-### Run
-
-```powershell
-# Human-readable output
-.\target\release\disk-insight.exe --drive C --top 100
-
-# JSON output
-.\target\release\disk-insight.exe --json --top 100
-
-# Experimental WOF-adjusted policy
-.\target\release\disk-insight.exe --drive C --top 100 --wof-adjusted
-
-# Phase-level timing breakdown
-.\target\release\disk-insight.exe --drive C --top 100 --perf-model
-
-# Per-path diagnostic with reclaimable estimate
-.\target\release\disk-insight.exe --diag-path "C:\Users"
-.\target\release\disk-insight.exe --diag-path "C:\Program Files"
-
-# Help
-.\target\release\disk-insight.exe --help
-```
-
-`--wof-adjusted` is experimental. Default output remains unchanged. It does not
-include hardlink, WinSxS/component-store, or cluster deduplication.
-
-### Save JSON output
-
-PowerShell `>` may write UTF-16LE; use `cmd /c` for reliable UTF-8 output:
-
-```powershell
-cmd /c ".\target\release\disk-insight.exe --json --top 100 > .\work\output.json"
-```
-
-Validate:
-
-```powershell
-python -m json.tool .\work\output.json > $null
-```
+- **Pre-release**: not a stable production release
+- **Unsigned binary**: may trigger SmartScreen on first run — expected for
+  unsigned local tools; do not bypass security controls to run it
+- **NTFS-focused**: behavior on exFAT / FAT32 / ReFS is not fully tested
+- **Administrator rights**: full MFT scan requires elevated access
+- **Cleanup classification is path-based heuristic**: Large review /
+  Reviewable areas / Caution areas are derived from path patterns, not
+  content analysis — they are starting points for manual review, not
+  recommendations to delete anything
+- **Large review uses top scan results**: only shows items present in the
+  Top-N scan results, not all files on the drive
+- **Reviewable / Caution areas use loaded tree rows**: only items that have
+  been expanded in the current session are included
+- **No automatic cleanup**: the app does not delete, move, or modify files
+  automatically
+- **No move-to-folder**: only Move to Recycle Bin (Advanced Mode required)
+- **No multi-select file operations**: single-item Recycle Bin move only
+- **No full shell context menu**: right-click shows app-defined options,
+  not the Windows Explorer shell menu
+- **No dark mode**: light theme only in current release
+- **Size estimates**: values are allocation-oriented estimates and may differ
+  from Explorer "Size" or other tools — differences are expected and bounded
 
 ---
 
-## Tauri desktop UI
+## Build
 
-### Development mode (hot reload)
+### Prerequisites
+
+- [Rust](https://www.rust-lang.org/) with MSVC toolchain
+- [Node.js](https://nodejs.org/)
+- [Tauri v2 prerequisites](https://v2.tauri.app/start/prerequisites/)
+  (WebView2 runtime, Visual Studio build tools)
+- Windows 10 or later
+
+### Desktop UI
 
 ```powershell
-npm install        # first time only
-npm run tauri dev  # run as Administrator for live MFT scan
-```
+# Install Node dependencies (first time)
+npm install
 
-In dev mode, sample data loads on startup and "Load sample" is available in the toolbar.
+# Development mode (hot reload, sample data loads on startup)
+npm run tauri dev
 
-### Production build
-
-```powershell
+# Production build
 npm run tauri build
 # Output: src-tauri\target\release\disk-insight-ui.exe
 ```
 
-Run the built `.exe` as Administrator to enable live scan.
+Run the built `.exe` as Administrator for full MFT scan access.
+In release mode, the app starts with an empty state — select a drive and
+click **Scan** to begin.
 
-In release mode, the app starts with an empty state. Select a drive and click **Scan** to begin.
+### CLI (secondary)
+
+```powershell
+cargo build --release
+.\target\release\disk-insight.exe --drive C --top 100
+.\target\release\disk-insight.exe --help
+```
+
+---
+
+## Screenshots
+
+TBD before public release.
+
+---
+
+## Company PC use
+
+For use on a company PC, follow your organization's policy for unsigned
+local tools.
+Do not bypass Defender, EDR, AppLocker, SmartScreen, or other security
+controls.
+Use the default Normal Mode. Do not enable Advanced Mode on a company PC.
+
+See `docs/security-overview.md` for the full safety posture description.
 
 ---
 
@@ -165,117 +162,22 @@ In release mode, the app starts with an empty state. Select a drive and click **
 
 | File | Description |
 |------|-------------|
-| `docs/runbook.md` | Developer verification steps and v0.3.0 pre-tag checklist |
-| `docs/json-output-schema.md` | JSON output field reference and API boundary notes |
-| `docs/ui-plan.md` | UI implementation history and remaining task list |
-| `docs/reclaimable-size-model.md` | Reclaimable estimate design and confidence model |
-| `docs/size-accuracy-review.md` | Explorer / WizTree / disk-insight size comparison |
-| `docs/scan-speed-cold-cache-plan.md` | Scan performance investigation notes |
-| `CLAUDE.md` | Project conventions and AI usage guidelines |
+| `docs/security-overview.md` | Full safety posture (Normal + Advanced model) |
+| `docs/company-pc-dogfooding-checklist.md` | Go/No-Go checklist for company PC use |
+| `docs/company-safe-build.md` | Company-PC dogfooding package build notes |
+| `docs/v0.6.0-public-readiness-plan.md` | Public readiness checklist and phase plan |
 
 ---
 
-## Size policy
+## License
 
-disk-insight offers two storage policies selectable in the toolbar:
-
-| Policy | Description |
-|--------|-------------|
-| `Current allocation estimate` (default) | NTFS allocation-oriented estimate. Close to Explorer "Size on disk" for normal files. WOF-compressed areas (Edge, Office, Windows) can show higher than WizTree Allocated. |
-| `WOF-adjusted estimate (experimental)` | WOF-compressed files use the compressed backing stream size. Often closer to WizTree "Allocated" for Program Files. Does not apply hardlink or WinSxS dedup. |
-
-Size values are **estimates**. Neither policy produces byte-exact matches with Explorer
-or WizTree — differences are expected, bounded, and documented by path type.
-See `docs/size-accuracy-review.md`.
-
-The diagnostic CLI can explain a specific path:
-
-```powershell
-.\target\release\disk-insight.exe --diag-path "C:\Program Files"
-```
-
-`--diag-path` reports current vs WOF-adjusted estimates, WOF/hardlink/reparse evidence,
-top child directories, and a `Reclaimable estimate` with confidence and caution text.
-It is an explanation aid, not a normal-output correction.
+TBD.
 
 ---
 
-## Known limitations
+## Disclaimer
 
-| Area | Notes |
-|------|-------|
-| WinSxS | Hard-linked files counted per directory entry; hardlink dedup not implemented. Total is a reference value, not exact. |
-| WOF | `current` policy: compressed files report projected (uncompressed) allocation — higher than WizTree. `wof_adjusted` uses compressed size. |
-| Hard links | Files with `link_count > 1` may count in multiple parent paths. |
-| Non-NTFS | FAT32, exFAT, ReFS are not the current target. |
-| Accuracy | Size totals differ from WizTree/Explorer. Differences are bounded and documented, not unknown. |
-| Virtual scroll | Not implemented. Safety warning shown when a folder has > 200 children. |
-| Cold-cache speed | First scan after boot is slower (MFT not in OS page cache). Progress strip shows elapsed time. |
-
-The goal is to identify large directories and files for manual review — not to produce
-byte-exact matches with any other tool.
-
----
-
-## Current milestone
-
-**Minimal usable milestone — PASS (2026-05-24).** Tagged as `v0.1.0-minimal`.
-
-**Next-phase milestone: Explorer-style TreeView — PASS (2026-05-25).** Tag candidate: `v0.2.0-treeview-wof`.
-
-**v0.3.0-safe-viewer milestone — in preparation.**
-
-Focus: safe read-only disk usage inspection, delete-free, reclaimable estimate aid.  
-This is not a full WizTree replacement. WizTree alternative remains a goal for v0.4.0+.
-
-Primary value at this milestone:
-- Delete-free safety (no accidental destructive operations)
-- Reclaimable estimate with confidence / caution — aids inspection decisions without claiming exactness
-- Direct children navigation, filter, sort, breadcrumb
-- Context menu, Explorer integration
-- Useful as a license-safe read-only fallback in work environments where WizTree is not available
-
-- [x] K-2b/K-2c Scan progress strip (phase label, elapsed time, shimmer bar)
-- [x] N-2b–N-2e Reclaimable estimate UI in selected folder card
-- [x] J-2/J-2b/J-3/J-5/J-5b Direct children panel (filter, sort, drill-down, breadcrumb)
-- [x] J-4 Session preferences (localStorage)
-- [x] P-0 Right-click context menu on direct children rows
-- [x] P-1a/P-1b/P-1c UI polish (hover actions, reclaimable clamp, compact header)
-- [x] P-2/P-2b/P-2c Release UI: no sample demo, empty state startup, progress strip regression fix
-- [x] G-2 Toolbar polish (size metric select width)
-- [x] H-2/H-3 Docs update and milestone judgment
-- [x] V-2 Tag name and positioning ← current
-- [ ] V-3 Final pre-tag check (release build verification)
-- [ ] Tag: `v0.3.0-safe-viewer`
-
----
-
-## Future direction
-
-v0.4.0 target: move closer to a WizTree alternative candidate.
-
-- Faster scan / virtual scroll for large drives
-- Tighter size accuracy (hardlink dedup, WinSxS correction)
-- Broader daily-use navigation (keyboard shortcuts, expand-to-path)
-
-v0.3.0 is a safe-viewer milestone, not a WizTree replacement — that goal is explicitly deferred but not abandoned.
-
----
-
-## Publication status
-
-Public release is deferred. Current state is usable for personal disk analysis.
-No delete action is implemented.
-
----
-
-## Deferred
-
-| Feature | Notes |
-|---------|-------|
-| Virtual scroll | @tanstack/react-virtual — after TreeView polish |
-| Treemap visualization | Proportional rectangle view of disk usage |
-| Drive NTFS detection | Non-NTFS drives fail at scan time; detection is future work |
-| WinSxS / hard link dedup | Avoid double-counting hard-linked files |
-| Delete action | Requires safety design (confirmation, recycle bin, undo) — intentionally deferred |
-| Global file search | Full-text or name-search across all scanned files |
+This is pre-release software provided for local use and evaluation.
+It is not a stable production release.
+No warranty is provided.
+Size estimates are diagnostic aids, not guarantees of exact space recovery.
