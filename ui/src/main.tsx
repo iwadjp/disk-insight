@@ -232,7 +232,6 @@ type TreeStateSnapshot = {
   drive: string;
   volumeSerial: string | null;
   selectedPath: string | null;
-  expandedPaths: string[];
   focusedPath: string | null;
 };
 
@@ -298,7 +297,6 @@ const LARGE_FOLDER_THRESHOLD = 200;
 const LARGE_TREE_THRESHOLD = 1000;
 const DIRECT_CHILDREN_DISPLAY_LIMIT = 300;
 const TREE_EXPAND_LIMIT = 300;
-const RESTORE_EXPANDED_PATH_LIMIT = 30;
 const PREF_KEY = "disk-insight.preferences.v1";
 
 // Performance instrumentation — set to true to enable, false for normal use
@@ -3684,31 +3682,35 @@ function App() {
       selectedDir && data
         ? { path: selectedDir.path, drive: data.summary.drive }
         : null;
-    // Snapshot expanded paths for best-effort restore after live scan result.
+    // Snapshot focused/selected paths for best-effort restore after live scan result.
     // Only saved when there is existing data (i.e. this is a refresh, not initial scan).
-    if (data && expandedIds.size > 0) {
-      const pathMap = new Map<number, string>();
-      for (const node of data.root_children ?? []) {
-        pathMap.set(node.record_index, node.path);
-      }
-      for (const nodes of Object.values(childrenByParent)) {
-        for (const node of nodes) {
-          pathMap.set(node.record_index, node.path);
+    if (data && (selectedDir || focusedRecordIndex !== null)) {
+      let focusedPath: string | null = null;
+      if (focusedRecordIndex !== null) {
+        if (selectedDir && focusedRecordIndex === selectedDir.record_index) {
+          focusedPath = selectedDir.path;
+        } else {
+          // Linear search through already-loaded nodes (cheap).
+          let found = false;
+          for (const node of data.root_children ?? []) {
+            if (node.record_index === focusedRecordIndex) { focusedPath = node.path; found = true; break; }
+          }
+          if (!found) {
+            outer: for (const nodes of Object.values(childrenByParent)) {
+              for (const node of nodes) {
+                if (node.record_index === focusedRecordIndex) { focusedPath = node.path; break outer; }
+              }
+            }
+          }
         }
       }
-      const expandedPaths: string[] = [];
-      for (const id of expandedIds) {
-        const p = pathMap.get(id);
-        if (p) expandedPaths.push(p);
-        if (expandedPaths.length >= RESTORE_EXPANDED_PATH_LIMIT) break;
-      }
-      treeStateSnapshotRef.current = {
+      const targetPath = focusedPath ?? selectedDir?.path ?? null;
+      treeStateSnapshotRef.current = targetPath ? {
         drive: data.summary.drive,
         volumeSerial: data.summary.volume_serial ?? null,
         selectedPath: selectedDir?.path ?? null,
-        expandedPaths,
-        focusedPath: focusedRecordIndex !== null ? (pathMap.get(focusedRecordIndex) ?? null) : null,
-      };
+        focusedPath,
+      } : null;
     } else {
       treeStateSnapshotRef.current = null;
     }
@@ -4642,15 +4644,30 @@ function App() {
   ): Promise<void> {
     if (snapshot.drive !== `${drive}:`) return;
     const volumeSerial = json.summary.volume_serial ?? snapshot.volumeSerial ?? undefined;
+    const targetPath = snapshot.focusedPath ?? snapshot.selectedPath;
+    if (!targetPath) return;
+
+    let result: ResolvePathResult;
+    try {
+      result = await invoke<ResolvePathResult>("resolve_path_chain", {
+        path: targetPath,
+        volumeSerial,
+      });
+    } catch {
+      return;
+    }
+    if (scanGenerationRef.current !== generation) return;
+    if (result.status !== "found" || !result.target) return;
+
+    const target = result.target;
+    // Expand only ancestors (chain without target itself), so the target row is
+    // visible but its children are not auto-expanded.
+    const ancestorFrns = result.chain.slice(0, -1);
 
     const newCBP: Record<number, TreeNode[]> = {};
     const newTEC: Record<number, number> = {};
-    const newExpandedIds = new Set<number>();
-    const fetched = new Set<number>();
-
-    async function fetchChildren(frn: number): Promise<void> {
-      if (fetched.has(frn)) return;
-      fetched.add(frn);
+    for (const frn of ancestorFrns) {
+      if (scanGenerationRef.current !== generation) return;
       try {
         const r = await invoke<ChildrenLimitedResult>("get_children_limited", {
           parentRecordIndex: frn,
@@ -4663,29 +4680,9 @@ function App() {
       }
     }
 
-    // Restore expanded paths: expand the full ancestor chain for each saved path.
-    for (const path of snapshot.expandedPaths) {
-      if (scanGenerationRef.current !== generation) return;
-      try {
-        const result = await invoke<ResolvePathResult>("resolve_path_chain", {
-          path,
-          volumeSerial,
-        });
-        if (result.status !== "found" || !result.target?.is_directory) continue;
-        for (const frn of result.chain) {
-          newExpandedIds.add(frn);
-          await fetchChildren(frn);
-          if (scanGenerationRef.current !== generation) return;
-        }
-      } catch {
-        // skip this path
-      }
-    }
-
     if (scanGenerationRef.current !== generation) return;
 
-    // Apply expanded state in batch.
-    if (newExpandedIds.size > 0) {
+    if (ancestorFrns.length > 0) {
       if (Object.keys(newCBP).length > 0) {
         setChildrenByParent((prev) => ({ ...prev, ...newCBP }));
         if (Object.keys(newTEC).length > 0) {
@@ -4694,43 +4691,15 @@ function App() {
       }
       setExpandedIds((prev) => {
         const next = new Set(prev);
-        for (const id of newExpandedIds) next.add(id);
+        for (const frn of ancestorFrns) next.add(frn);
         return next;
       });
     }
 
-    // Restore selected dir (handles deeper paths the sync fast-path can't reach).
-    if (snapshot.selectedPath) {
-      try {
-        const result = await invoke<ResolvePathResult>("resolve_path_chain", {
-          path: snapshot.selectedPath,
-          volumeSerial,
-        });
-        if (scanGenerationRef.current !== generation) return;
-        if (result.status === "found" && result.target?.is_directory) {
-          setSelectedDir(treeNodeToDirEntry(result.target));
-          setFocusedRecordIndex(result.target.record_index);
-        }
-      } catch {
-        // keep whatever selectedDir the sync path set
-      }
+    if (target.is_directory) {
+      setSelectedDir(treeNodeToDirEntry(target));
     }
-
-    // Restore focused node if different from selected dir.
-    if (snapshot.focusedPath && snapshot.focusedPath !== snapshot.selectedPath) {
-      try {
-        const result = await invoke<ResolvePathResult>("resolve_path_chain", {
-          path: snapshot.focusedPath,
-          volumeSerial,
-        });
-        if (scanGenerationRef.current !== generation) return;
-        if (result.status === "found" && result.target) {
-          setFocusedRecordIndex(result.target.record_index);
-        }
-      } catch {
-        // skip
-      }
-    }
+    setFocusedRecordIndex(target.record_index);
   }
 
   function handleAdvancedModeToggle(e: React.ChangeEvent<HTMLInputElement>) {
