@@ -4951,15 +4951,15 @@ function App() {
               <span>Advanced Mode</span>
             </label>
             <div className="toolbar-separator" />
-            {import.meta.env.DEV && (
+            {(import.meta.env.DEV || isTauriRuntime()) && (
               <button
                 className="btn"
                 onClick={() =>
-                  runLoad(loadSampleData, "Loading sample data...", false, "sample")
+                  runLoad(loadSampleData, "Loading demo data...", false, "sample")
                 }
                 disabled={isLoading}
               >
-                Load sample
+                Load demo
               </button>
             )}
             {isLoading && scanStartMsRef.current !== null ? (
