@@ -841,14 +841,14 @@ tbody tr:last-child td {
 }
 
 .advanced-mode-banner {
-  padding: 10px 14px;
-  margin-bottom: 14px;
+  padding: 4px 12px;
+  margin-bottom: 8px;
   border: 1px solid #fca5a5;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #fef2f2;
   color: #991b1b;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .toolbar-separator {
@@ -1310,10 +1310,10 @@ tbody tr:last-child td {
 
 .review-list-empty {
   margin: 0;
-  padding: 10px 12px;
+  padding: 5px 12px 7px;
   font-size: 11px;
   color: #5e6b78;
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .review-list-items {
