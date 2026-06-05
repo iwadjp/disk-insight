@@ -334,6 +334,8 @@ type AppPreferences = {
   storagePolicy?: string;
   directChildrenSortKey?: DirectChildrenSortKey;
   directChildrenSortDirection?: SortDirection;
+  fontSizePreset?: "small" | "medium" | "large";
+  contentWidthPreset?: "standard" | "wide" | "full";
 };
 
 function loadPreferences(): AppPreferences {
@@ -3040,6 +3042,20 @@ function App() {
   const [directChildrenSortDir, setDirectChildrenSortDir] = useState<SortDirection>(
     _initialPrefs.directChildrenSortDirection === "asc" ? "asc" : "desc",
   );
+  const [fontSizePreset, setFontSizePreset] = useState<"small" | "medium" | "large">(
+    (["small", "medium", "large"] as Array<"small" | "medium" | "large">).includes(
+      _initialPrefs.fontSizePreset as "small" | "medium" | "large",
+    )
+      ? (_initialPrefs.fontSizePreset as "small" | "medium" | "large")
+      : "medium",
+  );
+  const [contentWidthPreset, setContentWidthPreset] = useState<"standard" | "wide" | "full">(
+    (["standard", "wide", "full"] as Array<"standard" | "wide" | "full">).includes(
+      _initialPrefs.contentWidthPreset as "standard" | "wide" | "full",
+    )
+      ? (_initialPrefs.contentWidthPreset as "standard" | "wide" | "full")
+      : "wide",
+  );
   const [selectedDir, setSelectedDir] = useState<DirectoryEntry | undefined>(undefined);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
@@ -4648,8 +4664,10 @@ function App() {
       storagePolicy,
       directChildrenSortKey,
       directChildrenSortDirection: directChildrenSortDir,
+      fontSizePreset,
+      contentWidthPreset,
     });
-  }, [driveInput, topN, storagePolicy, directChildrenSortKey, directChildrenSortDir]);
+  }, [driveInput, topN, storagePolicy, directChildrenSortKey, directChildrenSortDir, fontSizePreset, contentWidthPreset]);
 
   useEffect(() => {
     setCleanupRefreshDelta(null);
@@ -4967,7 +4985,7 @@ function App() {
       : null;
 
   return (
-    <main className="app">
+    <main className="app" data-font-size={fontSizePreset} data-content-width={contentWidthPreset}>
       <header className="app-header">
         <h1>disk-insight</h1>
         <div className="toolbar-group">
@@ -5048,6 +5066,32 @@ function App() {
                 Scan {driveLabel}:
               </button>
             )}
+          </div>
+          <div className="view-controls">
+            <label className="view-ctrl-label">
+              Font
+              <select
+                className="view-ctrl-select"
+                value={fontSizePreset}
+                onChange={(e) => setFontSizePreset(e.target.value as "small" | "medium" | "large")}
+              >
+                <option value="small">Small</option>
+                <option value="medium">Medium</option>
+                <option value="large">Large</option>
+              </select>
+            </label>
+            <label className="view-ctrl-label">
+              Width
+              <select
+                className="view-ctrl-select"
+                value={contentWidthPreset}
+                onChange={(e) => setContentWidthPreset(e.target.value as "standard" | "wide" | "full")}
+              >
+                <option value="standard">Standard</option>
+                <option value="wide">Wide</option>
+                <option value="full">Full</option>
+              </select>
+            </label>
           </div>
           {storagePolicy === "wof_adjusted" && (
             <div
