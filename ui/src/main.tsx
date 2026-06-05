@@ -4635,7 +4635,8 @@ function App() {
   // ── Tree state restore after refresh scan ───────────────────────────────
   // Runs after the live scan result arrives. Resolves saved paths to new
   // record_indices using resolve_path_chain, then re-expands and re-selects.
-  // Aborts if a new scan starts (generation mismatch). All failures are silent.
+  // If the saved path is missing (deleted/moved), walks up to the nearest
+  // existing parent folder. Aborts on generation mismatch; all errors silent.
   async function restoreTreeSnapshot(
     json: DiskInsightOutput,
     snapshot: TreeStateSnapshot,
@@ -4647,22 +4648,31 @@ function App() {
     const targetPath = snapshot.focusedPath ?? snapshot.selectedPath;
     if (!targetPath) return;
 
-    let result: ResolvePathResult;
-    try {
-      result = await invoke<ResolvePathResult>("resolve_path_chain", {
-        path: targetPath,
-        volumeSerial,
-      });
-    } catch {
-      return;
+    // Walk up toward drive root until a path resolves, or give up at drive root.
+    let resolveResult: ResolvePathResult | null = null;
+    let resolvedPath = targetPath;
+    while (!isDriveRoot(resolvedPath)) {
+      if (scanGenerationRef.current !== generation) return;
+      try {
+        const r = await invoke<ResolvePathResult>("resolve_path_chain", {
+          path: resolvedPath,
+          volumeSerial,
+        });
+        if (r.status === "found") { resolveResult = r; break; }
+        if (r.status !== "missing") break; // unavailable — don't walk further
+      } catch {
+        break;
+      }
+      resolvedPath = getParentDir(resolvedPath);
     }
-    if (scanGenerationRef.current !== generation) return;
-    if (result.status !== "found" || !result.target) return;
 
-    const target = result.target;
+    if (!resolveResult || !resolveResult.target) return;
+    if (scanGenerationRef.current !== generation) return;
+
+    const target = resolveResult.target;
     // Expand only ancestors (chain without target itself), so the target row is
     // visible but its children are not auto-expanded.
-    const ancestorFrns = result.chain.slice(0, -1);
+    const ancestorFrns = resolveResult.chain.slice(0, -1);
 
     const newCBP: Record<number, TreeNode[]> = {};
     const newTEC: Record<number, number> = {};
