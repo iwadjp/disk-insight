@@ -52,6 +52,10 @@ $branch      = git rev-parse --abbrev-ref HEAD
 Write-Host "Commit : $commitHash"
 Write-Host "Short  : $commitShort"
 Write-Host "Branch : $branch"
+
+$tauriConf = Get-Content (Join-Path $projectRoot "src-tauri\tauri.conf.json") -Raw | ConvertFrom-Json
+$appVersion = $tauriConf.version
+Write-Host "Version: $appVersion"
 Write-Host ""
 
 # ── 2. Debug flag check (ui/src/main.tsx) ─────────────────────────────────────
@@ -217,6 +221,7 @@ disk-insight - Build Information
 =================================
 App name      : disk-insight
 Product name  : disk-insight-ui.exe
+Version       : $appVersion
 Build time    : $buildTime
 Commit (full) : $commitHash
 Commit (short): $commitShort

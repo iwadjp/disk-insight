@@ -6,6 +6,7 @@ TreeView-first navigation, and cautious manual cleanup assistance.
 ## Status
 
 Pre-release. Under active development.
+Current development target: v0.6.0 public readiness.
 No official GitHub Release has been published yet.
 Current builds are local dogfooding artifacts only.
 Do not treat current builds as stable production releases.
