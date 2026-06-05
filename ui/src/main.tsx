@@ -250,6 +250,38 @@ type Bookmark = {
 };
 
 const TOP_OPTIONS = [10, 30, 50, 100, 200, 500];
+
+// Public-safe demo bookmarks — shown only when sourceKind === 'sample'.
+// These never touch bookmarks.json.
+const DEMO_BOOKMARKS: Bookmark[] = [
+  { id: "demo-bm-1", kind: "directory", drive_letter: "C", volume_serial: "DEMO-0001",
+    path: "C:\\Projects", path_key: "c:\\projects", display_name: "Projects", note: null,
+    created_at_unix_ms: 1717200000000, last_seen_at_unix_ms: null,
+    last_known_subtree_size: 53687091200, last_known_exists: true },
+  { id: "demo-bm-2", kind: "directory", drive_letter: "C", volume_serial: "DEMO-0001",
+    path: "C:\\VMs", path_key: "c:\\vms", display_name: "VMs", note: null,
+    created_at_unix_ms: 1717200000000, last_seen_at_unix_ms: null,
+    last_known_subtree_size: 96636764160, last_known_exists: true },
+  { id: "demo-bm-3", kind: "directory", drive_letter: "C", volume_serial: "DEMO-0001",
+    path: "C:\\Temp", path_key: "c:\\temp", display_name: "Temp", note: null,
+    created_at_unix_ms: 1717200000000, last_seen_at_unix_ms: null,
+    last_known_subtree_size: 3221225472, last_known_exists: true },
+  { id: "demo-bm-4", kind: "directory", drive_letter: "C", volume_serial: "DEMO-0001",
+    path: "C:\\$Recycle.Bin", path_key: "c:\\$recycle.bin", display_name: "$Recycle.Bin", note: null,
+    created_at_unix_ms: 1717200000000, last_seen_at_unix_ms: null,
+    last_known_subtree_size: 1610612736, last_known_exists: true },
+];
+
+// Public-safe demo review items — pre-populated when demo data loads.
+const DEMO_REVIEW_ITEMS: ReviewListItem[] = [
+  { path: "C:\\Projects\\demo-app\\node_modules", name: "node_modules",
+    parentPath: "C:\\Projects\\demo-app", isDirectory: true, sizeBytes: 2684354560,
+    recordIndex: 311, category: "Dev dependency", source: 'large-review', addedAt: 1717200000000 },
+  { path: "C:\\Users\\demo\\AppData\\Local\\Browser\\Cache", name: "Cache",
+    parentPath: "C:\\Users\\demo\\AppData\\Local\\Browser", isDirectory: true, sizeBytes: 1288490189,
+    recordIndex: 222, category: "Cache candidate", source: 'large-review', addedAt: 1717200000001 },
+];
+
 const TREE_REVIEW_CATS  = new Set(['temp-candidate', 'cache-candidate', 'dev-dependency', 'recycle-bin']);
 const TREE_CAUTION_CATS = new Set(['protected-system', 'app-managed']);
 const LARGE_FOLDER_THRESHOLD = 200;
@@ -3037,6 +3069,7 @@ function App() {
   const [handoffNotice, setHandoffNotice] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const [demoBookmarks, setDemoBookmarks] = useState<Bookmark[]>([]);
   const [bookmarkJumpStates, setBookmarkJumpStates] = useState<Record<string, BookmarkJumpState>>({});
   const [bookmarkUndoNotice, setBookmarkUndoNotice] = useState<{ displayName: string; bookmark: Bookmark } | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
@@ -3566,6 +3599,12 @@ function App() {
         }
         setData(json);
         setSourceKind(kind);
+        if (kind === 'sample') {
+          setDemoBookmarks(DEMO_BOOKMARKS);
+          setReviewListItems(DEMO_REVIEW_ITEMS);
+        } else {
+          setDemoBookmarks([]);
+        }
         setUnsupportedDriveCapacity(null);
         setLastUpdated(new Date());
         if (usedTopN !== undefined) setScanTopN(usedTopN);
@@ -3641,6 +3680,7 @@ function App() {
       if (cached) {
         setData(cached.output);
         setSourceKind("cached");
+        setDemoBookmarks([]);
         setLastUpdated(new Date(cached.created_at_unix_ms));
         setScanTopN(top);
         const cacheRestore = scanRestoreRef.current;
@@ -3703,6 +3743,7 @@ function App() {
       }
       setData(json);
       setSourceKind("live");
+      setDemoBookmarks([]);
       setUnsupportedDriveCapacity(null);
       setLastUpdated(new Date());
       setScanTopN(top);
@@ -4041,7 +4082,12 @@ function App() {
 
   function isBookmarked(path: string): boolean {
     const key = bookmarkPathKey(path);
+    if (sourceKind === 'sample') return demoBookmarks.some((b) => b.path_key === key);
     return bookmarks.some((b) => b.path_key === key);
+  }
+
+  function handleRemoveDemoBookmark(id: string) {
+    setDemoBookmarks((prev) => prev.filter((b) => b.id !== id));
   }
 
   function handleAddBookmark(path: string, isDirectory: boolean) {
@@ -4117,6 +4163,7 @@ function App() {
   }
 
   function handleToggleBookmark(path: string, isDirectory: boolean) {
+    if (sourceKind === 'sample') return; // no-op in demo mode
     if (isBookmarked(path)) {
       handleRemoveBookmarkByPath(path);
     } else {
@@ -4174,6 +4221,30 @@ function App() {
     if (!isTauriRuntime()) return;
     if (TREE_FOCUS_DEBUG) {
       recordFocusEvent({ kind: "bookmarkJump", focusedRI: focusedRecordIndex, note: `id=${bookmark.id} path=${bookmark.path}` });
+    }
+
+    // Demo mode: resolve against root_children directly (no real scan in memory).
+    if (sourceKind === 'sample') {
+      if (!data) return;
+      const found = (data.root_children ?? []).find(
+        (n) => n.path.toLowerCase() === bookmark.path_key,
+      );
+      if (found) {
+        if (found.is_directory) { setSelectedDir(treeNodeToDirEntry(found)); setTreeError(null); }
+        setFocusedRecordIndex(found.record_index);
+        jumpScrollFrnRef.current = found.record_index;
+        setJumpScrollTick((n) => n + 1);
+        setBookmarkJumpStates((prev) => ({
+          ...prev,
+          [bookmark.id]: { status: "found", sizeBytes: found.subtree_size },
+        }));
+      } else {
+        setBookmarkJumpStates((prev) => ({
+          ...prev,
+          [bookmark.id]: { status: "missing", message: "Not in demo tree" },
+        }));
+      }
+      return;
     }
 
     // Cross-drive check: if bookmark is on a different volume than current scan,
@@ -5256,19 +5327,19 @@ function App() {
               )}
               {/* v0.5.9-A/C: Filter input hidden. State (currentFilterQuery) preserved. */}
               {/* v0.5.9-A/C: DirectChildrenPanel not in default display. State preserved. */}
-              {bookmarks.length > 0 && (
+              {(sourceKind === 'sample' ? demoBookmarks : bookmarks).length > 0 && (
                 <BookmarksBar
-                  bookmarks={bookmarks}
+                  bookmarks={sourceKind === 'sample' ? demoBookmarks : bookmarks}
                   jumpStates={bookmarkJumpStates}
                   onJump={handleJumpToBookmark}
-                  onRemove={handleRemoveBookmarkById}
+                  onRemove={sourceKind === 'sample' ? handleRemoveDemoBookmark : handleRemoveBookmarkById}
                   currentVolumeSerial={data?.summary?.volume_serial ?? null}
                   totalSize={data?.summary?.total_final_allocated ?? 0}
                   onOpenExplorer={handleOpenExplorer}
                   onSelectFile={handleSelectFile}
                   onCopyError={handleCopyError}
                   isInReviewList={isInReviewList}
-                  onToggleReviewList={handleToggleReviewList}
+                  onToggleReviewList={sourceKind === 'sample' ? undefined : handleToggleReviewList}
                 />
               )}
               <ReviewListPanel
