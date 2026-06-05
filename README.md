@@ -179,10 +179,9 @@ See `docs/security-overview.md` for the full safety posture description.
 
 ## License
 
-TBD before public release.
+This project is licensed under the MIT License.
 
-A license has not been selected yet. This repository should not be treated
-as publicly reusable until a license is chosen and added.
+See [LICENSE](LICENSE).
 
 ---
 
