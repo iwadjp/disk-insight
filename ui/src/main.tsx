@@ -228,6 +228,14 @@ type ResolvePathResult = {
   message: string | null;
 };
 
+type TreeStateSnapshot = {
+  drive: string;
+  volumeSerial: string | null;
+  selectedPath: string | null;
+  expandedPaths: string[];
+  focusedPath: string | null;
+};
+
 type BookmarkJumpState = {
   status: "jumping" | "found" | "missing" | "unavailable" | "outside300" | "other_drive";
   message?: string;
@@ -290,6 +298,7 @@ const LARGE_FOLDER_THRESHOLD = 200;
 const LARGE_TREE_THRESHOLD = 1000;
 const DIRECT_CHILDREN_DISPLAY_LIMIT = 300;
 const TREE_EXPAND_LIMIT = 300;
+const RESTORE_EXPANDED_PATH_LIMIT = 30;
 const PREF_KEY = "disk-insight.preferences.v1";
 
 // Performance instrumentation — set to true to enable, false for normal use
@@ -3171,6 +3180,7 @@ function App() {
   const jumpScrollFrnRef = useRef<number | null>(null);
   const [jumpScrollTick, setJumpScrollTick] = useState(0);
   const scanRestoreRef = useRef<{ path: string; drive: string } | null>(null);
+  const treeStateSnapshotRef = useRef<TreeStateSnapshot | null>(null);
   const scanGenerationRef = useRef(0);
   const cancelMessageTimerRef = useRef<number | null>(null);
   const recycleRefreshPendingRef = useRef(false);
@@ -3674,6 +3684,34 @@ function App() {
       selectedDir && data
         ? { path: selectedDir.path, drive: data.summary.drive }
         : null;
+    // Snapshot expanded paths for best-effort restore after live scan result.
+    // Only saved when there is existing data (i.e. this is a refresh, not initial scan).
+    if (data && expandedIds.size > 0) {
+      const pathMap = new Map<number, string>();
+      for (const node of data.root_children ?? []) {
+        pathMap.set(node.record_index, node.path);
+      }
+      for (const nodes of Object.values(childrenByParent)) {
+        for (const node of nodes) {
+          pathMap.set(node.record_index, node.path);
+        }
+      }
+      const expandedPaths: string[] = [];
+      for (const id of expandedIds) {
+        const p = pathMap.get(id);
+        if (p) expandedPaths.push(p);
+        if (expandedPaths.length >= RESTORE_EXPANDED_PATH_LIMIT) break;
+      }
+      treeStateSnapshotRef.current = {
+        drive: data.summary.drive,
+        volumeSerial: data.summary.volume_serial ?? null,
+        selectedPath: selectedDir?.path ?? null,
+        expandedPaths,
+        focusedPath: focusedRecordIndex !== null ? (pathMap.get(focusedRecordIndex) ?? null) : null,
+      };
+    } else {
+      treeStateSnapshotRef.current = null;
+    }
     setExpandedIds(new Set());
     setLoadingIds(new Set());
     setChildrenByParent({});
@@ -3782,6 +3820,12 @@ function App() {
       showUpdatedBanner();
       console.log(`[perf-ui] setData called  t+${(performance.now() - t0).toFixed(0)} ms`);
       setIsLoading(false);
+      // Restore expanded tree state in the background (best effort).
+      const treeSnapshot = treeStateSnapshotRef.current;
+      treeStateSnapshotRef.current = null;
+      if (treeSnapshot && isTauriRuntime()) {
+        void restoreTreeSnapshot(json, treeSnapshot, drive, generation);
+      }
       return true;
     } catch (err: unknown) {
       clearPendingProgressLatch();
@@ -4584,6 +4628,109 @@ function App() {
         console.warn("[cleanup-refresh] after capacity unavailable", err);
       }
     })();
+  }
+
+  // ── Tree state restore after refresh scan ───────────────────────────────
+  // Runs after the live scan result arrives. Resolves saved paths to new
+  // record_indices using resolve_path_chain, then re-expands and re-selects.
+  // Aborts if a new scan starts (generation mismatch). All failures are silent.
+  async function restoreTreeSnapshot(
+    json: DiskInsightOutput,
+    snapshot: TreeStateSnapshot,
+    drive: string,
+    generation: number,
+  ): Promise<void> {
+    if (snapshot.drive !== `${drive}:`) return;
+    const volumeSerial = json.summary.volume_serial ?? snapshot.volumeSerial ?? undefined;
+
+    const newCBP: Record<number, TreeNode[]> = {};
+    const newTEC: Record<number, number> = {};
+    const newExpandedIds = new Set<number>();
+    const fetched = new Set<number>();
+
+    async function fetchChildren(frn: number): Promise<void> {
+      if (fetched.has(frn)) return;
+      fetched.add(frn);
+      try {
+        const r = await invoke<ChildrenLimitedResult>("get_children_limited", {
+          parentRecordIndex: frn,
+          limit: TREE_EXPAND_LIMIT,
+        });
+        newCBP[frn] = r.nodes;
+        if (r.total_count > r.nodes.length) newTEC[frn] = r.total_count;
+      } catch {
+        // skip — level just won't show children
+      }
+    }
+
+    // Restore expanded paths: expand the full ancestor chain for each saved path.
+    for (const path of snapshot.expandedPaths) {
+      if (scanGenerationRef.current !== generation) return;
+      try {
+        const result = await invoke<ResolvePathResult>("resolve_path_chain", {
+          path,
+          volumeSerial,
+        });
+        if (result.status !== "found" || !result.target?.is_directory) continue;
+        for (const frn of result.chain) {
+          newExpandedIds.add(frn);
+          await fetchChildren(frn);
+          if (scanGenerationRef.current !== generation) return;
+        }
+      } catch {
+        // skip this path
+      }
+    }
+
+    if (scanGenerationRef.current !== generation) return;
+
+    // Apply expanded state in batch.
+    if (newExpandedIds.size > 0) {
+      if (Object.keys(newCBP).length > 0) {
+        setChildrenByParent((prev) => ({ ...prev, ...newCBP }));
+        if (Object.keys(newTEC).length > 0) {
+          setTreeExpandedTotalCount((prev) => ({ ...prev, ...newTEC }));
+        }
+      }
+      setExpandedIds((prev) => {
+        const next = new Set(prev);
+        for (const id of newExpandedIds) next.add(id);
+        return next;
+      });
+    }
+
+    // Restore selected dir (handles deeper paths the sync fast-path can't reach).
+    if (snapshot.selectedPath) {
+      try {
+        const result = await invoke<ResolvePathResult>("resolve_path_chain", {
+          path: snapshot.selectedPath,
+          volumeSerial,
+        });
+        if (scanGenerationRef.current !== generation) return;
+        if (result.status === "found" && result.target?.is_directory) {
+          setSelectedDir(treeNodeToDirEntry(result.target));
+          setFocusedRecordIndex(result.target.record_index);
+        }
+      } catch {
+        // keep whatever selectedDir the sync path set
+      }
+    }
+
+    // Restore focused node if different from selected dir.
+    if (snapshot.focusedPath && snapshot.focusedPath !== snapshot.selectedPath) {
+      try {
+        const result = await invoke<ResolvePathResult>("resolve_path_chain", {
+          path: snapshot.focusedPath,
+          volumeSerial,
+        });
+        if (scanGenerationRef.current !== generation) return;
+        if (result.status === "found" && result.target) {
+          setFocusedRecordIndex(result.target.record_index);
+        }
+      } catch {
+        // skip
+      }
+    }
   }
 
   function handleAdvancedModeToggle(e: React.ChangeEvent<HTMLInputElement>) {
