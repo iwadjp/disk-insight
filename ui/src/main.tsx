@@ -5013,32 +5013,7 @@ function App() {
                 ))}
               </select>
             </label>
-            <label className="toolbar-label">
-              Top
-              <select
-                className="top-select"
-                value={topN}
-                onChange={(e) => setTopN(Number(e.target.value))}
-                disabled={isLoading}
-              >
-                {TOP_OPTIONS.map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            </label>
-            <label className="toolbar-label">
-              Size metric
-              <select
-                className="top-select size-metric-select"
-                value={storagePolicy}
-                onChange={(e) => setStoragePolicy(e.target.value)}
-                disabled={isLoading}
-                title="Compare estimates with Explorer &quot;Size on disk&quot; or WizTree &quot;Allocated&quot;, not Explorer &quot;Size&quot;."
-              >
-                <option value="current">Current allocation</option>
-                <option value="wof_adjusted">WOF-adjusted</option>
-              </select>
-            </label>
+            <div className="toolbar-separator" />
             <label
               className={`advanced-mode-toggle${advancedMode ? " advanced-mode-toggle--active" : ""}`}
               title="Session-only. Unlocks Move to Recycle Bin. Resets on close."
@@ -5051,25 +5026,13 @@ function App() {
               />
               <span>Advanced Mode</span>
             </label>
-            <div className="toolbar-separator" />
             <button
               className="btn btn-sm"
               onClick={() => setSettingsOpen(true)}
-              title="Font size and content width settings"
+              title="Top, size metric, font size, content width, and demo data"
             >
               Settings
             </button>
-            {(import.meta.env.DEV || isTauriRuntime()) && (
-              <button
-                className="btn"
-                onClick={() =>
-                  runLoad(loadSampleData, "Loading demo data...", false, "sample")
-                }
-                disabled={isLoading}
-              >
-                Load demo
-              </button>
-            )}
             {isLoading && scanStartMsRef.current !== null ? (
               <button className="btn" onClick={handleCancelScan}>
                 Cancel scan
@@ -5084,14 +5047,6 @@ function App() {
               </button>
             )}
           </div>
-          {storagePolicy === "wof_adjusted" && (
-            <div
-              className="policy-warning"
-              title="Experimental WOF-aware estimate. It may be closer to WizTree &quot;Allocated&quot; for WOF-compressed files."
-            >
-              Experimental WOF estimate; hard links / WinSxS not fully corrected.
-            </div>
-          )}
         </div>
       </header>
 
@@ -5568,6 +5523,62 @@ function App() {
                   <option value="full">Full</option>
                 </select>
               </div>
+              <div className="settings-divider" />
+              <p className="settings-section-label">Results</p>
+              <div className="settings-row">
+                <span className="settings-field-label">Top N items</span>
+                <select
+                  className="top-select"
+                  value={topN}
+                  onChange={(e) => setTopN(Number(e.target.value))}
+                  disabled={isLoading}
+                >
+                  {TOP_OPTIONS.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="settings-row">
+                <span
+                  className="settings-field-label"
+                  title="Compare estimates with Explorer 'Size on disk' or WizTree 'Allocated', not Explorer 'Size'."
+                >
+                  Size metric
+                </span>
+                <select
+                  className="top-select size-metric-select"
+                  value={storagePolicy}
+                  onChange={(e) => setStoragePolicy(e.target.value)}
+                  disabled={isLoading}
+                >
+                  <option value="current">Current allocation</option>
+                  <option value="wof_adjusted">WOF-adjusted</option>
+                </select>
+              </div>
+              {storagePolicy === "wof_adjusted" && (
+                <p className="settings-note">
+                  Experimental WOF estimate. Hard links / WinSxS not fully corrected.
+                </p>
+              )}
+              {(import.meta.env.DEV || isTauriRuntime()) && (
+                <>
+                  <div className="settings-divider" />
+                  <p className="settings-section-label">Demo</p>
+                  <div className="settings-row">
+                    <span className="settings-field-label">Public-safe demo data</span>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => {
+                        setSettingsOpen(false);
+                        runLoad(loadSampleData, "Loading demo data...", false, "sample");
+                      }}
+                      disabled={isLoading}
+                    >
+                      Load demo
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
             <div className="modal-actions">
               <button className="btn" onClick={() => setSettingsOpen(false)}>

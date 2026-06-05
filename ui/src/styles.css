@@ -3107,6 +3107,19 @@ details.insights-section[open] > .insights-summary::before {
   color: #334155;
 }
 
+.settings-divider {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 8px 0 16px;
+}
+
+.settings-note {
+  font-size: 11px;
+  color: #64748b;
+  margin: -4px 0 12px;
+  line-height: 1.4;
+}
+
 /* ── Content width presets ── */
 /* default (.app): wide = min(1760px, calc(100% - 32px)) */
 .app[data-content-width="standard"] { width: min(1280px, calc(100% - 32px)); }
