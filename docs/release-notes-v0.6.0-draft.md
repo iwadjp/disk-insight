@@ -58,13 +58,13 @@ Contents:
 ZIP SHA256:
 
 ```
-1e76fcb0e7986e9646e9fb5d4bdd34883a200a5a1f83d9a5316743096d902d4f
+ec08abd9f4cdb8110374d1f16fd60d0b09c45126635d2f3d4500a80090a80f38
 ```
 
 Build:
 
 - Version: 0.6.0
-- Commit: e4852a785799cc082d14336d1b28d04dbca1b298
+- Commit: f6d7f720ae7de84897967b208edcf832459b8cf6
 - Signed: NO
 - GitHub Release: NO at package build time
 
