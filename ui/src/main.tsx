@@ -1403,7 +1403,7 @@ function CompactSummary({
           <span title="Used space (total minus free)">
             <span className="compact-summary-label">Used </span>
             <span className="compact-summary-value compact-summary-value--primary">{formatBytes(capacity.used_bytes)}</span>
-            <span className="compact-summary-muted"> ({capacity.used_percent.toFixed(1)}%)</span>
+            <span className="compact-summary-percent"> ({capacity.used_percent.toFixed(1)}%)</span>
           </span>
           <span className="compact-summary-sep" aria-hidden="true">·</span>
           <span title="Free space on the volume">

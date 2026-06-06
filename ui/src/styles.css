@@ -195,6 +195,11 @@ h2 {
   color: #9ca3af;
 }
 
+.compact-summary-percent {
+  font-weight: 600;
+  color: #475569;
+}
+
 .compact-summary--unsupported {
   border-color: #cbd5e1;
   background: #f8fafc;
