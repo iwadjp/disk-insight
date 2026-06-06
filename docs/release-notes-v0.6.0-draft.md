@@ -19,6 +19,11 @@ No official GitHub Release has been published yet unless this draft is later use
 - Public-safe demo data for screenshots and evaluation
 - Normal + Advanced safety model
 - Advanced Mode gated Move to Recycle Bin
+- Settings dialog consolidates less-frequently used controls: Font size, Content width, Top N, Size metric, Load demo
+- Toolbar simplified to everyday actions: Drive, Advanced Mode, Settings, Scan
+- Refresh scan restores the focused/selected tree location by path, with parent folder fallback if the target was removed
+- Review list item sizes and status are refreshed after rescan
+- Compact drive summary highlights Drive label, Used, Free, and Used percentage
 
 ## Safety model
 
@@ -53,13 +58,13 @@ Contents:
 ZIP SHA256:
 
 ```
-0f2c9f35fb5f5fafbad60e9ccd811fe78c91f1debce9826ce8bf4be89246c636
+1e76fcb0e7986e9646e9fb5d4bdd34883a200a5a1f83d9a5316743096d902d4f
 ```
 
 Build:
 
 - Version: 0.6.0
-- Commit: ae4e93d9285c89bd146a4a0fb3ed3c3c692df9ab
+- Commit: e4852a785799cc082d14336d1b28d04dbca1b298
 - Signed: NO
 - GitHub Release: NO at package build time
 
