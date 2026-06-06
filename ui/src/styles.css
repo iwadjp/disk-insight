@@ -162,15 +162,37 @@ h2 {
 }
 
 .compact-summary-drive {
-  font-weight: 650;
+  font-weight: 700;
   color: #17202a;
   white-space: nowrap;
+  background: #eef2f6;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.01em;
 }
 
 .compact-summary-sep {
   padding: 0 8px;
   color: #9ca3af;
   flex-shrink: 0;
+}
+
+.compact-summary-label {
+  color: #64748b;
+}
+
+.compact-summary-value {
+  font-weight: 500;
+  color: #374151;
+}
+
+.compact-summary-value--primary {
+  font-weight: 700;
+  color: #17202a;
+}
+
+.compact-summary-muted {
+  color: #9ca3af;
 }
 
 .compact-summary--unsupported {

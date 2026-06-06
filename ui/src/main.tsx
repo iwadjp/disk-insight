@@ -1395,21 +1395,38 @@ function CompactSummary({
       {capacity && (
         <>
           <span className="compact-summary-sep" aria-hidden="true">·</span>
-          <span title="Total volume capacity reported by the OS">{formatBytes(capacity.total_bytes)}</span>
+          <span title="Total volume capacity reported by the OS">
+            <span className="compact-summary-label">Total </span>
+            <span className="compact-summary-value">{formatBytes(capacity.total_bytes)}</span>
+          </span>
           <span className="compact-summary-sep" aria-hidden="true">·</span>
-          <span title="Used space (total minus free)">Used {formatBytes(capacity.used_bytes)} ({capacity.used_percent.toFixed(1)}%)</span>
+          <span title="Used space (total minus free)">
+            <span className="compact-summary-label">Used </span>
+            <span className="compact-summary-value compact-summary-value--primary">{formatBytes(capacity.used_bytes)}</span>
+            <span className="compact-summary-muted"> ({capacity.used_percent.toFixed(1)}%)</span>
+          </span>
           <span className="compact-summary-sep" aria-hidden="true">·</span>
-          <span title="Free space on the volume">Free {formatBytes(capacity.free_bytes)}</span>
+          <span title="Free space on the volume">
+            <span className="compact-summary-label">Free </span>
+            <span className="compact-summary-value compact-summary-value--primary">{formatBytes(capacity.free_bytes)}</span>
+          </span>
           <span className="compact-summary-sep" aria-hidden="true">·</span>
         </>
       )}
       <span title="Estimated allocated-style size. Compare with Explorer 'Size on disk' or WizTree 'Allocated', not Explorer 'Size'.">
-        Alloc {formatBytes(summary.total_final_allocated)}
+        <span className="compact-summary-label">Alloc </span>
+        <span className="compact-summary-value">{formatBytes(summary.total_final_allocated)}</span>
       </span>
       <span className="compact-summary-sep" aria-hidden="true">·</span>
-      <span>Files {formatRecords(summary.files)}</span>
+      <span>
+        <span className="compact-summary-label">Files </span>
+        <span className="compact-summary-value">{formatRecords(summary.files)}</span>
+      </span>
       <span className="compact-summary-sep" aria-hidden="true">·</span>
-      <span>Dirs {formatRecords(summary.directories)}</span>
+      <span>
+        <span className="compact-summary-label">Dirs </span>
+        <span className="compact-summary-value">{formatRecords(summary.directories)}</span>
+      </span>
     </div>
   );
 }
@@ -1419,11 +1436,21 @@ function UnsupportedDriveCapacityCard({ drive, capacity, note }: UnsupportedDriv
     <div className="compact-summary compact-summary--unsupported">
       <span className="compact-summary-drive">{drive}</span>
       <span className="compact-summary-sep" aria-hidden="true">·</span>
-      <span title="Total volume capacity reported by Windows">{formatBytes(capacity.total_bytes)}</span>
+      <span title="Total volume capacity reported by Windows">
+        <span className="compact-summary-label">Total </span>
+        <span className="compact-summary-value">{formatBytes(capacity.total_bytes)}</span>
+      </span>
       <span className="compact-summary-sep" aria-hidden="true">·</span>
-      <span title="Used space (total minus free)">Used {formatBytes(capacity.used_bytes)} ({capacity.used_percent.toFixed(1)}%)</span>
+      <span title="Used space (total minus free)">
+        <span className="compact-summary-label">Used </span>
+        <span className="compact-summary-value compact-summary-value--primary">{formatBytes(capacity.used_bytes)}</span>
+        <span className="compact-summary-muted"> ({capacity.used_percent.toFixed(1)}%)</span>
+      </span>
       <span className="compact-summary-sep" aria-hidden="true">·</span>
-      <span title="Free space on the volume">Free {formatBytes(capacity.free_bytes)}</span>
+      <span title="Free space on the volume">
+        <span className="compact-summary-label">Free </span>
+        <span className="compact-summary-value compact-summary-value--primary">{formatBytes(capacity.free_bytes)}</span>
+      </span>
       <span className="compact-summary-sep" aria-hidden="true">·</span>
       <span className="compact-summary-note">{note}</span>
     </div>
