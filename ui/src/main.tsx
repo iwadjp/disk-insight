@@ -167,6 +167,7 @@ interface ReviewListItem {
   category?: string;
   source: 'tree' | 'large-review' | 'reviewable' | 'caution' | 'bookmark';
   addedAt: number;
+  refreshStatus?: "found" | "missing" | "unavailable";
 }
 type ContextMenuTarget = {
   path: string;
@@ -1817,7 +1818,7 @@ function ReviewListPanel({
               {items.map((item) => (
                 <div
                   key={item.path}
-                  className="review-list-item"
+                  className={`review-list-item${item.refreshStatus === "missing" || item.refreshStatus === "unavailable" ? " review-list-item--stale" : ""}`}
                   title={item.path}
                   onContextMenu={(e) => {
                     e.preventDefault();
@@ -1843,7 +1844,15 @@ function ReviewListPanel({
                     disabled={onJump === undefined}
                   >
                     <div className="review-list-item-main">
-                      <span className="review-list-item-name">{item.name}</span>
+                      <span className="review-list-item-name">
+                        {item.name}
+                        {item.refreshStatus === "missing" && (
+                          <span className="review-list-status-badge review-list-status-badge--missing">not found</span>
+                        )}
+                        {item.refreshStatus === "unavailable" && (
+                          <span className="review-list-status-badge review-list-status-badge--unavailable">unavailable</span>
+                        )}
+                      </span>
                       <span className="review-list-item-meta">
                         {formatBytes(item.sizeBytes)}
                         {item.category ? ` · ${item.category}` : ""}
@@ -3828,6 +3837,10 @@ function App() {
       if (treeSnapshot && isTauriRuntime()) {
         void restoreTreeSnapshot(json, treeSnapshot, drive, generation);
       }
+      // Refresh review list item sizes against the new scan result.
+      if (reviewListItems.length > 0) {
+        void refreshReviewList(json, reviewListItems, drive, generation);
+      }
       return true;
     } catch (err: unknown) {
       clearPendingProgressLatch();
@@ -4710,6 +4723,63 @@ function App() {
       setSelectedDir(treeNodeToDirEntry(target));
     }
     setFocusedRecordIndex(target.record_index);
+  }
+
+  // ── Review list size refresh after refresh scan ──────────────────────────
+  // Resolves each same-drive item against the new scan result.
+  // Updates sizeBytes when found; sets refreshStatus to "missing"/"unavailable"
+  // when not. Items from other drives are left untouched.
+  // Runs after setIsLoading(false); generation check prevents stale updates.
+  async function refreshReviewList(
+    json: DiskInsightOutput,
+    items: ReviewListItem[],
+    drive: string,
+    generation: number,
+  ): Promise<void> {
+    if (!isTauriRuntime()) return;
+    const driveUpper = drive.toUpperCase();
+    const sameDrive = items.filter((item) => item.path[0]?.toUpperCase() === driveUpper);
+    if (sameDrive.length === 0) return;
+
+    const volumeSerial = json.summary.volume_serial ?? undefined;
+    const updates: Record<string, { sizeBytes?: number; refreshStatus: ReviewListItem["refreshStatus"] }> = {};
+
+    for (const item of sameDrive) {
+      if (scanGenerationRef.current !== generation) return;
+      try {
+        const result = await invoke<ResolvePathResult>("resolve_path_chain", {
+          path: item.path,
+          volumeSerial,
+        });
+        if (result.status === "found" && result.target) {
+          const sizeBytes = result.target.is_directory
+            ? result.target.subtree_size
+            : result.target.direct_file_size;
+          updates[item.path.toLowerCase()] = { sizeBytes, refreshStatus: "found" };
+        } else {
+          updates[item.path.toLowerCase()] = {
+            refreshStatus: result.status === "missing" ? "missing" : "unavailable",
+          };
+        }
+      } catch {
+        updates[item.path.toLowerCase()] = { refreshStatus: "unavailable" };
+      }
+    }
+
+    if (scanGenerationRef.current !== generation) return;
+
+    setReviewListItems((prev) =>
+      prev.map((item) => {
+        if (item.path[0]?.toUpperCase() !== driveUpper) return item;
+        const upd = updates[item.path.toLowerCase()];
+        if (!upd) return item;
+        return {
+          ...item,
+          sizeBytes: upd.sizeBytes ?? item.sizeBytes,
+          refreshStatus: upd.refreshStatus,
+        };
+      }),
+    );
   }
 
   function handleAdvancedModeToggle(e: React.ChangeEvent<HTMLInputElement>) {

@@ -1392,6 +1392,32 @@ tbody tr:last-child td {
   color: #1649c0;
 }
 
+.review-list-item--stale {
+  opacity: 0.75;
+}
+
+.review-list-status-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: 5px;
+  vertical-align: middle;
+  text-transform: uppercase;
+}
+.review-list-status-badge--missing {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+.review-list-status-badge--unavailable {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
 .review-list-remove {
   flex-shrink: 0;
   width: 24px;
