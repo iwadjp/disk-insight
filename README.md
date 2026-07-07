@@ -5,11 +5,14 @@ TreeView-first navigation, and cautious manual cleanup assistance.
 
 ## Status
 
-Pre-release. Under active development.
-Current development target: v0.6.0 public readiness.
-No official GitHub Release has been published yet.
-Current builds are local dogfooding artifacts only.
-Do not treat current builds as stable production releases.
+v0.6.0 is available as a [GitHub pre-release](https://github.com/iwadjp/disk-insight/releases/tag/v0.6.0)
+for Windows x64 dogfooding and evaluation.
+
+This is not a stable production release. Treat it as a pre-release candidate
+and review the release notes and known limitations before use.
+
+The project is still being compared against existing tools such as WizTree,
+and public-readiness work is ongoing.
 
 ---
 
