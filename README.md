@@ -1,18 +1,28 @@
 # disk-insight
 
-A local-first Windows disk usage viewer focused on fast NTFS scanning,
-TreeView-first navigation, and cautious manual cleanup assistance.
+disk-insight is a local-only Windows disk usage viewer for inspecting where
+storage is used. It reads NTFS MFT data for fast scanning and helps you find
+large folders and files in a tree-first view for cautious manual review.
+It has no network communication or telemetry and does not perform automatic cleanup.
+
+## Download
+
+v0.6.0 is available as a GitHub pre-release for Windows x64 evaluation.
+
+1. Open the [v0.6.0 GitHub pre-release](https://github.com/iwadjp/disk-insight/releases/tag/v0.6.0).
+2. Under **Assets**, download `disk-insight-v0.6.0-windows-x64.zip`.
+3. Extract the ZIP and run `disk-insight-ui.exe`.
+
+Run as Administrator for full NTFS MFT scan access. Non-administrator launch
+is possible, but some scan operations may be limited.
+
+The executable is unsigned and may trigger SmartScreen. Review the release
+notes and do not bypass your organization's security controls.
 
 ## Status
 
-v0.6.0 is available as a [GitHub pre-release](https://github.com/iwadjp/disk-insight/releases/tag/v0.6.0)
-for Windows x64 dogfooding and evaluation.
-
-This is not a stable production release. Treat it as a pre-release candidate
-and review the release notes and known limitations before use.
-
-The project is still being compared against existing tools such as WizTree,
-and public-readiness work is ongoing.
+v0.6.0 is a pre-release, not a stable production release.
+Review the known limitations before use.
 
 ---
 
