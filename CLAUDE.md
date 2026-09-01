@@ -122,6 +122,9 @@ disk-insight.exe --help
 
 ## AI 使い分け方針
 
+> AI 利用のクレジット節約・ツール使い分け・無償 AI 活用・ChatGPT/Codex 引き継ぎ運用は
+> `AI-USAGE.md` を参照。project 固有の判断は本 `CLAUDE.md` を優先する。
+
 | タスク | 担当 |
 |--------|------|
 | 実装本体・Tauri/Rust 連携・ビルド・コミット | Claude Code (Sonnet 4.6)（引き続き主実装） |
