@@ -7,11 +7,15 @@ It has no network communication or telemetry and does not perform automatic clea
 
 ## Download
 
-v0.6.0 is available as a GitHub pre-release for Windows x64 evaluation.
+v1.0.0 is available as a GitHub release for Windows x64.
 
-1. Open the [v0.6.0 GitHub pre-release](https://github.com/iwadjp/disk-insight/releases/tag/v0.6.0).
-2. Under **Assets**, download `disk-insight-v0.6.0-windows-x64.zip`.
+1. Open the [v1.0.0 GitHub release](https://github.com/iwadjp/disk-insight/releases/tag/v1.0.0).
+2. Under **Assets**, download `disk-insight-v1.0.0-windows-x64.zip`.
 3. Extract the ZIP and run `disk-insight-ui.exe`.
+
+It is a portable ZIP: there is no installer, and uninstalling means deleting
+the extracted folder. App-managed data is written only to
+`%LOCALAPPDATA%\disk-insight\`.
 
 Run as Administrator for full NTFS MFT scan access. Non-administrator launch
 is possible, but some scan operations may be limited.
@@ -21,8 +25,14 @@ notes and do not bypass your organization's security controls.
 
 ## Status
 
-v0.6.0 is a pre-release, not a stable production release.
-Review the known limitations before use.
+v1.0.0 is the first stable release. The feature set and the Normal / Advanced
+safety model are considered settled for the 1.x line.
+
+Stable here means the documented behavior is what the project intends to keep
+supporting — not that the build is signed, broadly certified, or verified on
+every environment. It is developed and used by a single developer, and
+verification is concentrated on that environment. Review the known limitations
+before use.
 
 ---
 
@@ -96,7 +106,10 @@ Delete / Rename / Cut / Paste are not implemented.
 
 ## Known limitations
 
-- **Pre-release**: not a stable production release
+- **Limited environment verification**: developed and used by a single
+  developer on Windows 10/11 with NTFS volumes. Behavior on other hardware,
+  display scaling, locales, and managed/enterprise configurations is not
+  systematically tested
 - **Unsigned binary**: may trigger SmartScreen on first run — expected for
   unsigned local tools; do not bypass security controls to run it
 - **NTFS-focused**: NTFS is the primary supported target. Other file
@@ -206,7 +219,7 @@ See [LICENSE](LICENSE).
 
 ## Disclaimer
 
-This is pre-release software provided for local use and evaluation.
-It is not a stable production release.
-No warranty is provided.
+This software is provided for local use.
+No warranty is provided, as stated in the MIT License.
 Size estimates are diagnostic aids, not guarantees of exact space recovery.
+Review the known limitations above before relying on it.
