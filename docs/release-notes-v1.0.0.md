@@ -30,7 +30,8 @@ settled for the 1.x line.
 - Insights panel: largest items under the selected folder, subtree search
 - Drive auto-detection and a compact drive summary
 - Advanced Mode gated Move to Recycle Bin, with per-item confirmation
-- Secondary CLI (`disk-insight.exe`) with JSON output
+- Secondary CLI (`disk-insight.exe`) with JSON output — built from source,
+  not included in this ZIP
 
 ## Safety model
 

@@ -29,7 +29,8 @@ and reviewing them manually. It performs no automatic cleanup.
 - Drive auto-detection and a compact drive summary
 - Size metric selector: current allocation or WOF-adjusted (experimental)
 - Advanced Mode gated Move to Recycle Bin, with per-item confirmation
-- Secondary CLI (`disk-insight.exe`) with JSON output
+- Secondary CLI (`disk-insight.exe`) with JSON output — built from source,
+  not included in the release ZIP
 
 ### Safety model
 
