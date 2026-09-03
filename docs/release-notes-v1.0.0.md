@@ -133,7 +133,7 @@ Contents:
 ZIP SHA-256:
 
 ```
-<SUBSTITUTE: zip SHA-256 printed by scripts\build-release-package.ps1>
+bfb376c7603532cb3d6c9a0382b7cb29e5132720f314055252a8160818433579
 ```
 
 ## License

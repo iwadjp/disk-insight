@@ -4,7 +4,7 @@ All notable user-facing changes to disk-insight are documented here.
 
 This project follows [Semantic Versioning](https://semver.org/).
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-09-04
 
 First stable release. No new features compared to v0.6.0 — this release marks
 the point where the feature set and the safety model are considered settled
