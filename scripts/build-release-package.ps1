@@ -7,7 +7,7 @@
 #   - Errors if working tree is dirty
 #   - Reads version from src-tauri/tauri.conf.json
 #   - Checks debug flags and windows_subsystem setting
-#   - Runs npm run build and npm run tauri build
+#   - Runs npm run build and npm run tauri build (with path-remapping RUSTFLAGS)
 #   - Assembles dist-release\disk-insight-v{version}-windows-x64\
 #   - Generates BUILD-INFO.txt and SHA256SUMS.txt
 #   - Creates zip archive with root folder inside
@@ -122,6 +122,13 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host ""
 
 Write-Host "--- npm run tauri build (Rust + bundle) ---" -ForegroundColor Yellow
+# Keep build-machine paths (cargo registry, project root) out of panic-location strings
+# in the shipped exe. An explicitly set RUSTFLAGS is left as-is.
+if (-not $env:RUSTFLAGS) {
+    $cargoHome = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { "$env:USERPROFILE\.cargo" }
+    $env:RUSTFLAGS = "--remap-path-prefix=$cargoHome=/cargo --remap-path-prefix=$projectRoot=/disk-insight"
+}
+Write-Host "RUSTFLAGS: $env:RUSTFLAGS"
 npm run tauri build
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: tauri build failed (exit $LASTEXITCODE)" -ForegroundColor Red
