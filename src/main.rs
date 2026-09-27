@@ -208,7 +208,7 @@ fn main() -> Result<()> {
         }
         drive = inferred_drive;
         if let Err(e) = mft_probe::print_diag_path(drive, path) {
-            eprintln!("繧ｨ繝ｩ繝ｼ: {}", e);
+            eprintln!("エラー: {}", e);
             std::process::exit(1);
         }
         return Ok(());
