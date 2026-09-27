@@ -7,10 +7,10 @@ It has no network communication or telemetry and does not perform automatic clea
 
 ## Download
 
-v1.0.0 is available as a GitHub release for Windows x64.
+v1.0.1 is available as a GitHub release for Windows x64.
 
-1. Open the [v1.0.0 GitHub release](https://github.com/iwadjp/disk-insight/releases/tag/v1.0.0).
-2. Under **Assets**, download `disk-insight-v1.0.0-windows-x64.zip`.
+1. Open the [v1.0.1 GitHub release](https://github.com/iwadjp/disk-insight/releases/tag/v1.0.1).
+2. Under **Assets**, download `disk-insight-v1.0.1-windows-x64.zip`.
 3. Extract the ZIP and run `disk-insight-ui.exe`.
 
 It is a portable ZIP: there is no installer, and uninstalling means deleting

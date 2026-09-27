@@ -4,6 +4,20 @@ All notable user-facing changes to disk-insight are documented here.
 
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - Unreleased
+
+Bug-fix release. No change to disk analysis behavior, the safety model, or the
+GUI distribution format (portable ZIP containing `disk-insight-ui.exe`).
+
+### Fixed
+
+- The app icon embedded in `disk-insight-ui.exe` now includes the standard
+  Windows sizes (16–256 px) for the taskbar, window and Explorer. v1.0.0
+  embedded only a single 32×32 image, which Windows had to scale.
+- The `--diag-path` error output of the developer CLI (`disk-insight.exe`, built
+  from source; not included in the release ZIP) printed a garbled label
+  instead of `エラー:`.
+
 ## [1.0.0] - 2026-09-04
 
 First stable release. No new features compared to v0.6.0 — this release marks
