@@ -4101,6 +4101,9 @@ function App() {
     // Duplicate request guard: do not fire if already loading
     if (loadingIds.has(id)) return;
 
+    // Until refresh completes, the backend still holds the previous scan.
+    if (isLoading) return;
+
     // Need to fetch — only available on live scan
     if (sourceKind !== "live") {
       setTreeError(
@@ -4127,9 +4130,12 @@ function App() {
     });
 
     const expandT0 = performance.now();
+    // Refresh invalidates in-flight expansions as well as already-cached children.
+    const generation = scanGenerationRef.current;
     perfLog(`tree-expand START  path=${node.path}  record_index=${id}`);
     getChildrenLimited(id, TREE_EXPAND_LIMIT)
       .then((result) => {
+        if (scanGenerationRef.current !== generation) return;
         perfLog(`tree-expand DONE  path=${node.path}  t=${(performance.now() - expandT0).toFixed(0)}ms  count=${result.nodes.length}  total_count=${result.total_count}`);
         setChildrenByParent((prev) => ({ ...prev, [id]: result.nodes }));
         if (result.total_count > result.nodes.length) {
@@ -4142,6 +4148,7 @@ function App() {
         });
       })
       .catch((err: unknown) => {
+        if (scanGenerationRef.current !== generation) return;
         perfLog(`tree-expand ERROR  path=${node.path}  t=${(performance.now() - expandT0).toFixed(0)}ms`);
         setChildrenErrors((prev) => ({
           ...prev,
@@ -4149,6 +4156,7 @@ function App() {
         }));
       })
       .finally(() => {
+        if (scanGenerationRef.current !== generation) return;
         setLoadingIds((prev) => {
           const next = new Set(prev);
           next.delete(id);
