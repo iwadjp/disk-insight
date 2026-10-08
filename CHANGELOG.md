@@ -4,19 +4,27 @@ All notable user-facing changes to disk-insight are documented here.
 
 This project follows [Semantic Versioning](https://semver.org/).
 
-## [1.0.1] - Unreleased
+## [1.0.1] - 2026-09-29
 
 Bug-fix release. No change to disk analysis behavior, the safety model, or the
 GUI distribution format (portable ZIP containing `disk-insight-ui.exe`).
 
 ### Fixed
 
+- Refresh no longer lets an older asynchronous folder result overwrite the newer
+  scan tree, so deleted or moved files no longer reappear and folder totals no
+  longer revert to the previous scan.
 - The app icon embedded in `disk-insight-ui.exe` now includes the standard
   Windows sizes (16–256 px) for the taskbar, window and Explorer. v1.0.0
   embedded only a single 32×32 image, which Windows had to scale.
 - The `--diag-path` error output of the developer CLI (`disk-insight.exe`, built
   from source; not included in the release ZIP) printed a garbled label
   instead of `エラー:`.
+
+### Build
+
+- The release exe no longer embeds build-machine source paths (cargo registry /
+  project directory) in its panic-location strings.
 
 ## [1.0.0] - 2026-09-04
 
